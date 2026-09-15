@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TutorPlatform")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5b524aec63e2b1c8d7afe279e9091cf84c023d50")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ab124e31ee718b9eb456517d44b646a57c41f90a")]
 [assembly: System.Reflection.AssemblyProductAttribute("TutorPlatform")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TutorPlatform")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
