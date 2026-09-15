@@ -3,7 +3,7 @@ using TutorPlatform.DTOs;
 using TutorPlatform.Services;
 using static TutorPlatform.DTOs.RegisterDto;
 
-namespace TutorPlatform.API.Controllers
+namespace TutorPlatform.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
