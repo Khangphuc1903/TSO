@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using TutorPlatform.API.Services;
 using TutorPlatform.DTOs;
-using TutorPlatform.Services;
 using static TutorPlatform.DTOs.RegisterDto;
 
-namespace TutorPlatform.Controllers
+namespace TutorPlatform.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -15,9 +15,25 @@ namespace TutorPlatform.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
-            var (success, message, token) = await _authService.RegisterAsync(dto);
+            var (success, message) = await _authService.RegisterAsync(dto);
+            if (!success) return BadRequest(new { message });
+            return Ok(new { message });
+        }
+
+        [HttpPost("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail(ConfirmEmailDto dto)
+        {
+            var (success, message, token) = await _authService.ConfirmEmailAsync(dto);
             if (!success) return BadRequest(new { message });
             return Ok(new { message, token });
+        }
+
+        [HttpPost("resend-code")]
+        public async Task<IActionResult> ResendCode(ResendCodeDto dto)
+        {
+            var (success, message) = await _authService.ResendConfirmationAsync(dto);
+            if (!success) return BadRequest(new { message });
+            return Ok(new { message });
         }
 
         [HttpPost("login")]
@@ -26,6 +42,22 @@ namespace TutorPlatform.Controllers
             var (success, message, token) = await _authService.LoginAsync(dto);
             if (!success) return Unauthorized(new { message });
             return Ok(new { message, token });
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+        {
+            var (success, message) = await _authService.ForgotPasswordAsync(dto);
+            if (!success) return BadRequest(new { message });
+            return Ok(new { message });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
+        {
+            var (success, message) = await _authService.ResetPasswordAsync(dto);
+            if (!success) return BadRequest(new { message });
+            return Ok(new { message });
         }
     }
 }

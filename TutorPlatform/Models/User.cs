@@ -6,7 +6,7 @@ namespace TutorPlatform.Model;
 public partial class User
 {
     public int UserId { get; set; }
-
+    public DateTime? EmailConfirmExpiry { get; set; }
     public string Email { get; set; } = null!;
 
     public string PasswordHash { get; set; } = null!;
