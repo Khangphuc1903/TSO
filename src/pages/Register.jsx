@@ -28,11 +28,8 @@ export default function Register() {
       // axiosClient.baseURL (khai báo trong src/api/axiosClient.js) + "/Auth/register"
       // => gọi tới: POST https://localhost:xxxx/api/Auth/register
       // Body gửi đi chính là object "form" state ở trên, Axios tự chuyển thành JSON.
-      const res = await axiosClient.post("/Auth/register", form);
-
-      // Backend trả về { message, token } (xem AuthController.Register)
-      localStorage.setItem("token", res.data.token);
-      navigate("/"); // đăng ký xong, chuyển về trang chủ
+      await axiosClient.post("/Auth/register", form);
+      navigate("/verify-email", { state: { email: form.email } });
     } catch (err) {
       // Nếu email đã tồn tại, BE trả BadRequest({ message }) -> hiện ra đây
       setError(err.response?.data?.message || "Registration failed. Please try again.");
