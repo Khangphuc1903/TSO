@@ -3,7 +3,7 @@ import axios from "axios";
 // Change this to match the port your .NET backend runs on (shown in the
 // console window when you press F5 in Visual Studio, e.g. https://localhost:7123/api)
 const axiosClient = axios.create({
-  baseURL: "https://localhost:7123/api",
+  baseURL: "http://localhost:5008/api",
   headers: { "Content-Type": "application/json" },
 });
 

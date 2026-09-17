@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Users,
@@ -12,6 +13,7 @@ import {
 import TutorCard from "../components/TutorCard";
 import TrustBadge from "../components/TrustBadge";
 import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 const FEATURED_TUTORS = [
   {
     name: "Dr. Marcus Vance",
@@ -72,14 +74,16 @@ const TRUST_ITEMS = [
 ];
 
 export default function Home() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("tutors"); // "tutors" | "groups"
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("");
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // TODO: navigate to /search?query=...&level=...&mode=tutors|groups
-    console.log({ activeTab, query, level });
+    if (activeTab === "groups") {
+      navigate(`/study-groups?query=${encodeURIComponent(query)}&level=${encodeURIComponent(level)}`);
+    }
   };
 
   return (
@@ -209,6 +213,7 @@ export default function Home() {
           ))}
         </div>
       </section>
+      <Footer />
     </div>
   );
 }
