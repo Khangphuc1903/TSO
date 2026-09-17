@@ -45,8 +45,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddScoped<JwtHelper>();
 builder.Services.AddScoped<TutorSearchService>();
 builder.Services.AddScoped<SubjectSearchService>();
-builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ReviewService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
