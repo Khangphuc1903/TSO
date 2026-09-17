@@ -295,4 +295,8 @@ C:\Users\Admin\TSO\TutorPlatform\obj\Debug\net8.0\swae.build.ex.cache
 C:\Users\Admin\TSO\TutorPlatform\obj\Debug\net8.0\TutorPla.DCC52FD9.Up2Date
 C:\Users\Admin\TSO\TutorPlatform\obj\Debug\net8.0\TutorPlatform.genruntimeconfig.cache
 C:\Users\Admin\TSO\TutorPlatform\obj\Debug\net8.0\ref\TutorPlatform.dll
+<<<<<<< HEAD
 D:\PRN222\TutorPlatform\TutorPlatform\obj\Debug\net8.0\TutorPlatform.sourcelink.json
+=======
+C:\Users\Admin\TSO\TutorPlatform\bin\Debug\net8.0\pkg881.json
+>>>>>>> 1c5236504627d0dbefe2c6acfbcc0e4d7134b80b
