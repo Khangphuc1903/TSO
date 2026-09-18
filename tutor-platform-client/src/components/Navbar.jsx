@@ -1,5 +1,5 @@
-import { Link, useLocation } from "react-router-dom";
-import { GraduationCap, ClipboardList } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { GraduationCap, ClipboardList, User, LogOut } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Discovery", to: "/" },
@@ -10,6 +10,13 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-100">
@@ -38,20 +45,49 @@ export default function Navbar() {
           })}
         </nav>
 
-        <div className="flex items-center gap-5">
-          <Link
-            to="/register"
-            className="hidden sm:block text-sm font-medium text-brand-600 hover:underline"
-          >
-            Register
-          </Link>
+        <div className="flex items-center gap-4">
+          {token ? (
+            <>
+              <Link
+                to="/profile"
+                className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                  location.pathname === "/profile"
+                    ? "bg-brand-50 text-brand-600 border-brand-200"
+                    : "text-slate-700 hover:bg-slate-50 border-slate-200"
+                }`}
+              >
+                <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center text-xs font-bold">
+                  <User size={14} />
+                </div>
+                <span>Hồ sơ</span>
+              </Link>
 
-          <Link
-            to="/login"
-            className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-          >
-            Sign In
-          </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Đăng xuất"
+                className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+              >
+                <LogOut size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/register"
+                className="hidden sm:block text-sm font-medium text-brand-600 hover:underline"
+              >
+                Register
+              </Link>
+
+              <Link
+                to="/login"
+                className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                Sign In
+              </Link>
+            </>
+          )}
 
           <div className="hidden sm:block h-6 w-px bg-slate-200" />
 

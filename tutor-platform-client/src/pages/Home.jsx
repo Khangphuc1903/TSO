@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Users,
@@ -14,6 +15,7 @@ import {
 import TutorCard from "../components/TutorCard";
 import TrustBadge from "../components/TrustBadge";
 import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 import axiosClient from "../api/axiosClient";
 const FEATURED_TUTORS = [
   {
@@ -75,6 +77,7 @@ const TRUST_ITEMS = [
 ];
 
 export default function Home() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("tutors"); // "tutors" | "groups"
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("");
@@ -207,7 +210,7 @@ export default function Home() {
             />
             <TabButton
               active={activeTab === "groups"}
-              onClick={() => setActiveTab("groups")}
+              onClick={() => navigate("/study-groups")}
               icon={<Users size={16} />}
               label="Find Study Groups"
             />
@@ -382,6 +385,7 @@ export default function Home() {
           ))}
         </div>
       </section>
+      <Footer />
     </div>
   );
 }

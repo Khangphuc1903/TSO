@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using TutorPlatform.API.Services;
 using TutorPlatform.DTOs;
 using static TutorPlatform.DTOs.RegisterDto;
@@ -15,9 +15,9 @@ namespace TutorPlatform.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
-            var (success, message) = await _authService.RegisterAsync(dto);
+            var (success, message, token) = await _authService.RegisterAsync(dto);
             if (!success) return BadRequest(new { message });
-            return Ok(new { message });
+            return Ok(new { message, token });
         }
 
         [HttpPost("confirm-email")]

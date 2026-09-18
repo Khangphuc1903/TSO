@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Datas;
 using TutorPlatform.DTOs;
 using TutorPlatform.Helpers;
@@ -22,15 +22,15 @@ namespace TutorPlatform.API.Services
         }
 
         // ---------------- REGISTER ----------------
-        public async Task<(bool Success, string Message)> RegisterAsync(RegisterDto dto)
+        public async Task<(bool Success, string Message, string? Token)> RegisterAsync(RegisterDto dto)
         {
             bool emailExists = await _db.Users.AnyAsync(u => u.Email == dto.Email);
             if (emailExists)
-                return (false, "Email already registered.");
+                return (false, "Email already registered.", null);
 
             var role = await _db.Roles.FirstOrDefaultAsync(r => r.RoleName == dto.Role);
             if (role == null)
-                return (false, "Invalid role.");
+                return (false, "Invalid role.", null);
 
             var code = EmailService.GenerateOtpCode();
 
@@ -41,7 +41,7 @@ namespace TutorPlatform.API.Services
                 FullName = dto.FullName,
                 RoleId = role.RoleId,
                 Status = "Active",
-                IsEmailConfirmed = false,
+                IsEmailConfirmed = true,
                 EmailConfirmToken = code,
                 EmailConfirmExpiry = DateTime.Now.AddMinutes(10),
                 CreatedAt = DateTime.Now
@@ -50,13 +50,14 @@ namespace TutorPlatform.API.Services
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
-            await _email.SendEmailAsync(
+            _ = Task.Run(() => _email.SendEmailAsync(
                 user.Email,
                 "Verify your TSG account",
-                $"<p>Hi {user.FullName},</p><p>Your verification code is:</p><h2>{code}</h2><p>This code expires in 10 minutes.</p>"
-            );
+                $"<p>Hi {user.FullName},</p><p>Welcome to TSG! Your account has been created successfully.</p>"
+            ));
 
-            return (true, "Registered successfully. Please check your email for the verification code.");
+            var token = _jwt.GenerateToken(user.UserId, user.Email, role.RoleName);
+            return (true, "Registered successfully.", token);
         }
 
         // ---------------- CONFIRM EMAIL ----------------
@@ -124,7 +125,10 @@ namespace TutorPlatform.API.Services
                 return (false, "Account is not active.", null);
 
             if (!user.IsEmailConfirmed)
-                return (false, "Please verify your email before signing in.", null);
+            {
+                user.IsEmailConfirmed = true;
+                await _db.SaveChangesAsync();
+            }
 
             var token = _jwt.GenerateToken(user.UserId, user.Email, user.Role.RoleName);
             return (true, "Login successful.", token);

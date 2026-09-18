@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, Mail, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
+import Footer from "../components/Footer";
 import axiosClient from "../api/axiosClient";
 
 export default function Register() {
@@ -42,8 +43,9 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 sm:p-10">
+    <div className="min-h-screen bg-surface flex flex-col justify-between">
+      <div className="flex-1 flex items-center justify-center p-6 py-12">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 sm:p-10">
         <div className="flex items-center gap-2 mb-8">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
             <GraduationCap size={20} />
@@ -171,6 +173,8 @@ export default function Register() {
           </Link>
         </p>
       </div>
+      </div>
+      <Footer />
     </div>
   );
 }

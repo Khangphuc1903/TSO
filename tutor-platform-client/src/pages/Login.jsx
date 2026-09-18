@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import Footer from "../components/Footer";
 import axiosClient from "../api/axiosClient";
 
 export default function Login() {
@@ -30,8 +31,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden grid md:grid-cols-2">
+    <div className="min-h-screen bg-surface flex flex-col justify-between">
+      <div className="flex-1 flex items-center justify-center p-6 py-12">
+        <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden grid md:grid-cols-2">
         {/* Left panel — brand / value proposition */}
         <div className="relative hidden md:flex flex-col justify-between p-10 text-white overflow-hidden bg-brand-700">
           {/* Decorative background: swap this div for a real campus photo (background-image) later */}
@@ -188,6 +190,8 @@ export default function Login() {
           </p>
         </div>
       </div>
+      </div>
+      <Footer />
     </div>
   );
 }
