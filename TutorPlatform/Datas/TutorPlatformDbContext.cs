@@ -387,6 +387,7 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Difficulty).HasMaxLength(20);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.OptionA).HasMaxLength(255);
             entity.Property(e => e.OptionB).HasMaxLength(255);
@@ -689,8 +690,14 @@ public partial class TutorPlatformDbContext : DbContext
         {
             entity.HasKey(e => e.TutorSubjectId).HasName("PK__TutorSub__2D58B9FBB68C7880");
 
-            entity.HasIndex(e => new { e.TutorId, e.SubjectId }, "UQ_TutorSubject").IsUnique();
+            entity.HasIndex(e => new { e.GradeLevel, e.SubjectId, e.TutorId }, "UQ_TutorSubject_Combo")
+                .IsUnique()
+                .HasFilter("([GradeLevel] IS NOT NULL)");
+            entity.HasIndex(e => new { e.SubjectId, e.TutorId }, "UQ_TutorSubject_NoGrade")
+                .IsUnique()
+                .HasFilter("([GradeLevel] IS NULL)");
 
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.VerifiedAt).HasColumnType("datetime");
 
             entity.HasOne(d => d.Subject).WithMany(p => p.TutorSubjects)
@@ -729,6 +736,7 @@ public partial class TutorPlatformDbContext : DbContext
             entity.HasKey(e => e.AttemptId).HasName("PK__TutorTes__891A68E6D1E8EAD4");
 
             entity.Property(e => e.AttemptNumber).HasDefaultValue(1);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.PassThreshold).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.ScorePercent).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.StartedAt).HasColumnType("datetime");

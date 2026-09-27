@@ -13,7 +13,15 @@ public class TutorSubjectItemDto
 {
     public int SubjectId { get; set; }
     public string SubjectName { get; set; } = null!;
+    public string EducationLevel { get; set; } = null!;
+    public string? GradeLevel { get; set; }
     public bool IsVerified { get; set; }
+}
+
+public class SubjectRegistrationDto
+{
+    public int SubjectId { get; set; }
+    public string? GradeLevel { get; set; }
 }
 
 public class AvailabilitySlotDto
@@ -75,6 +83,7 @@ public class UpdateTutorTeachingProfileDto
     public string TeachingMode { get; set; } = "Both";
     public bool IsPublished { get; set; }
     public List<int> SubjectIds { get; set; } = new();
+    public List<SubjectRegistrationDto> SubjectRegistrations { get; set; } = new();
 }
 
 public class CreateAvailabilitySlotDto

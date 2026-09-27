@@ -85,6 +85,7 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<StudyGroupService>();
 builder.Services.AddScoped<GroupChatService>();
 builder.Services.AddScoped<TutorWorkspaceService>();
+builder.Services.AddScoped<TutorTestService>();
 builder.Services.AddHostedService<LessonReminderService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
@@ -121,6 +122,35 @@ BEGIN
         CONSTRAINT FK_StudyGroupMessages_Sender FOREIGN KEY (SenderId) REFERENCES dbo.Users(UserId)
     );
     CREATE INDEX IX_StudyGroupMessages_Group_SentAt ON dbo.StudyGroupMessages(GroupId, SentAt);
+END
+
+-- ==== Tutor subject knowledge test: Level + Subject + Grade (Lớp) support ====
+-- Backward-compatible: only adds NULLABLE columns; never drops/modifies existing data.
+IF OBJECT_ID(N'dbo.Questions', N'U') IS NOT NULL AND COL_LENGTH('Questions','GradeLevel') IS NULL
+    ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.Question', N'U') IS NOT NULL AND COL_LENGTH('Question','GradeLevel') IS NULL
+    ALTER TABLE Question ADD GradeLevel NVARCHAR(50) NULL;
+
+IF OBJECT_ID(N'dbo.TutorTestAttempts', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempts','GradeLevel') IS NULL
+    ALTER TABLE TutorTestAttempts ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.TutorTestAttempt', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempt','GradeLevel') IS NULL
+    ALTER TABLE TutorTestAttempt ADD GradeLevel NVARCHAR(50) NULL;
+
+IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL AND COL_LENGTH('TutorSubjects','GradeLevel') IS NULL
+    ALTER TABLE TutorSubjects ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.TutorSubject', N'U') IS NOT NULL AND COL_LENGTH('TutorSubject','GradeLevel') IS NULL
+    ALTER TABLE TutorSubject ADD GradeLevel NVARCHAR(50) NULL;
+
+-- One tutor may register the same subject for several grades, so the old
+-- (TutorId, SubjectId) unique index is replaced by grade-aware unique indexes.
+IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        DROP INDEX UQ_TutorSubject ON TutorSubjects;
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_Combo' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        CREATE UNIQUE INDEX UQ_TutorSubject_Combo ON TutorSubjects (TutorId, SubjectId, GradeLevel) WHERE GradeLevel IS NOT NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_NoGrade' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;
 END
 ");
 }

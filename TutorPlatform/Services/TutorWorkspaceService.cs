@@ -70,6 +70,8 @@ public class TutorWorkspaceService
             {
                 SubjectId = s.SubjectId,
                 SubjectName = s.Subject.SubjectName,
+                EducationLevel = s.Subject.EducationLevel ?? "",
+                GradeLevel = s.GradeLevel,
                 IsVerified = s.IsVerified
             }).ToList(),
             Certificates = tp.TutorCertificates
@@ -103,28 +105,60 @@ public class TutorWorkspaceService
         profile.HourlyRateMin = dto.HourlyRateMin;
         profile.HourlyRateMax = dto.HourlyRateMax;
         profile.TeachingMode = mode;
-        profile.IsPublished = dto.IsPublished;
-        profile.UpdatedAt = DateTime.Now;
 
-        var wanted = (dto.SubjectIds ?? new List<int>()).Distinct().ToList();
+        var wanted = BuildWantedRegistrations(dto);
         if (wanted.Count > 0)
         {
-            var validCount = await _db.Subjects.CountAsync(s => wanted.Contains(s.SubjectId) && s.IsActive, cancellationToken);
-            if (validCount != wanted.Count)
+            var wantedIds = wanted.Select(reg => reg.SubjectId).Distinct().ToList();
+            var validCount = await _db.Subjects.CountAsync(s => wantedIds.Contains(s.SubjectId) && s.IsActive, cancellationToken);
+            if (validCount != wantedIds.Count)
                 return (false, 400, "Có môn học không hợp lệ.", null);
         }
 
         var existing = await _db.TutorSubjects.Where(s => s.TutorId == tutorId).ToListAsync(cancellationToken);
-        _db.TutorSubjects.RemoveRange(existing.Where(s => !wanted.Contains(s.SubjectId)));
-        foreach (var sid in wanted.Where(id => existing.All(e => e.SubjectId != id)))
+
+        // Đăng ký lại toàn bộ tổ hợp: xóa những không được chọn, thêm những mới.
+        var wantedKeys = wanted.Select(reg => (reg.SubjectId, Grade: reg.gradeLevel)).ToHashSet();
+        _db.TutorSubjects.RemoveRange(existing.Where(row => !wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))));
+        foreach (var reg in wanted.Where(reg =>
+            existing.All(row => !(row.SubjectId == reg.SubjectId && NormalizeGrade(row.GradeLevel) == reg.gradeLevel))))
         {
             _db.TutorSubjects.Add(new TutorSubject
             {
                 TutorId = tutorId,
-                SubjectId = sid,
+                SubjectId = reg.SubjectId,
+                GradeLevel = reg.gradeLevel,
                 IsVerified = false
             });
         }
+
+        // Bắt buộce hoàn thành bài kiểm chuyên môn trước công công quỷ giảng dạy.
+        if (dto.IsPublished)
+        {
+            var pending = await _db.TutorSubjects
+                .Where(s => s.TutorId == tutorId && !s.IsVerified)
+                .OrderBy(s => s.SubjectId)
+                .ToListAsync(cancellationToken);
+            if (pending.Count > 0)
+            {
+                var pendingSubjects = await _db.Subjects
+                    .Where(s => pending.Select(p => p.SubjectId).Contains(s.SubjectId))
+                    .Select(s => new { s.SubjectId, s.SubjectName })
+                    .ToListAsync(cancellationToken);
+                var names = pendingSubjects.ToDictionary(s => s.SubjectId, s => s.SubjectName);
+                var descriptions = pending
+                    .Select(p => (names.TryGetValue(p.SubjectId, out var name) ? name : ("môn " + p.SubjectId))
+                        + (string.IsNullOrWhiteSpace(p.GradeLevel) ? " (chưa chọn lớp)" : (" – " + p.GradeLevel)))
+                    .ToList();
+                return (false, 400,
+                    "Không có quyền công công quỷ: hoàn tats bài kiểm chuyên môn bắt buộce trước for: " + string.Join(", ", descriptions) + ".",
+                    null);
+            }
+            profile.VerificationStatus = "Verified";
+        }
+
+        profile.IsPublished = dto.IsPublished;
+        profile.UpdatedAt = DateTime.Now;
 
         await _db.SaveChangesAsync(cancellationToken);
         return (true, 200, "Đã lưu hồ sơ dạy học.", await GetWorkspaceAsync(tutorId, cancellationToken));
@@ -249,6 +283,26 @@ public class TutorWorkspaceService
         _db.AvailabilitySlots.Remove(slot);
         await _db.SaveChangesAsync(cancellationToken);
         return (true, 200, "Đã xóa khung giờ.");
+    }
+
+    private static List<(int SubjectId, string? gradeLevel)> BuildWantedRegistrations(UpdateTutorTeachingProfileDto dto)
+    {
+        if (dto.SubjectRegistrations != null && dto.SubjectRegistrations.Count > 0)
+            return dto.SubjectRegistrations
+                .Select(reg => (SubjectId: reg.SubjectId, gradeLevel: NormalizeGrade(reg.GradeLevel)))
+                .Distinct()
+                .ToList();
+        return (dto.SubjectIds ?? new List<int>())
+            .Select(id => (SubjectId: id, gradeLevel: (string?)null))
+            .Distinct()
+            .ToList();
+    }
+
+    private static string? NormalizeGrade(string? grade)
+    {
+        if (string.IsNullOrWhiteSpace(grade)) return null;
+        var trimmed = grade.Trim();
+        return trimmed.Length > 50 ? trimmed.Substring(0, 50) : trimmed;
     }
 
     private static TutorCertificateItemDto MapCert(TutorCertificate c) => new()

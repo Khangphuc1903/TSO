@@ -13,11 +13,13 @@ public class TutorMeController : ControllerBase
 {
     private readonly TutorWorkspaceService _workspace;
     private readonly StudyGroupService _groups;
+    private readonly TutorTestService _tests;
 
-    public TutorMeController(TutorWorkspaceService workspace, StudyGroupService groups)
+    public TutorMeController(TutorWorkspaceService workspace, StudyGroupService groups, TutorTestService tests)
     {
         _workspace = workspace;
         _groups = groups;
+        _tests = tests;
     }
 
     private int? UserId
@@ -116,5 +118,76 @@ public class TutorMeController : ControllerBase
         return result.Success
             ? Ok(new { message = result.Message })
             : StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [HttpGet("tests")]
+    public async Task<IActionResult> Tests(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.ListTestsAsync(id, cancellationToken));
+    }
+
+    [HttpGet("tests/catalog")]
+    public async Task<IActionResult> TestCatalog(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.ListCatalogAsync(id, cancellationToken));
+    }
+
+    [HttpGet("tests/history")]
+    public async Task<IActionResult> TestHistory(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.ListAttemptsAsync(id, cancellationToken));
+    }
+
+    [HttpGet("tests/grades")]
+    public async Task<IActionResult> TestGrades([FromQuery] int subjectId, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.ListGradesAsync(id, subjectId, cancellationToken));
+    }
+
+    [HttpGet("tests/status")]
+    public async Task<IActionResult> TestStatus(
+        [FromQuery] int subjectId, [FromQuery] string gradeLevel, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.GetTestStatusAsync(id, subjectId, gradeLevel, cancellationToken);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpGet("tests/questions")]
+    public async Task<IActionResult> TestQuestions(
+        [FromQuery] int subjectId, [FromQuery] string gradeLevel, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.GetQuestionsAsync(id, subjectId, gradeLevel, cancellationToken);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpPost("tests/submit")]
+    public async Task<IActionResult> SubmitTest([FromBody] SubmitTutorTestDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.SubmitAsync(id, dto, cancellationToken);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpPost("tests/register")]
+    public async Task<IActionResult> RegisterTestCombination(
+        [FromBody] RegisterTestCombinationDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.RegisterCombinationAsync(id, dto, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : StatusCode(result.StatusCode, new { message = result.Message });
     }
 }
