@@ -14,6 +14,8 @@ namespace TutorPlatform.Helpers
         {
             var claims = new[]
             {
+                new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+                new Claim("nameid", userId.ToString()),
                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
                 new Claim(ClaimTypes.Email, email),
                 new Claim(ClaimTypes.Role, role)

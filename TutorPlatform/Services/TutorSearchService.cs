@@ -123,6 +123,15 @@ namespace TutorPlatform.Services
                 query = query.Where(tp => !string.IsNullOrWhiteSpace(tp.VerificationStatus) && tp.VerificationStatus.Contains(status, StringComparison.OrdinalIgnoreCase));
             }
 
+            if (!string.IsNullOrWhiteSpace(search.EducationLevel))
+            {
+                var level = search.EducationLevel.Trim();
+                query = query.Where(tp => tp.TutorSubjects.Any(ts =>
+                    ts.Subject != null &&
+                    !string.IsNullOrWhiteSpace(ts.Subject.EducationLevel) &&
+                    ts.Subject.EducationLevel.Contains(level, StringComparison.OrdinalIgnoreCase)));
+            }
+
             return query
                 .OrderByDescending(tp => tp.AverageRating)
                 .ThenByDescending(tp => tp.TotalReviews)
@@ -217,6 +226,15 @@ namespace TutorPlatform.Services
                 query = query.Where(tp => !string.IsNullOrWhiteSpace(tp.VerificationStatus) && tp.VerificationStatus.Contains(status));
             }
 
+            if (!string.IsNullOrWhiteSpace(search.EducationLevel))
+            {
+                var level = search.EducationLevel.Trim();
+                query = query.Where(tp => tp.TutorSubjects.Any(ts =>
+                    ts.Subject != null &&
+                    !string.IsNullOrWhiteSpace(ts.Subject.EducationLevel) &&
+                    ts.Subject.EducationLevel.Contains(level)));
+            }
+
             var tutors = await query
                 .OrderByDescending(tp => tp.AverageRating)
                 .ThenByDescending(tp => tp.TotalReviews)
@@ -249,6 +267,83 @@ namespace TutorPlatform.Services
                     .Distinct()
                     .ToList()
             }).ToList();
+        }
+
+        public async Task<TutorDetailDto?> GetDetailAsync(int tutorId, CancellationToken cancellationToken = default)
+        {
+            var tp = await _db.TutorProfiles
+                .AsNoTracking()
+                .Include(x => x.Tutor)
+                .Include(x => x.TutorSubjects).ThenInclude(ts => ts.Subject)
+                .Include(x => x.TutorCertificates)
+                .Include(x => x.AvailabilitySlots)
+                .FirstOrDefaultAsync(x => x.TutorId == tutorId, cancellationToken);
+
+            if (tp == null) return null;
+
+            return new TutorDetailDto
+            {
+                TutorId = tp.TutorId,
+                FullName = tp.Tutor?.FullName,
+                Email = tp.Tutor?.Email,
+                PhoneNumber = tp.Tutor?.PhoneNumber,
+                City = tp.Tutor?.City,
+                District = tp.Tutor?.District,
+                Address = tp.Tutor?.Address,
+                AvatarUrl = tp.Tutor?.AvatarUrl,
+                Bio = tp.Bio,
+                University = tp.University,
+                Major = tp.Major,
+                YearsOfExperience = tp.YearsOfExperience,
+                HourlyRateMin = tp.HourlyRateMin,
+                HourlyRateMax = tp.HourlyRateMax,
+                TeachingMode = tp.TeachingMode,
+                AverageRating = tp.AverageRating,
+                TotalReviews = tp.TotalReviews,
+                VerificationStatus = tp.VerificationStatus,
+                IsPublished = tp.IsPublished,
+                Subjects = tp.TutorSubjects
+                    .Where(ts => ts.Subject != null)
+                    .Select(ts => ts.Subject.SubjectName)
+                    .Distinct()
+                    .ToList(),
+                SubjectDetails = tp.TutorSubjects
+                    .Where(ts => ts.Subject != null)
+                    .Select(ts => new TutorSubjectItemDto
+                    {
+                        SubjectId = ts.SubjectId,
+                        SubjectName = ts.Subject.SubjectName,
+                        IsVerified = ts.IsVerified
+                    })
+                    .ToList(),
+                Certificates = tp.TutorCertificates
+                    .OrderByDescending(c => c.IssuedDate)
+                    .Select(c => new TutorCertificateItemDto
+                    {
+                        CertificateId = c.CertificateId,
+                        CertificateName = c.CertificateName,
+                        IssuedBy = c.IssuedBy,
+                        IssuedDate = c.IssuedDate,
+                        FileUrl = c.FileUrl
+                    })
+                    .ToList(),
+                AvailableSlots = tp.AvailabilitySlots
+                    .Where(s => s.IsRecurring || !s.IsBooked)
+                    .OrderBy(s => s.DayOfWeek)
+                    .ThenBy(s => s.SpecificDate)
+                    .ThenBy(s => s.StartTime)
+                    .Select(s => new AvailabilitySlotDto
+                    {
+                        SlotId = s.SlotId,
+                        DayOfWeek = s.DayOfWeek,
+                        SpecificDate = s.SpecificDate,
+                        StartTime = s.StartTime.ToString("HH:mm"),
+                        EndTime = s.EndTime.ToString("HH:mm"),
+                        IsRecurring = s.IsRecurring,
+                        IsBooked = s.IsBooked
+                    })
+                    .ToList()
+            };
         }
     }
 }

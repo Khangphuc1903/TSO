@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Datas;
 using TutorPlatform.DTOs;
@@ -51,6 +50,38 @@ public class ReviewService
         });
     }
 
+    public async Task<List<ReviewableBookingDto>> GetEligibleBookingsAsync(
+        int tutorId,
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await EligibleBookingsQuery(tutorId, userId)
+            .Include(b => b.Subject)
+            .OrderByDescending(b => b.ScheduledDate)
+            .ThenByDescending(b => b.StartTime)
+            .ToListAsync(cancellationToken);
+
+        return items.Select(b => new ReviewableBookingDto
+        {
+            BookingId = b.BookingId,
+            SubjectName = b.Subject.SubjectName,
+            ScheduledDate = b.ScheduledDate.ToString("yyyy-MM-dd"),
+            StartTime = b.StartTime.ToString("HH:mm"),
+            EndTime = b.EndTime.ToString("HH:mm"),
+            Status = b.Status
+        }).ToList();
+    }
+
+    private IQueryable<Booking> EligibleBookingsQuery(int tutorId, int userId)
+    {
+        var reviewedIds = _db.Reviews.Where(r => r.StudentId == userId && r.TutorId == tutorId).Select(r => r.BookingId);
+        return _db.Bookings.Where(b =>
+            b.TutorId == tutorId &&
+            b.StudentId == userId &&
+            (b.Status == "Confirmed" || b.Status == "Completed") &&
+            !reviewedIds.Contains(b.BookingId));
+    }
+
     public async Task<(bool Success, int StatusCode, string Message, TutorReviewsDto? Data)> CreateReviewAsync(
         int tutorId,
         int userId,
@@ -62,22 +93,20 @@ public class ReviewService
             return (false, StatusCodes.Status400BadRequest, "Số sao phải từ 1 đến 5.", null);
         }
 
-        var booking = await _db.Bookings
-            .FirstOrDefaultAsync(item =>
-                item.BookingId == dto.BookingId && item.StudentId == userId && item.TutorId == tutorId,
-                cancellationToken);
+        var eligible = await EligibleBookingsQuery(tutorId, userId).ToListAsync(cancellationToken);
+        if (eligible.Count == 0)
+        {
+            return (false, StatusCodes.Status400BadRequest,
+                "Bạn cần có buổi học đã được gia sư xác nhận hoặc hoàn thành mới đánh giá được.", null);
+        }
+
+        var booking = dto.BookingId is > 0
+            ? eligible.FirstOrDefault(item => item.BookingId == dto.BookingId)
+            : eligible.OrderByDescending(item => item.ScheduledDate).ThenByDescending(item => item.StartTime).First();
 
         if (booking == null)
         {
-            return (false, StatusCodes.Status400BadRequest, "Không tìm thấy booking hợp lệ để đánh giá.", null);
-        }
-
-        var alreadyReviewed = await _db.Reviews
-            .AnyAsync(review => review.BookingId == booking.BookingId, cancellationToken);
-
-        if (alreadyReviewed)
-        {
-            return (false, StatusCodes.Status409Conflict, "Booking này đã được đánh giá.", null);
+            return (false, StatusCodes.Status400BadRequest, "Buổi học này chưa được xác nhận hoặc đã đánh giá rồi.", null);
         }
 
         _db.Reviews.Add(new Review

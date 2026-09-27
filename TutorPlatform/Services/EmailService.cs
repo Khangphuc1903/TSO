@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Mail;
 
 namespace TutorPlatform.Services
@@ -25,7 +25,8 @@ namespace TutorPlatform.Services
                 using var client = new SmtpClient(smtp["Host"], int.Parse(smtp["Port"]!))
                 {
                     Credentials = new NetworkCredential(username, password),
-                    EnableSsl = true
+                    EnableSsl = true,
+                    Timeout = 8000
                 };
 
                 var mail = new MailMessage

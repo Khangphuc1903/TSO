@@ -3,48 +3,80 @@
   "WorkspaceRootPath": "D:\\PRN222\\TutorPlatform\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\hubs\\nameuseridprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\hubs\\nameuseridprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\hubs\\apphub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\hubs\\apphub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\scripts\\seed-demo-tutors.sql||{CC5D8DF0-88F4-4BB2-9DBB-B48CEE65C30A}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\scripts\\seed-demo-tutors.sql||{CC5D8DF0-88F4-4BB2-9DBB-B48CEE65C30A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\scripts\\seed-test-tutor-account.sql||{CC5D8DF0-88F4-4BB2-9DBB-B48CEE65C30A}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\scripts\\seed-test-tutor-account.sql||{CC5D8DF0-88F4-4BB2-9DBB-B48CEE65C30A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\demotutorseeder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\demotutorseeder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\weatherforecastcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\weatherforecastcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\studygroupscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\studygroupscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\subjectsearchcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\subjectsearchcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\bookingscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\bookingscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\helpers\\jwthelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\helpers\\jwthelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\tutorsearchcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\tutorsearchcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\bookingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\bookingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\tutorplatform.http||{5703B403-55E7-4C63-8C88-A8F52C7A45C5}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\tutorplatform.http||{5703B403-55E7-4C63-8C88-A8F52C7A45C5}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\reviewscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\reviewscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\subjectsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\subjectsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\tutorsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\tutorsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\weatherforecastcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\weatherforecastcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\reviewservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\reviewservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\services\\subjectsearchservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -55,20 +87,40 @@
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\services\\tutorsearchservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\tutorsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\tutorsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\subjectsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\subjectsearchrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\reviewdtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\reviewdtos.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\dtos\\registerdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\models\\refund.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\models\\refund.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\helpers\\jwthelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\helpers\\jwthelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\tutorplatform.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
       "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\tutorplatform.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\tutorplatform.http||{5703B403-55E7-4C63-8C88-A8F52C7A45C5}",
-      "RelativeMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|solutionrelative:tutorplatform\\tutorplatform.http||{5703B403-55E7-4C63-8C88-A8F52C7A45C5}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{8316D16B-EC9E-472A-B9A3-E9BF13319996}|TutorPlatform\\TutorPlatform.csproj|d:\\prn222\\tutorplatform\\tutorplatform\\datas\\tutorplatformdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -93,7 +145,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 24,
+          "SelectedChildIndex": 7,
           "Children": [
             {
               "$type": "Bookmark",
@@ -125,7 +177,162 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 0,
+              "Title": "NameUserIdProvider.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Hubs\\NameUserIdProvider.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Hubs\\NameUserIdProvider.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Hubs\\NameUserIdProvider.cs*",
+              "RelativeToolTip": "TutorPlatform\\Hubs\\NameUserIdProvider.cs*",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-24T08:47:02.424Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "AppHub.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Hubs\\AppHub.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Hubs\\AppHub.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Hubs\\AppHub.cs",
+              "RelativeToolTip": "TutorPlatform\\Hubs\\AppHub.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-24T08:47:00.713Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "seed-demo-tutors.sql",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Scripts\\seed-demo-tutors.sql",
+              "RelativeDocumentMoniker": "TutorPlatform\\Scripts\\seed-demo-tutors.sql",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Scripts\\seed-demo-tutors.sql",
+              "RelativeToolTip": "TutorPlatform\\Scripts\\seed-demo-tutors.sql",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-09-24T08:46:52.746Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "seed-test-tutor-account.sql",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Scripts\\seed-test-tutor-account.sql",
+              "RelativeDocumentMoniker": "TutorPlatform\\Scripts\\seed-test-tutor-account.sql",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Scripts\\seed-test-tutor-account.sql",
+              "RelativeToolTip": "TutorPlatform\\Scripts\\seed-test-tutor-account.sql",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-09-24T08:46:36.355Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "StudyGroupsController.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\StudyGroupsController.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\StudyGroupsController.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\StudyGroupsController.cs",
+              "RelativeToolTip": "TutorPlatform\\Controllers\\StudyGroupsController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T05:58:12.731Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "DemoTutorSeeder.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\DemoTutorSeeder.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Services\\DemoTutorSeeder.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\DemoTutorSeeder.cs",
+              "RelativeToolTip": "TutorPlatform\\Services\\DemoTutorSeeder.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T05:17:12.655Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "BookingsController.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\BookingsController.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\BookingsController.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\BookingsController.cs",
+              "RelativeToolTip": "TutorPlatform\\Controllers\\BookingsController.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T05:09:54.582Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "BookingService.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\BookingService.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Services\\BookingService.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\BookingService.cs",
+              "RelativeToolTip": "TutorPlatform\\Services\\BookingService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T05:09:44.86Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "ReviewService.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\ReviewService.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Services\\ReviewService.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\ReviewService.cs",
+              "RelativeToolTip": "TutorPlatform\\Services\\ReviewService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T02:25:42.913Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "ReviewsController.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\ReviewsController.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\ReviewsController.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\ReviewsController.cs",
+              "RelativeToolTip": "TutorPlatform\\Controllers\\ReviewsController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T02:25:28.22Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "SubjectSearchController.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\SubjectSearchController.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\SubjectSearchController.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\SubjectSearchController.cs",
+              "RelativeToolTip": "TutorPlatform\\Controllers\\SubjectSearchController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T02:25:26.925Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "TutorSearchController.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\TutorSearchController.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\TutorSearchController.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\TutorSearchController.cs",
+              "RelativeToolTip": "TutorPlatform\\Controllers\\TutorSearchController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T02:25:25.033Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "ReviewDtos.cs",
+              "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\DTOs\\ReviewDtos.cs",
+              "RelativeDocumentMoniker": "TutorPlatform\\DTOs\\ReviewDtos.cs",
+              "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\DTOs\\ReviewDtos.cs",
+              "RelativeToolTip": "TutorPlatform\\DTOs\\ReviewDtos.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-09-18T02:25:15.374Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
               "Title": "User.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Models\\User.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Models\\User.cs",
@@ -137,19 +344,19 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 17,
               "Title": "EmailService.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\EmailService.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Services\\EmailService.cs",
               "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\EmailService.cs",
               "RelativeToolTip": "TutorPlatform\\Services\\EmailService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB8AAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-09-15T06:15:09.684Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 23,
               "Title": "SubjectSearchRequest.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\DTOs\\SubjectSearchRequest.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\DTOs\\SubjectSearchRequest.cs",
@@ -161,7 +368,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 22,
               "Title": "TutorSearchRequest.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\DTOs\\TutorSearchRequest.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\DTOs\\TutorSearchRequest.cs",
@@ -173,7 +380,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 19,
               "Title": "SubjectSearchService.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\SubjectSearchService.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Services\\SubjectSearchService.cs",
@@ -185,7 +392,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
+              "DocumentIndex": 20,
               "Title": "TutorSearchService.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\TutorSearchService.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Services\\TutorSearchService.cs",
@@ -197,7 +404,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 28,
               "Title": "Refund.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Models\\Refund.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Models\\Refund.cs",
@@ -209,43 +416,43 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 13,
               "Title": "Program.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Program.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Program.cs",
               "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Program.cs",
               "RelativeToolTip": "TutorPlatform\\Program.cs",
-              "ViewState": "AgIAAAQAAAAAAAAAAAAkwB8AAAAFAAAAAAAAAA==",
+              "ViewState": "AgIAAA0AAAAAAAAAAAAkwE0AAAAiAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-09-10T09:42:13.059Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 21,
               "Title": "AuthController.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\AuthController.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\AuthController.cs",
               "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\AuthController.cs",
               "RelativeToolTip": "TutorPlatform\\Controllers\\AuthController.cs",
-              "ViewState": "AgIAAAsAAAAAAAAAAAAkwAcAAAATAAAAAAAAAA==",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAkwAcAAAATAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-09-10T09:41:19.927Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 16,
               "Title": "AuthService.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\AuthService.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Services\\AuthService.cs",
               "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Services\\AuthService.cs",
               "RelativeToolTip": "TutorPlatform\\Services\\AuthService.cs",
-              "ViewState": "AgIAADQAAAAAAAAAAAAUwEwAAAAVAAAAAAAAAA==",
+              "ViewState": "AgIAAA0AAAAAAAAAAAAkwDsAAAAIAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-09-10T09:38:40.794Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 10,
               "Title": "JwtHelper.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Helpers\\JwtHelper.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Helpers\\JwtHelper.cs",
@@ -257,7 +464,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 25,
               "Title": "RegisterDto.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\DTOs\\RegisterDto.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\DTOs\\RegisterDto.cs",
@@ -269,7 +476,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 29,
               "Title": "TutorPlatform.csproj",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\TutorPlatform.csproj",
               "RelativeDocumentMoniker": "TutorPlatform\\TutorPlatform.csproj",
@@ -281,7 +488,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 14,
               "Title": "TutorPlatform.http",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\TutorPlatform.http",
               "RelativeDocumentMoniker": "TutorPlatform\\TutorPlatform.http",
@@ -293,7 +500,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 26,
               "Title": "appsettings.Development.json",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\appsettings.Development.json",
               "RelativeDocumentMoniker": "TutorPlatform\\appsettings.Development.json",
@@ -305,7 +512,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 31,
               "Title": "OcrExtractionResult.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Models\\OcrExtractionResult.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Models\\OcrExtractionResult.cs",
@@ -317,7 +524,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 30,
               "Title": "TutorPlatformDbContext.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Datas\\TutorPlatformDbContext.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Datas\\TutorPlatformDbContext.cs",
@@ -329,7 +536,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 5,
               "Title": "appsettings.json",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\appsettings.json",
               "RelativeDocumentMoniker": "TutorPlatform\\appsettings.json",
@@ -337,24 +544,23 @@
               "RelativeToolTip": "TutorPlatform\\appsettings.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2026-09-10T09:24:19.366Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-09-10T09:24:19.366Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 6,
               "Title": "WeatherForecastController.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\WeatherForecastController.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Controllers\\WeatherForecastController.cs",
               "ToolTip": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Controllers\\WeatherForecastController.cs",
               "RelativeToolTip": "TutorPlatform\\Controllers\\WeatherForecastController.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACAAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-09-10T08:37:36.693Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 32,
               "Title": "WeatherForecast.cs",
               "DocumentMoniker": "D:\\PRN222\\TutorPlatform\\TutorPlatform\\Models\\WeatherForecast.cs",
               "RelativeDocumentMoniker": "TutorPlatform\\Models\\WeatherForecast.cs",
@@ -366,7 +572,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 20,
+              "DocumentIndex": 33,
               "Title": "App.css",
               "DocumentMoniker": "C:\\Users\\ASUS\\Downloads\\tutor-platform-client\\tutor-platform-client\\src\\App.css",
               "ToolTip": "C:\\Users\\ASUS\\Downloads\\tutor-platform-client\\tutor-platform-client\\src\\App.css",

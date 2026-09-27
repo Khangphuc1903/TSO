@@ -13,6 +13,7 @@ namespace TutorPlatform.DTOs
         public int? MaxExperience { get; set; }
         public string? TeachingMode { get; set; }
         public string? VerificationStatus { get; set; }
+        public string? EducationLevel { get; set; }
         public bool IsPublishedOnly { get; set; } = true;
     }
 }

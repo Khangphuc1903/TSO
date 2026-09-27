@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Model;
@@ -83,8 +83,12 @@ public partial class TutorPlatformDbContext : DbContext
     public virtual DbSet<Wishlist> Wishlists { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server= LAPTOP-PJCV33QV\\SQLEXPRESS; Database= TutorPlatformDB; Uid=sa; Pwd=123; TrustServerCertificate=True;");
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSqlServer("Server=LAPTOP-PJCV33QV\\SQLEXPRESS;Database=TutorPlatformDB;Uid=sa;Pwd=123;TrustServerCertificate=True;");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -570,6 +574,7 @@ public partial class TutorPlatformDbContext : DbContext
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasDefaultValue("Pending");
+            entity.Property(e => e.JoinMessage).HasMaxLength(500);
 
             entity.HasOne(d => d.Group).WithMany(p => p.StudyGroupMembers)
                 .HasForeignKey(d => d.GroupId)
@@ -754,6 +759,7 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasColumnType("datetime");
             entity.Property(e => e.District).HasMaxLength(100);
             entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.EmailConfirmExpiry).HasColumnType("datetime");
             entity.Property(e => e.EmailConfirmToken).HasMaxLength(255);
             entity.Property(e => e.FullName).HasMaxLength(150);
             entity.Property(e => e.Gender).HasMaxLength(10);

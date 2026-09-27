@@ -13,6 +13,8 @@ public partial class StudyGroupMember
 
     public string Status { get; set; } = null!;
 
+    public string? JoinMessage { get; set; }
+
     public DateTime JoinedAt { get; set; }
 
     public virtual StudyGroup Group { get; set; } = null!;

@@ -4,14 +4,23 @@ namespace TutorPlatform.DTOs;
 
 public class CreateReviewDto
 {
-    [Range(1, int.MaxValue)]
-    public int BookingId { get; set; }
+    public int? BookingId { get; set; }
 
     [Range(1, 5)]
     public byte Rating { get; set; }
 
     [MaxLength(1000)]
     public string? Comment { get; set; }
+}
+
+public class ReviewableBookingDto
+{
+    public int BookingId { get; set; }
+    public string SubjectName { get; set; } = null!;
+    public string ScheduledDate { get; set; } = null!;
+    public string StartTime { get; set; } = null!;
+    public string EndTime { get; set; } = null!;
+    public string Status { get; set; } = null!;
 }
 
 public class ReviewListItemDto

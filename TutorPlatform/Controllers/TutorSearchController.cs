@@ -71,6 +71,25 @@ namespace TutorPlatform.Controllers
             }
         }
 
+        [HttpGet("{tutorId:int}")]
+        public async Task<IActionResult> GetById(int tutorId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var item = await _tutorSearchService.GetDetailAsync(tutorId, cancellationToken);
+                if (item == null)
+                    return NotFound(new { message = "Không tìm thấy gia sư." });
+                return Ok(item);
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Không thể truy vấn dữ liệu gia sư hiện tại. Vui lòng thử lại sau."
+                });
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetDefaultTutors(CancellationToken cancellationToken)
         {

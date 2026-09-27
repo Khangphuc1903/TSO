@@ -27,8 +27,19 @@ public class ReviewsController : ControllerBase
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Không thể trả danh sách đánh giá hiện táji. Vui lòng thử lại sau." });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Không thể trả danh sách đánh giá hiện tại. Vui lòng thử lại sau." });
         }
+    }
+
+    [Authorize(Roles = "Student")]
+    [HttpGet("tutor/{tutorId:int}/eligible")]
+    public async Task<IActionResult> Eligible(int tutorId, CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized(new { message = "Không xác định được người dùng đăng nhập." });
+        var items = await _reviewService.GetEligibleBookingsAsync(tutorId, userId, cancellationToken);
+        return Ok(items);
     }
 
     [Authorize(Roles = "Student")]
@@ -53,7 +64,7 @@ public class ReviewsController : ControllerBase
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Không thể gửi đánh giá hiện táji. Vui lòng thử lại sau." });
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Không thể gửi đánh giá hiện tại. Vui lòng thử lại sau." });
         }
     }
 }

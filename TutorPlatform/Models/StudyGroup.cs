@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace TutorPlatform.Model;
@@ -42,6 +42,8 @@ public partial class StudyGroup
     public virtual StudyGroupMentor? StudyGroupMentor { get; set; }
 
     public virtual ICollection<StudyGroupSchedule> StudyGroupSchedules { get; set; } = new List<StudyGroupSchedule>();
+
+    public virtual ICollection<StudyGroupMessage> StudyGroupMessages { get; set; } = new List<StudyGroupMessage>();
 
     public virtual Subject Subject { get; set; } = null!;
 }
