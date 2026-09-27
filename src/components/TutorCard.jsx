@@ -1,9 +1,10 @@
+import { Link } from "react-router-dom";
 import { Star, BadgeCheck, ChevronRight } from "lucide-react";
+import { formatVnd } from "../utils/format";
 
 export default function TutorCard({ tutor }) {
-  const { name, subject, tags, rating, price, photoUrl } = tutor;
-
-  return (
+  const { id, name, subject, tags = [], rating = 0, price = 0, photoUrl } = tutor;
+  const body = (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       <div className="relative h-40">
         <img
@@ -38,8 +39,8 @@ export default function TutorCard({ tutor }) {
 
         <div className="flex items-center justify-between">
           <div>
-            <span className="font-bold text-slate-900">${price}</span>
-            <span className="text-xs text-slate-400"> /hr</span>
+            <span className="font-bold text-slate-900">{formatVnd(price)}</span>
+            <span className="text-xs text-slate-400"> /giờ</span>
           </div>
           <button className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-brand-50 hover:text-brand-600 transition-colors">
             <ChevronRight size={16} />
@@ -47,5 +48,13 @@ export default function TutorCard({ tutor }) {
         </div>
       </div>
     </div>
+  );
+
+  if (!id) return body;
+
+  return (
+    <Link to={`/tutors/${id}`} state={{ tutor }} className="block">
+      {body}
+    </Link>
   );
 }

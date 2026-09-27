@@ -10,6 +10,7 @@ export function parseUserFromToken(token) {
       payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
       "";
     const userId =
+      payload.sub ||
       payload.nameid ||
       payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] ||
       "";
@@ -41,9 +42,27 @@ export function isLoggedIn() {
   return Boolean(localStorage.getItem("token"));
 }
 
+export function homeForRole(role) {
+  const r = (role || "").toLowerCase();
+  if (r === "pending") return "/onboarding";
+  return r === "tutor" ? "/tutor" : "/profile";
+}
+
+export function redirectAfterAuth(navigate, token, needsOnboarding) {
+  const user = saveSession(token);
+  if (needsOnboarding || (user?.role || "").toLowerCase() === "pending") {
+    localStorage.setItem("needsOnboarding", "1");
+    navigate("/onboarding");
+    return;
+  }
+  localStorage.removeItem("needsOnboarding");
+  navigate(homeForRole(user?.role));
+}
+
 export function logout() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
+  localStorage.removeItem("needsOnboarding");
 }
 
 export function avatarUrl(email) {

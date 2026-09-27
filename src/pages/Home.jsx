@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Users,
@@ -12,6 +13,7 @@ import {
 import TutorCard from "../components/TutorCard";
 import TrustBadge from "../components/TrustBadge";
 import Navbar from "../components/Navbar";
+import { getDefaultTutors } from "../api/tutorSearch";
 const FEATURED_TUTORS = [
   {
     name: "Dr. Marcus Vance",
@@ -72,14 +74,30 @@ const TRUST_ITEMS = [
 ];
 
 export default function Home() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("tutors"); // "tutors" | "groups"
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("");
+  const [featured, setFeatured] = useState(FEATURED_TUTORS);
+
+  useEffect(() => {
+    getDefaultTutors()
+      .then((items) => {
+        if (items.length) setFeatured(items.slice(0, 4));
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // TODO: navigate to /search?query=...&level=...&mode=tutors|groups
-    console.log({ activeTab, query, level });
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("keyword", query.trim());
+    if (activeTab === "tutors") {
+      if (level) params.set("educationLevel", level);
+      navigate(`/tutors${params.toString() ? `?${params}` : ""}`);
+      return;
+    }
+    navigate(`/study-groups${params.toString() ? `?${params}` : ""}`);
   };
 
   return (
@@ -148,10 +166,10 @@ export default function Home() {
               className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 sm:w-48"
             >
               <option value="">Select Level</option>
-              <option value="primary">Primary School</option>
-              <option value="secondary">Secondary School</option>
-              <option value="highschool">High School</option>
-              <option value="university">University</option>
+              <option value="Primary">Primary School</option>
+              <option value="Secondary">Secondary School</option>
+              <option value="High">High School</option>
+              <option value="University">University</option>
             </select>
 
             <button
@@ -194,18 +212,18 @@ export default function Home() {
               Featured Tutors
             </h2>
           </div>
-          <a
-            href="/tutors"
+          <Link
+            to="/tutors"
             className="flex items-center gap-1 text-sm font-medium text-brand-600 hover:underline"
           >
             View All Tutors
             <ArrowRight size={14} />
-          </a>
+          </Link>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {FEATURED_TUTORS.map((tutor) => (
-            <TutorCard key={tutor.name} tutor={tutor} />
+          {featured.map((tutor) => (
+            <TutorCard key={tutor.id || tutor.name} tutor={tutor} />
           ))}
         </div>
       </section>

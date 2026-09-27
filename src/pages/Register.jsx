@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { GraduationCap, Mail, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { GraduationCap, Mail, Lock, User, Eye, EyeOff, ArrowRight, Phone } from "lucide-react";
 import axiosClient from "../api/axiosClient";
+import GoogleSignInButton from "../components/GoogleSignInButton";
+import LocationFields from "../components/LocationFields";
+import { phoneError, regionError } from "../data/locations";
+import { redirectAfterAuth } from "../auth";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -9,6 +13,9 @@ export default function Register() {
     fullName: "",
     email: "",
     password: "",
+    phoneNumber: "",
+    city: "",
+    district: "",
     role: "Student",
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -21,17 +28,22 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    const phoneMsg = phoneError(form.phoneNumber);
+    if (phoneMsg) {
+      setError(phoneMsg);
+      return;
+    }
+    const areaMsg = regionError(form.city, form.district);
+    if (areaMsg) {
+      setError(areaMsg);
+      return;
+    }
     setLoading(true);
 
     try {
-      // ---- ĐÂY LÀ CHỖ FORM ĐƯỢC GỬI ĐI ----
-      // axiosClient.baseURL (khai báo trong src/api/axiosClient.js) + "/Auth/register"
-      // => gọi tới: POST https://localhost:xxxx/api/Auth/register
-      // Body gửi đi chính là object "form" state ở trên, Axios tự chuyển thành JSON.
       await axiosClient.post("/Auth/register", form);
       navigate("/verify-email", { state: { email: form.email } });
     } catch (err) {
-      // Nếu email đã tồn tại, BE trả BadRequest({ message }) -> hiện ra đây
       setError(err.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
@@ -56,6 +68,18 @@ export default function Register() {
         <p className="text-slate-500 mb-6">
           Join thousands of students and tutors already learning together.
         </p>
+
+        <GoogleSignInButton
+          label="Continue with Google"
+          onError={setError}
+          onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding)}
+        />
+
+        <div className="flex items-center gap-3 my-6">
+          <div className="h-px bg-slate-200 flex-1" />
+          <span className="text-xs text-slate-400">or continue with email</span>
+          <div className="h-px bg-slate-200 flex-1" />
+        </div>
 
         {error && (
           <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
@@ -104,6 +128,40 @@ export default function Register() {
                 className="w-full rounded-lg border border-slate-200 pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">
+              Số điện thoại (10 số)
+            </label>
+            <div className="relative">
+              <Phone
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="tel"
+                name="phoneNumber"
+                required
+                inputMode="numeric"
+                maxLength={10}
+                value={form.phoneNumber}
+                onChange={(e) =>
+                  setForm({ ...form, phoneNumber: e.target.value.replace(/\D/g, "").slice(0, 10) })
+                }
+                placeholder="0912345678"
+                className="w-full rounded-lg border border-slate-200 pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <LocationFields
+              required
+              city={form.city}
+              district={form.district}
+              onChange={({ city, district }) => setForm((p) => ({ ...p, city, district }))}
+            />
           </div>
 
           <div>

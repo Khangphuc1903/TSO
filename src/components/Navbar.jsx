@@ -3,19 +3,25 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Bell, GraduationCap, MessageCircle, LogOut, User } from "lucide-react";
 import { avatarUrl, getUser, isLoggedIn, logout } from "../auth";
 
-const NAV_LINKS = [
-  { label: "Discovery", to: "/" },
-  { label: "Find Tutors", to: "/tutors" },
-  { label: "Find Study Groups", to: "/study-groups" },
-  { label: "My Dashboard", to: "/dashboard" },
-];
-
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const loggedIn = isLoggedIn();
   const user = getUser();
+  const isTutor = (user?.role || "").toLowerCase() === "tutor";
+  const isPending =
+    (user?.role || "").toLowerCase() === "pending" || localStorage.getItem("needsOnboarding") === "1";
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const navLinks = isPending
+    ? [{ label: "Hoàn tất hồ sơ", to: "/onboarding" }]
+    : [
+        { label: "Discovery", to: "/" },
+        { label: "Find Tutors", to: "/tutors" },
+        { label: "Find Study Groups", to: "/study-groups" },
+        { label: isTutor ? "Lịch dạy" : "Lịch học", to: "/bookings" },
+        ...(isTutor ? [{ label: "Bảng làm việc", to: "/tutor" }] : []),
+      ];
 
   const handleLogout = () => {
     logout();
@@ -32,16 +38,14 @@ export default function Navbar() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          {NAV_LINKS.map((link) => {
+          {navLinks.map((link) => {
             const isActive = location.pathname === link.to;
             return (
               <Link
                 key={link.to}
                 to={link.to}
                 className={`text-sm font-medium transition-colors ${
-                  isActive
-                    ? "text-brand-600"
-                    : "text-slate-600 hover:text-slate-900"
+                  isActive ? "text-brand-600" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 {link.label}
@@ -76,18 +80,12 @@ export default function Navbar() {
                 className="ml-1 h-9 w-9 rounded-full overflow-hidden ring-2 ring-slate-100 hover:ring-brand-200 transition"
                 aria-label="Profile menu"
               >
-                <img
-                  src={avatarUrl(user?.email)}
-                  alt="Avatar"
-                  className="h-full w-full object-cover"
-                />
+                <img src={avatarUrl(user?.email)} alt="Avatar" className="h-full w-full object-cover" />
               </button>
 
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-100 bg-white shadow-lg py-1">
-                  <p className="px-3 py-2 text-xs text-slate-500 truncate">
-                    {user?.email}
-                  </p>
+                  <p className="px-3 py-2 text-xs text-slate-500 truncate">{user?.email}</p>
                   <Link
                     to="/profile"
                     onClick={() => setMenuOpen(false)}
@@ -96,6 +94,16 @@ export default function Navbar() {
                     <User size={16} />
                     Trang cá nhân
                   </Link>
+                  {isTutor && (
+                    <Link
+                      to="/tutor"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <GraduationCap size={16} />
+                      Bảng làm việc
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={handleLogout}
@@ -110,10 +118,7 @@ export default function Navbar() {
           </div>
         ) : (
           <div className="flex items-center gap-5">
-            <Link
-              to="/register"
-              className="hidden sm:block text-sm font-medium text-brand-600 hover:underline"
-            >
+            <Link to="/register" className="hidden sm:block text-sm font-medium text-brand-600 hover:underline">
               Register
             </Link>
             <Link

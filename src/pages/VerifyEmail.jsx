@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { MailCheck, ArrowRight } from "lucide-react";
 import axiosClient from "../api/axiosClient";
-import { saveSession } from "../auth";
+import { redirectAfterAuth } from "../auth";
 
 export default function VerifyEmail() {
   const location = useLocation();
@@ -21,8 +21,7 @@ export default function VerifyEmail() {
     setLoading(true);
     try {
       const res = await axiosClient.post("/Auth/confirm-email", { email, code });
-      saveSession(res.data.token);
-      navigate("/profile");
+      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding);
     } catch (err) {
       setError(err.response?.data?.message || "Verification failed.");
     } finally {
