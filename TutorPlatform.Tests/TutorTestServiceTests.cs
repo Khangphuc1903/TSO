@@ -191,7 +191,12 @@ public class TutorTestServiceTests
         Assert.Empty(await service.ListAttemptsAsync(2, CancellationToken.None));
         Assert.Empty(await service.ListTestsAsync(2, CancellationToken.None));
         Assert.False((await service.GetQuestionsAsync(2, 8, "Lớp 8", CancellationToken.None)).Success);
-        Assert.False((await service.GetTestStatusAsync(2, 8, "Lớp 8", CancellationToken.None)).Success);
+
+        // Status endpoint chỉ trả trạng thái CỦA CHÍNH tutor đó (chưa làm), không lộ kết quả của tutor 1.
+        var ownStatus = (await service.GetTestStatusAsync(2, 8, "Lớp 8", CancellationToken.None)).Data!;
+        Assert.False(ownStatus.IsRegistered);
+        Assert.Equal("Chưa làm", ownStatus.Status);
+        Assert.Null(ownStatus.LatestIsPassed);
     }
 
     [Fact]
@@ -240,6 +245,75 @@ public class TutorTestServiceTests
         Assert.Equal(2, result.CorrectCount);
         Assert.Equal(66.67m, result.ScorePercent);
         Assert.True(result.IsPassed);
+    }
+
+    [Fact]
+    public async Task PublishRequiresAllRegisteredCombosVerified()
+    {
+        await using var db = CreateDbContext();
+        SeedComboData(db);
+        db.TutorProfiles.Add(new TutorProfile
+        {
+            TutorId = 1,
+            TeachingMode = "Both",
+            VerificationStatus = "Pending",
+            IsPublished = false,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var workspace = new TutorWorkspaceService(db, null!);
+        var service = new TutorTestService(db);
+
+        UpdateTutorTeachingProfileDto PublishDto() => new()
+        {
+            TeachingMode = "Online",
+            IsPublished = true,
+            SubjectRegistrations = new List<SubjectRegistrationDto>
+            {
+                new() { SubjectId = 8, GradeLevel = "Lớp 8" },
+                new() { SubjectId = 8, GradeLevel = "Lớp 9" }
+            }
+        };
+
+        // Case 1+4: chưa hoàn thành bài test bắt buộce => KHÔNG được công công quỷ.
+        var blocked = await workspace.UpdateProfileAsync(1, PublishDto(), CancellationToken.None);
+        Assert.False(blocked.Success);
+        Assert.Equal(400, blocked.Status);
+        Assert.False(db.TutorProfiles.Single(p => p.TutorId == 1).IsPublished);
+
+        // Case 8: đạt Toán Lớp 8 nhưng Lớp 9 chưa đạt => vẫn chưa đủ điều conditions.
+        await service.SubmitAsync(1, new SubmitTutorTestDto
+        {
+            SubjectId = 8,
+            GradeLevel = "Lớp 8",
+            Answers = new List<TutorTestAnswerSubmissionDto>
+            {
+                new() { QuestionId = 1, SelectedOption = "A" },
+                new() { QuestionId = 2, SelectedOption = "B" }
+            }
+        }, CancellationToken.None);
+
+        var stillBlocked = await workspace.UpdateProfileAsync(1, PublishDto(), CancellationToken.None);
+        Assert.False(stillBlocked.Success);
+        Assert.Equal(400, stillBlocked.Status);
+
+        // Đạt thêm Lớp 9 => đủ điều conditions, công công quỷ thành công.
+        await service.SubmitAsync(1, new SubmitTutorTestDto
+        {
+            SubjectId = 8,
+            GradeLevel = "Lớp 9",
+            Answers = new List<TutorTestAnswerSubmissionDto>
+            {
+                new() { QuestionId = 3, SelectedOption = "C" },
+                new() { QuestionId = 4, SelectedOption = "D" }
+            }
+        }, CancellationToken.None);
+
+        var ok = await workspace.UpdateProfileAsync(1, PublishDto(), CancellationToken.None);
+        Assert.True(ok.Success);
+        Assert.True(db.TutorProfiles.Single(p => p.TutorId == 1).IsPublished);
+        Assert.Equal("Verified", db.TutorProfiles.Single(p => p.TutorId == 1).VerificationStatus);
     }
 
     [Fact]
