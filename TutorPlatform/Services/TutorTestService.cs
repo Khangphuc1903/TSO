@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Datas;
 using TutorPlatform.DTOs;
@@ -8,6 +8,7 @@ namespace TutorPlatform.Services;
 
 public class TutorTestService
 {
+    private const string ProfessionalTestType = "Professional";
     private const decimal DefaultPassThreshold = 70m;
     private const string PassThresholdSettingKey = "TutorTestPassThreshold";
     private readonly TutorPlatformDbContext _db;
@@ -52,7 +53,7 @@ public class TutorTestService
             };
             foreach (var entry in questionCounts.Where(item => item.SubjectId == subject.SubjectId && item.GradeLevel != null))
             {
-                var latest = latestAttempts[KeyOf(subject.SubjectId, entry.GradeLevel)];
+                var latest = LatestFor(latestAttempts, subject.SubjectId, entry.GradeLevel);
                 subjectDto.Grades.Add(new TutorTestGradeDto
                 {
                     GradeLevel = entry.GradeLevel!,
@@ -99,7 +100,7 @@ public class TutorTestService
         {
             var subject = names[entry.SubjectId];
             var grade = entry.GradeLevel!;
-            var latest = latestAttempts[KeyOf(entry.SubjectId, grade)];
+            var latest = LatestFor(latestAttempts, entry.SubjectId, grade);
             tests.Add(new TutorTestListItemDto
             {
                 SubjectId = entry.SubjectId,
@@ -139,7 +140,7 @@ public class TutorTestService
             .OrderBy(entry => entry.Grade)
             .Select(entry =>
             {
-                var latest = latestAttempts[KeyOf(subjectId, entry.Grade)];
+                var latest = LatestFor(latestAttempts, subjectId, entry.Grade);
                 return new TutorTestGradeDto
                 {
                     GradeLevel = entry.Grade,
@@ -163,7 +164,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             .FirstOrDefaultAsync(cancellationToken);
 
         if (subject == null || normalizedGrade == null)
-            return (false, 404, "Tá»• há»£p mÃ´n há»c/lá»› h khÃ´ng tá»“n táº¡i.", null);
+            return (false, 404, "Tổ hợp môn học/lớ h không tồn tại.", null);
 
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
@@ -172,9 +173,9 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             question => question.IsActive && question.SubjectId == subjectId && question.GradeLevel == normalizedGrade, cancellationToken);
 
         if (questionCount == 0)
-            return (false, 404, "Hiá»‡n chÆ°a cÃ³ bÃ i test for this mÃ´n + lá»›p.", null);
+            return (false, 404, "Hiện chưa có bài test for this môn + lớp.", null);
 
-        var latest = (await LoadLatestAttemptsAsync(tutorId, cancellationToken))[KeyOf(subjectId, normalizedGrade)];
+        var latest = LatestFor(await LoadLatestAttemptsAsync(tutorId, cancellationToken), subjectId, normalizedGrade);
 
         return (true, 200, string.Empty, new TutorTestStatusDto
         {
@@ -224,13 +225,13 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(gradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chá»n lá»›p (grade) Ä‘á»ƒ lÃ m bÃ i test.", null);
+            return (false, 400, "Chọn lớp (grade) để làm bài test.", null);
 
-        // Tutor chá»‰ truy cáº­p bÃ i test for tá»• há»£p (mÃ´n + lá»›p) mÃ  háº¯ Ä‘Äƒng kÃ½.
+        // Tutor chỉ truy cập bài test for tổ hợp (môn + lớp) mà hắ đăng ký.
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
         if (!isRegistered)
-            return (false, 403, "ÄÄƒng kÃ½ tá»• há»£p " + subjectId + " + " + normalizedGrade + " trÆ°á»›c lÃ m bÃ i test.", null);
+            return (false, 403, "Đăng ký tổ hợp " + subjectId + " + " + normalizedGrade + " trước làm bài test.", null);
 
         var subject = await _db.Subjects
             .AsNoTracking()
@@ -239,11 +240,11 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             .FirstOrDefaultAsync(cancellationToken);
 
         if (subject == null)
-            return (false, 404, "MÃ´n há»c khÃ´ng tá»“n táº¡i ho chÆ°a Ä‘Æ°á»£c kÃ­ch hoáº¡t.", null);
+            return (false, 404, "Môn học không tồn tại ho chưa được kích hoạt.", null);
 
         var questions = await LoadQuestionsAsync(subjectId, normalizedGrade, cancellationToken);
         if (questions.Count == 0)
-            return (false, 404, "Hiá»‡n chÆ°a cÃ³ cÃ¢u há»i for bÃ i test nÃ y (mÃ´n + lá»›p).", null);
+            return (false, 404, "Hiện chưa có câu hỏi for bài test này (môn + lớp).", null);
 
         return (true, 200, string.Empty, new TutorTestQuestionsDto
         {
@@ -272,16 +273,16 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(dto.GradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chá»n lá»›p (grade) Ä‘á»ƒ ná»™p bÃ i test.", null);
+            return (false, 400, "Chọn lớp (grade) để nộp bài test.", null);
 
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
         if (!isRegistered)
-            return (false, 403, "ÄÄƒng kÃ½ tá»• há»£p trÆ°á»›c ná»™p bÃ i test.", null);
+            return (false, 403, "Đăng ký tổ hợp trước nộp bài test.", null);
 
         var questions = await LoadQuestionsAsync(dto.SubjectId, normalizedGrade, cancellationToken);
         if (questions.Count == 0)
-            return (false, 404, "Hiá»‡n chÆ°a cÃ³ cÃ¢u há»i for bÃ i test nÃ y (mÃ´n + lá»›p).", null);
+            return (false, 404, "Hiện chưa có câu hỏi for bài test này (môn + lớp).", null);
 
         var subjectInfo = await _db.Subjects
             .Where(subject => subject.SubjectId == dto.SubjectId)
@@ -290,14 +291,14 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         var submittedAnswers = dto.Answers ?? new List<TutorTestAnswerSubmissionDto>();
         if (submittedAnswers.GroupBy(answer => answer.QuestionId).Any(group => group.Count() > 1))
-            return (false, 400, "KhÃ´ng Ä‘Æ°á»£c gá»­i cÃ¢u tráº£ lá»i trÃ¹ng láº·p.", null);
+            return (false, 400, "Không được gửi câu trả lời trùng lặp.", null);
         if (submittedAnswers.Any(answer =>
                 NormalizeOption(answer.SelectedOption) is { } option && option is not ("A" or "B" or "C" or "D")))
-            return (false, 400, "ÄÃ¡p Ã¡n chá»‰ Ä‘Æ°á»£c chá»n A, B, C hoáº·c D.", null);
+            return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
 
         var questionIds = questions.Select(question => question.QuestionId).ToHashSet();
         if (submittedAnswers.Any(answer => !questionIds.Contains(answer.QuestionId)))
-            return (false, 400, "BÃ i lÃ m chá»©a cÃ¢u há»i khÃ´ng thuá»™c bÃ i test nÃ y.", null);
+            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài test này.", null);
 
         var answers = submittedAnswers.ToDictionary(
             answer => answer.QuestionId,
@@ -307,7 +308,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         var submittedAt = DateTime.UtcNow;
         var startedAt = dto.StartedAt?.ToUniversalTime() ?? submittedAt;
         if (startedAt > submittedAt)
-            return (false, 400, "Thá»i Ä‘iá»ƒm báº¯t Ä‘áº§u bÃ i test khÃ´ng há»£p lá»‡.", null);
+            return (false, 400, "Thời điểm bắt đầu bài test không hợp lệ.", null);
 
         var attemptNumber = (await _db.TutorTestAttempts
             .Where(attempt => attempt.TutorId == tutorId
@@ -341,7 +342,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         _db.TutorTestAttempts.Add(attempt);
 
-        // Äáº¡t â‡’ Ä‘Ã¡nh dáº¥u tá»• há»£p (mÃ´n + lá»›p) Ä‘Ã£ Ä‘á»§ Ä‘iá»u conditions giáº£ng dáº¡y.
+        // Đạt ⇒ đánh dấu tổ hợp (môn + lớp) đã đủ điều conditions giảng dạy.
         if (score.IsPassed)
             await MarkCombinationVerifiedAsync(tutorId, dto.SubjectId, normalizedGrade, submittedAt, cancellationToken);
 
@@ -371,17 +372,17 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(dto.GradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chá»n lá»›p (grade) for mÃ´n há»c.");
+            return (false, 400, "Chọn lớp (grade) for môn học.");
 
         var subjectOk = await _db.Subjects.AnyAsync(s => s.SubjectId == dto.SubjectId && s.IsActive, cancellationToken);
         if (!subjectOk)
-            return (false, 404, "MÃ´n há»c khÃ´ng tá»“n táº¡i ho chÆ°a Ä‘Æ°á»£c kÃ­ch hoáº¡t.");
+            return (false, 404, "Môn học không tồn tại ho chưa được kích hoạt.");
 
-        // Kada tá»• há»£p pháº£i cÃ³ bÃ i test tÆ°Æ¡ngå¿œ trÆ°á»›c Ä‘Äƒng kÃ½ (khÃ´ng bÃ i test "chung" mÃ¹ quÃ¡ng).
+        // Kada tổ hợp phải có bài test tương応 trước đăng ký (không bài test "chung" mù quáng).
         var testExists = await _db.Questions.AnyAsync(
             question => question.IsActive && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
         if (!testExists)
-            return (false, 409, "Hiá»‡n chÆ°a cÃ³ bÃ i test for tá»• há»£p cáº¥p + mÃ´n + lá»›p nÃ y.");
+            return (false, 409, "Hiện chưa có bài test for tổ hợp cấp + môn + lớp này.");
 
         var existing = await _db.TutorSubjects.FirstOrDefaultAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
@@ -398,7 +399,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             await _db.SaveChangesAsync(cancellationToken);
         }
 
-        return (true, 200, "ÄÃ£ Ä‘Äƒng kÃ½ tá»• há»£p " + normalizedGrade + ".");
+        return (true, 200, "Đã đăng ký tổ hợp " + normalizedGrade + ".");
     }
 
     // ---------------- PUBLIC STATIC SCORING ----------------
@@ -460,6 +461,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId && attempt.SubjectId != null)
             .OrderByDescending(attempt => attempt.SubmittedAt)
+            .ThenByDescending(attempt => attempt.AttemptId)
             .Select(attempt => new
             {
                 attempt.SubjectId,
@@ -530,10 +532,13 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     }
 
     private static string StatusOf(LatestAttempt? latest)
-        => latest == null ? "ChÆ°a lÃ m" : latest.IsPassed ? "Äáº¡t" : "KhÃ´ng Ä‘áº¡t";
+        => latest == null ? "Chưa làm" : latest.IsPassed ? "Đạt" : "Không đạt";
 
     private static string KeyOf(int subjectId, string? gradeLevel)
         => subjectId.ToString() + "\u0001" + (gradeLevel ?? "");
+
+    private static LatestAttempt? LatestFor(Dictionary<string, LatestAttempt> map, int subjectId, string? gradeLevel)
+        => map.TryGetValue(KeyOf(subjectId, gradeLevel), out var latest) ? latest : null;
 
     private class GradeQuestionCount
     {
