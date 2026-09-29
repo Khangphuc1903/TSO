@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   GraduationCap,
   BookOpen,
@@ -53,7 +53,6 @@ function StatusBadge({ status }) {
   );
 }
 export default function TutorTests() {
-  const navigate = useNavigate();
   const role = useMemo(() => getJwtRole(), []);
 
   const [catalog, setCatalog] = useState([]);
@@ -86,8 +85,10 @@ export default function TutorTests() {
   };
 
   useEffect(() => {
-    loadCatalog();
-  }, [navigate]);
+    (async () => {
+      await loadCatalog();
+    })();
+  }, []);
 
   const levels = useMemo(() => catalog ?? [], [catalog]);
   const levelSubjects = useMemo(() => {
