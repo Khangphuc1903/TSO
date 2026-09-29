@@ -14,10 +14,18 @@ export default function BookingLessonCard({
   onChat,
   actions,
 }) {
-  const status = STATUS[booking.status] || {
+  let status = STATUS[booking.status] || {
     label: booking.status,
     className: "bg-slate-100 text-slate-600",
   };
+
+  if (booking.status === "Pending") {
+    if (booking.paymentStatus === "Success") {
+      status = { label: "Chờ gia sư duyệt", className: "bg-amber-50 text-amber-700 border border-amber-200" };
+    } else {
+      status = { label: "Chờ thanh toán", className: "bg-orange-50 text-orange-600 border border-orange-200" };
+    }
+  }
 
   return (
     <article className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md transition-shadow">
@@ -29,9 +37,31 @@ export default function BookingLessonCard({
           <h3 className="font-semibold text-slate-900 mt-0.5">{booking.subjectName}</h3>
           <p className="text-sm text-slate-500 mt-0.5">{counterpartName}</p>
         </div>
-        <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${status.className}`}>
-          {status.label}
-        </span>
+        <div className="flex flex-col items-end gap-1.5">
+          <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${status.className}`}>
+            {status.label}
+          </span>
+          {booking.paymentStatus === "Success" && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Đã thanh toán (Tạm giữ)
+            </span>
+          )}
+          {(booking.paymentStatus === "Unpaid" || booking.paymentStatus === "Pending") && booking.status !== "Cancelled" && booking.status !== "Rejected" && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              Chưa thanh toán
+            </span>
+          )}
+          {booking.paymentStatus === "Refunded" && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+              Đã hoàn tiền (100%)
+            </span>
+          )}
+          {booking.paymentStatus === "PartiallyRefunded" && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+              Đã hoàn một phần
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-2 text-sm text-slate-600 mb-4">

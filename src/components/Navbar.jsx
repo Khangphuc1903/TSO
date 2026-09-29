@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, GraduationCap, MessageCircle, LogOut, User } from "lucide-react";
+import { Bell, GraduationCap, MessageCircle, LogOut, User, ShoppingCart } from "lucide-react";
 import { avatarUrl, getUser, isLoggedIn, logout } from "../auth";
+import { useCart } from "../context/CartContext";
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const loggedIn = isLoggedIn();
   const user = getUser();
+  const { cartCount } = useCart();
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
   const isPending =
     (user?.role || "").toLowerCase() === "pending" || localStorage.getItem("needsOnboarding") === "1";
@@ -73,6 +75,21 @@ export default function Navbar() {
               <MessageCircle size={20} />
             </Link>
 
+            {!isTutor && (
+              <Link
+                to="/cart"
+                aria-label="Giỏ hàng"
+                className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
+              >
+                <ShoppingCart size={20} />
+                {cartCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
+                    {cartCount > 9 ? "9+" : cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
+
             <div className="relative">
               <button
                 type="button"
@@ -94,6 +111,23 @@ export default function Navbar() {
                     <User size={16} />
                     Trang cá nhân
                   </Link>
+                  {!isTutor && (
+                    <Link
+                      to="/cart"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center justify-between px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ShoppingCart size={16} />
+                        Giỏ hàng
+                      </div>
+                      {cartCount > 0 && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600">
+                          {cartCount}
+                        </span>
+                      )}
+                    </Link>
+                  )}
                   {isTutor && (
                     <Link
                       to="/tutor"

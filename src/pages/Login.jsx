@@ -24,7 +24,11 @@ export default function Login() {
       const res = await axiosClient.post("/Auth/login", form);
       redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding);
     } catch (err) {
-      setError(err.response?.data?.message || "Invalid email or password.");
+      if (!err.response) {
+        setError("Không thể kết nối đến máy chủ Backend (Port 5008). Vui lòng thử lại sau.");
+      } else {
+        setError(err.response?.data?.message || "Email hoặc mật khẩu không chính xác.");
+      }
     } finally {
       setLoading(false);
     }
