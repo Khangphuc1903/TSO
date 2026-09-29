@@ -86,6 +86,15 @@ builder.Services.AddScoped<StudyGroupService>();
 builder.Services.AddScoped<GroupChatService>();
 builder.Services.AddScoped<TutorWorkspaceService>();
 builder.Services.AddScoped<TutorTestService>();
+builder.Services.AddScoped<PaymentService>();
+
+var payOsSection = builder.Configuration.GetSection("PayOS");
+builder.Services.AddSingleton(new PayOS.PayOSClient(
+    payOsSection["ClientId"] ?? "",
+    payOsSection["ApiKey"] ?? "",
+    payOsSection["ChecksumKey"] ?? ""
+));
+
 builder.Services.AddHostedService<LessonReminderService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
@@ -145,12 +154,14 @@ IF OBJECT_ID(N'dbo.TutorSubject', N'U') IS NOT NULL AND COL_LENGTH('TutorSubject
 -- (TutorId, SubjectId) unique index is replaced by grade-aware unique indexes.
 IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL
 BEGIN
-    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+    IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_TutorSubject' AND parent_object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        ALTER TABLE TutorSubjects DROP CONSTRAINT UQ_TutorSubject;
+    ELSE IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         DROP INDEX UQ_TutorSubject ON TutorSubjects;
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_Combo' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
-        CREATE UNIQUE INDEX UQ_TutorSubject_Combo ON TutorSubjects (TutorId, SubjectId, GradeLevel) WHERE GradeLevel IS NOT NULL;
+        EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_Combo ON TutorSubjects (TutorId, SubjectId, GradeLevel) WHERE GradeLevel IS NOT NULL;');
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_NoGrade' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
-        CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;
+        EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;');
 END
 ");
 }

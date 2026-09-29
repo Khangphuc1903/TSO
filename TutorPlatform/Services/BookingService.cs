@@ -147,6 +147,7 @@ public class BookingService
             .Include(b => b.Student)
             .Include(b => b.Tutor).ThenInclude(t => t.Tutor)
             .Include(b => b.Subject)
+            .Include(b => b.Payments)
             .AsQueryable();
 
         query = role.Equals("Tutor", StringComparison.OrdinalIgnoreCase)
@@ -154,32 +155,45 @@ public class BookingService
             : query.Where(b => b.StudentId == userId);
 
         var items = await query.OrderByDescending(b => b.ScheduledDate).ToListAsync(cancellationToken);
-        return items.Select(b => new BookingListItemDto
+        return items.Select(b =>
         {
-            BookingId = b.BookingId,
-            StudentId = b.StudentId,
-            TutorId = b.TutorId,
-            StudentName = b.Student.FullName,
-            TutorName = b.Tutor.Tutor.FullName,
-            SubjectName = b.Subject.SubjectName,
-            ScheduledDate = b.ScheduledDate.ToString("yyyy-MM-dd"),
-            StartTime = b.StartTime.ToString("HH:mm"),
-            EndTime = b.EndTime.ToString("HH:mm"),
-            Status = b.Status,
-            Price = b.Price,
-            TeachingMode = b.TeachingMode,
-            Location = b.Location,
-            IsToday = b.ScheduledDate == DateOnly.FromDateTime(DateTime.Today)
+            var successOrRefunded = b.Payments
+                .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+                .FirstOrDefault(p => p.Status is "Success" or "Refunded" or "PartiallyRefunded");
+            var lastPayment = successOrRefunded ?? b.Payments.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+            return new BookingListItemDto
+            {
+                BookingId = b.BookingId,
+                StudentId = b.StudentId,
+                TutorId = b.TutorId,
+                StudentName = b.Student.FullName,
+                TutorName = b.Tutor.Tutor.FullName,
+                SubjectName = b.Subject.SubjectName,
+                ScheduledDate = b.ScheduledDate.ToString("yyyy-MM-dd"),
+                StartTime = b.StartTime.ToString("HH:mm"),
+                EndTime = b.EndTime.ToString("HH:mm"),
+                Status = b.Status,
+                Price = b.Price,
+                TeachingMode = b.TeachingMode,
+                Location = b.Location,
+                IsToday = b.ScheduledDate == DateOnly.FromDateTime(DateTime.Today),
+                PaymentStatus = lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
+                PaymentUrl = lastPayment?.PaymentUrl
+            };
         }).ToList();
     }
 
     public async Task<(bool Success, int StatusCode, string Message)> RejectAsync(int tutorId, int bookingId, CancellationToken cancellationToken)
     {
-        var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId && b.TutorId == tutorId, cancellationToken);
+        var booking = await _db.Bookings
+            .Include(b => b.Payments)
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.TutorId == tutorId, cancellationToken);
         if (booking == null)
             return (false, 404, "Không tìm thấy booking.");
         if (booking.Status != "Pending")
             return (false, 400, "Chỉ từ chối được đơn đang chờ xác nhận.");
+
+        using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
 
         booking.Status = "Rejected";
         booking.CancelledAt = DateTime.Now;
@@ -190,18 +204,45 @@ public class BookingService
             if (slot is { IsRecurring: false })
                 slot.IsBooked = false;
         }
+
+        // Tự động hoàn tiền 100% nếu học viên đã thanh toán tiền giữ chỗ
+        var successPayment = booking.Payments.FirstOrDefault(p => p.Status == "Success");
+        if (successPayment != null)
+        {
+            var refund = new Refund
+            {
+                PaymentId = successPayment.PaymentId,
+                BookingId = booking.BookingId,
+                Amount = successPayment.Amount,
+                RefundPercent = 100m,
+                Reason = "Gia sư từ chối đơn đặt lịch",
+                Status = "Processed",
+                ProcessedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Refunds.Add(refund);
+            successPayment.Status = "Refunded";
+        }
+
         await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+
+        var notifyMsg = successPayment != null
+            ? $"Gia sư đã từ chối buổi học ngày {booking.ScheduledDate:dd/MM/yyyy}. Số tiền {successPayment.Amount:N0} ₫ giữ chỗ của bạn đã được hệ thống tự động hoàn trả 100%."
+            : $"Buổi {booking.ScheduledDate:dd/MM/yyyy} không được xác nhận. Bạn có thể đặt khung giờ khác.";
 
         await _notifications.NotifyAsync(
             booking.StudentId,
             "BookingRejected",
             "Gia sư đã từ chối buổi học",
-            $"Buổi {booking.ScheduledDate:dd/MM/yyyy} không được xác nhận. Bạn có thể đặt khung giờ khác.",
+            notifyMsg,
             "Booking",
             booking.BookingId,
             cancellationToken);
 
-        return (true, 200, "Đã từ chối đơn đặt lịch.");
+        return (true, 200, successPayment != null 
+            ? "Đã từ chối đơn đặt lịch và tự động hoàn trả 100% tiền giữ chỗ cho học viên." 
+            : "Đã từ chối đơn đặt lịch.");
     }
 
     public async Task EnsureTodayRemindersAsync(int userId, CancellationToken cancellationToken)
@@ -237,11 +278,19 @@ public class BookingService
 
     public async Task<(bool Success, int StatusCode, string Message)> ConfirmAsync(int tutorId, int bookingId, CancellationToken cancellationToken)
     {
-        var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId && b.TutorId == tutorId, cancellationToken);
+        var booking = await _db.Bookings
+            .Include(b => b.Payments)
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.TutorId == tutorId, cancellationToken);
         if (booking == null)
             return (false, 404, "Không tìm thấy booking.");
         if (booking.Status != "Pending")
             return (false, 400, "Booking không ở trạng thái chờ xác nhận.");
+
+        var hasPaid = booking.Payments.Any(p => p.Status == "Success");
+        if (booking.Price > 0 && !hasPaid)
+        {
+            return (false, 400, "Học viên chưa hoàn tất thanh toán tiền giữ chỗ. Vui lòng chờ học viên thanh toán trước khi duyệt.");
+        }
 
         booking.Status = "Confirmed";
         booking.ConfirmedAt = DateTime.Now;

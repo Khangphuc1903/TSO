@@ -1,3 +1,16 @@
+## Build results
 **/bin/
 **/obj/
 *.log
+
+## Visual Studio & Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosv
+*.sln.docstates
+
+## OS Files
+.DS_Store
+Thumbs.db
