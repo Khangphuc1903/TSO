@@ -141,6 +141,34 @@ public class TutorMeController : ControllerBase
         return Ok(await _tests.ListAttemptsAsync(id, cancellationToken));
     }
 
+    [HttpGet("tests/pedagogical/status")]
+    public async Task<IActionResult> PedagogicalTestStatus(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.GetPedagogicalTestStatusAsync(id, cancellationToken));
+    }
+
+    [HttpGet("tests/pedagogical/questions")]
+    public async Task<IActionResult> PedagogicalTestQuestions(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.GetPedagogicalTestQuestionsAsync(id, cancellationToken);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpPost("tests/pedagogical/submit")]
+    public async Task<IActionResult> SubmitPedagogicalTest(
+        [FromBody] SubmitTutorPedagogicalTestDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.SubmitPedagogicalTestAsync(id, dto, cancellationToken);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
     [HttpGet("tests/grades")]
     public async Task<IActionResult> TestGrades([FromQuery] int subjectId, CancellationToken cancellationToken)
     {

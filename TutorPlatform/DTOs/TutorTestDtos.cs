@@ -85,6 +85,39 @@ public class TutorTestStatusDto
     public bool IsRegistered { get; set; }
 }
 
+public class TutorPedagogicalTestQuestionsDto
+{
+    public decimal PassThreshold { get; set; }
+    public DateTime StartedAt { get; set; }
+    public List<TutorTestQuestionDto> Questions { get; set; } = new();
+}
+
+public class SubmitTutorPedagogicalTestDto
+{
+    public DateTime? StartedAt { get; set; }
+    public List<TutorTestAnswerSubmissionDto> Answers { get; set; } = new();
+}
+
+public class TutorPedagogicalTestStatusDto
+{
+    public string Status { get; set; } = "Chưa làm";
+    public decimal? LatestScorePercent { get; set; }
+    public bool? LatestIsPassed { get; set; }
+    public int? LatestAttemptNumber { get; set; }
+}
+
+public class TutorPedagogicalTestResultDto
+{
+    public int TotalQuestions { get; set; }
+    public int CorrectCount { get; set; }
+    public decimal ScorePercent { get; set; }
+    public decimal PassThreshold { get; set; }
+    public bool IsPassed { get; set; }
+    public int AttemptNumber { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime SubmittedAt { get; set; }
+}
+
 public class TutorTestGradeDto
 {
     public string GradeLevel { get; set; } = null!;

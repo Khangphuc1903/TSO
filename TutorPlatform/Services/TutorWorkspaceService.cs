@@ -146,6 +146,17 @@ public class TutorWorkspaceService
                     "Chưa thể công bố hồ sơ: hãy chọn ít nhất một tổ hợp (cấp học + môn học + lớp) rồi hoàn thành bài kiểm tra chuyên môn tương ứng.",
                     null);
 
+            var hasPassedPedagogicalTest = await _db.TutorTestAttempts.AnyAsync(attempt =>
+                attempt.TutorId == tutorId
+                && attempt.TestType == TutorTestService.PedagogicalTestType
+                && attempt.SubjectId == null
+                && attempt.GradeLevel == null
+                && attempt.IsPassed, cancellationToken);
+            if (!hasPassedPedagogicalTest)
+                return (false, 400,
+                    "Không có quyền công bố hồ sơ: gia sư phải đạt bài kiểm tra kỹ năng sư phạm bắt buộc trước.",
+                    null);
+
             // Case 1: tổ hợp nào chưa đạt chuyên môn thì không được công bố.
             var pending = keptRows.Where(row => !row.IsVerified)
                 .Concat(newRows)

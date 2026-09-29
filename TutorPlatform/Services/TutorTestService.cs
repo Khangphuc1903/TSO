@@ -9,6 +9,7 @@ namespace TutorPlatform.Services;
 public class TutorTestService
 {
     private const string ProfessionalTestType = "Professional";
+    public const string PedagogicalTestType = "Pedagogical";
     private const decimal DefaultPassThreshold = 70m;
     private const string PassThresholdSettingKey = "TutorTestPassThreshold";
     private readonly TutorPlatformDbContext _db;
@@ -128,7 +129,8 @@ public class TutorTestService
 
         var questionCounts = await _db.Questions
             .AsNoTracking()
-            .Where(question => question.IsActive && question.SubjectId == subjectId && question.GradeLevel != null)
+            .Where(question => question.IsActive && question.TestType == ProfessionalTestType
+                && question.SubjectId == subjectId && question.GradeLevel != null)
             .Select(question => new { Grade = question.GradeLevel! })
             .GroupBy(group => group.Grade)
             .Select(group => new { Grade = group.Key, Count = group.Count() })
@@ -170,7 +172,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
 
         var questionCount = await _db.Questions.CountAsync(
-            question => question.IsActive && question.SubjectId == subjectId && question.GradeLevel == normalizedGrade, cancellationToken);
+            question => question.IsActive && question.TestType == ProfessionalTestType
+                && question.SubjectId == subjectId && question.GradeLevel == normalizedGrade, cancellationToken);
 
         if (questionCount == 0)
             return (false, 404, "Hiện chưa có bài kiểm tra cho môn + lớp này.", null);
@@ -191,13 +194,155 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         });
     }
 
+    public async Task<TutorPedagogicalTestStatusDto> GetPedagogicalTestStatusAsync(
+        int tutorId, CancellationToken cancellationToken)
+    {
+        var latest = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(attempt => attempt.TutorId == tutorId
+                && attempt.TestType == PedagogicalTestType
+                && attempt.SubjectId == null
+                && attempt.GradeLevel == null)
+            .OrderByDescending(attempt => attempt.SubmittedAt)
+            .ThenByDescending(attempt => attempt.AttemptId)
+            .Select(attempt => new
+            {
+                attempt.ScorePercent,
+                attempt.IsPassed,
+                attempt.AttemptNumber
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new TutorPedagogicalTestStatusDto
+        {
+            Status = StatusOf(latest == null ? null : new LatestAttempt
+            {
+                ScorePercent = latest.ScorePercent,
+                IsPassed = latest.IsPassed,
+                AttemptNumber = latest.AttemptNumber
+            }),
+            LatestScorePercent = latest?.ScorePercent,
+            LatestIsPassed = latest?.IsPassed,
+            LatestAttemptNumber = latest?.AttemptNumber
+        };
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message, TutorPedagogicalTestQuestionsDto? Data)> GetPedagogicalTestQuestionsAsync(
+        int tutorId, CancellationToken cancellationToken)
+    {
+        var status = await GetPedagogicalTestStatusAsync(tutorId, cancellationToken);
+        if (status.LatestIsPassed == true)
+            return (false, 409, "Đã hoàn thành bài kiểm tra kỹ năng sư phạm.", null);
+
+        var questions = await LoadPedagogicalQuestionsAsync(cancellationToken);
+        if (questions.Count == 0)
+            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra kỹ năng sư phạm.", null);
+
+        return (true, 200, string.Empty, new TutorPedagogicalTestQuestionsDto
+        {
+            PassThreshold = await GetPassThresholdAsync(cancellationToken),
+            StartedAt = DateTime.UtcNow,
+            Questions = questions.Select(question => new TutorTestQuestionDto
+            {
+                QuestionId = question.QuestionId,
+                Content = question.Content,
+                OptionA = question.OptionA,
+                OptionB = question.OptionB,
+                OptionC = question.OptionC,
+                OptionD = question.OptionD,
+                Difficulty = question.Difficulty
+            }).ToList()
+        });
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message, TutorPedagogicalTestResultDto? Data)> SubmitPedagogicalTestAsync(
+        int tutorId, SubmitTutorPedagogicalTestDto dto, CancellationToken cancellationToken)
+    {
+        var status = await GetPedagogicalTestStatusAsync(tutorId, cancellationToken);
+        if (status.LatestIsPassed == true)
+            return (false, 409, "Đã hoàn thành bài kiểm tra kỹ năng sư phạm.", null);
+
+        var questions = await LoadPedagogicalQuestionsAsync(cancellationToken);
+        if (questions.Count == 0)
+            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra kỹ năng sư phạm.", null);
+
+        var submittedAnswers = dto.Answers ?? new List<TutorTestAnswerSubmissionDto>();
+        if (submittedAnswers.GroupBy(answer => answer.QuestionId).Any(group => group.Count() > 1))
+            return (false, 400, "Không được gửi câu trả lời trùng lặp.", null);
+        if (submittedAnswers.Any(answer =>
+                NormalizeOption(answer.SelectedOption) is { } option && option is not ("A" or "B" or "C" or "D")))
+            return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
+
+        var questionIds = questions.Select(question => question.QuestionId).ToHashSet();
+        if (submittedAnswers.Any(answer => !questionIds.Contains(answer.QuestionId)))
+            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài kiểm tra này.", null);
+
+        var answers = submittedAnswers.ToDictionary(
+            answer => answer.QuestionId,
+            answer => NormalizeOption(answer.SelectedOption));
+        var passThreshold = await GetPassThresholdAsync(cancellationToken);
+        var score = ScoreAnswers(questions, answers, passThreshold);
+        var submittedAt = DateTime.UtcNow;
+        var startedAt = dto.StartedAt?.ToUniversalTime() ?? submittedAt;
+        if (startedAt > submittedAt)
+            return (false, 400, "Thời điểm bắt đầu bài test không hợp lệ.", null);
+
+        var attemptNumber = (await _db.TutorTestAttempts
+            .Where(attempt => attempt.TutorId == tutorId
+                && attempt.TestType == PedagogicalTestType
+                && attempt.SubjectId == null
+                && attempt.GradeLevel == null)
+            .Select(attempt => (int?)attempt.AttemptNumber)
+            .MaxAsync(cancellationToken) ?? 0) + 1;
+
+        var attempt = new TutorTestAttempt
+        {
+            TutorId = tutorId,
+            TestType = PedagogicalTestType,
+            SubjectId = null,
+            GradeLevel = null,
+            TotalQuestions = questions.Count,
+            CorrectCount = score.CorrectCount,
+            ScorePercent = score.ScorePercent,
+            PassThreshold = passThreshold,
+            IsPassed = score.IsPassed,
+            AttemptNumber = attemptNumber,
+            StartedAt = startedAt,
+            SubmittedAt = submittedAt,
+            TutorTestAnswers = questions.Select(question => new TutorTestAnswer
+            {
+                QuestionId = question.QuestionId,
+                SelectedOption = answers.GetValueOrDefault(question.QuestionId),
+                IsCorrect = answers.TryGetValue(question.QuestionId, out var selected)
+                    && selected == NormalizeOption(question.CorrectAnswer)
+            }).ToList()
+        };
+
+        _db.TutorTestAttempts.Add(attempt);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return (true, 200, string.Empty, new TutorPedagogicalTestResultDto
+        {
+            TotalQuestions = attempt.TotalQuestions,
+            CorrectCount = attempt.CorrectCount,
+            ScorePercent = attempt.ScorePercent,
+            PassThreshold = attempt.PassThreshold,
+            IsPassed = attempt.IsPassed,
+            AttemptNumber = attempt.AttemptNumber,
+            StartedAt = attempt.StartedAt,
+            SubmittedAt = attempt.SubmittedAt
+        });
+    }
+
     // ---------------- ATTEMPTS HISTORY ----------------
 
     public async Task<List<TutorTestAttemptDto>> ListAttemptsAsync(int tutorId, CancellationToken cancellationToken)
     {
         return await _db.TutorTestAttempts
             .AsNoTracking()
-            .Where(attempt => attempt.TutorId == tutorId)
+            .Where(attempt => attempt.TutorId == tutorId
+                && attempt.TestType == ProfessionalTestType
+                && attempt.SubjectId != null)
             .OrderByDescending(attempt => attempt.SubmittedAt)
             .Select(attempt => new TutorTestAttemptDto
             {
@@ -380,7 +525,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         // Kada tổ hợp phải có bài kiểm tra tương ứng trước đăng ký (không bài kiểm tra "chung" mù quáng).
         var testExists = await _db.Questions.AnyAsync(
-            question => question.IsActive && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
+            question => question.IsActive && question.TestType == ProfessionalTestType
+                && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
         if (!testExists)
             return (false, 409, "Hiện chưa có bài test for tổ hợp cấp + môn + lớp này.");
 
@@ -423,8 +569,20 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         return await _db.Questions
             .Where(question => question.IsActive
+                && question.TestType == ProfessionalTestType
                 && question.SubjectId == subjectId
                 && question.GradeLevel == gradeLevel)
+            .OrderBy(question => question.QuestionId)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<Question>> LoadPedagogicalQuestionsAsync(CancellationToken cancellationToken)
+    {
+        return await _db.Questions
+            .Where(question => question.IsActive
+                && question.TestType == PedagogicalTestType
+                && question.SubjectId == null
+                && question.GradeLevel == null)
             .OrderBy(question => question.QuestionId)
             .ToListAsync(cancellationToken);
     }
@@ -433,7 +591,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var rows = await _db.Questions
             .AsNoTracking()
-            .Where(question => question.IsActive && question.SubjectId != null && question.GradeLevel != null)
+            .Where(question => question.IsActive && question.TestType == ProfessionalTestType
+                && question.SubjectId != null && question.GradeLevel != null)
             .Select(question => new { question.SubjectId, question.GradeLevel })
             .ToListAsync(cancellationToken);
 
@@ -459,7 +618,9 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var attempts = await _db.TutorTestAttempts
             .AsNoTracking()
-            .Where(attempt => attempt.TutorId == tutorId && attempt.SubjectId != null)
+            .Where(attempt => attempt.TutorId == tutorId
+                && attempt.TestType == ProfessionalTestType
+                && attempt.SubjectId != null)
             .OrderByDescending(attempt => attempt.SubmittedAt)
             .ThenByDescending(attempt => attempt.AttemptId)
             .Select(attempt => new
