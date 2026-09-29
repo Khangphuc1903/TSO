@@ -164,7 +164,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             .FirstOrDefaultAsync(cancellationToken);
 
         if (subject == null || normalizedGrade == null)
-            return (false, 404, "Tổ hợp môn học/lớ h không tồn tại.", null);
+            return (false, 404, "Tổ hợp cấp học + môn + lớp không tồn tại.", null);
 
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
@@ -173,7 +173,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             question => question.IsActive && question.SubjectId == subjectId && question.GradeLevel == normalizedGrade, cancellationToken);
 
         if (questionCount == 0)
-            return (false, 404, "Hiện chưa có bài test for this môn + lớp.", null);
+            return (false, 404, "Hiện chưa có bài kiểm tra cho môn + lớp này.", null);
 
         var latest = LatestFor(await LoadLatestAttemptsAsync(tutorId, cancellationToken), subjectId, normalizedGrade);
 
@@ -225,13 +225,13 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(gradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chọn lớp (grade) để làm bài test.", null);
+            return (false, 400, "Chọn lớp để làm bài kiểm tra.", null);
 
-        // Tutor chỉ truy cập bài test for tổ hợp (môn + lớp) mà hắ đăng ký.
+        // Tutor chỉ truy cập bài kiểm tra của tổ hợp (môn + lớp) mà họ đã đăng ký.
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
         if (!isRegistered)
-            return (false, 403, "Đăng ký tổ hợp " + subjectId + " + " + normalizedGrade + " trước làm bài test.", null);
+            return (false, 403, "Đăng ký tổ hợp (môn + lớp) trước khi làm bài kiểm tra.", null);
 
         var subject = await _db.Subjects
             .AsNoTracking()
@@ -240,11 +240,11 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             .FirstOrDefaultAsync(cancellationToken);
 
         if (subject == null)
-            return (false, 404, "Môn học không tồn tại ho chưa được kích hoạt.", null);
+            return (false, 404, "Môn học không tồn tại hoặc chưa được kích hoạt.", null);
 
         var questions = await LoadQuestionsAsync(subjectId, normalizedGrade, cancellationToken);
         if (questions.Count == 0)
-            return (false, 404, "Hiện chưa có câu hỏi for bài test này (môn + lớp).", null);
+            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra này (môn + lớp).", null);
 
         return (true, 200, string.Empty, new TutorTestQuestionsDto
         {
@@ -273,16 +273,16 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(dto.GradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chọn lớp (grade) để nộp bài test.", null);
+            return (false, 400, "Chọn lớp để nộp bài kiểm tra.", null);
 
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
         if (!isRegistered)
-            return (false, 403, "Đăng ký tổ hợp trước nộp bài test.", null);
+            return (false, 403, "Đăng ký tổ hợp trước khi nộp bài kiểm tra.", null);
 
         var questions = await LoadQuestionsAsync(dto.SubjectId, normalizedGrade, cancellationToken);
         if (questions.Count == 0)
-            return (false, 404, "Hiện chưa có câu hỏi for bài test này (môn + lớp).", null);
+            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra này (môn + lớp).", null);
 
         var subjectInfo = await _db.Subjects
             .Where(subject => subject.SubjectId == dto.SubjectId)
@@ -298,7 +298,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         var questionIds = questions.Select(question => question.QuestionId).ToHashSet();
         if (submittedAnswers.Any(answer => !questionIds.Contains(answer.QuestionId)))
-            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài test này.", null);
+            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài kiểm tra này.", null);
 
         var answers = submittedAnswers.ToDictionary(
             answer => answer.QuestionId,
@@ -342,7 +342,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         _db.TutorTestAttempts.Add(attempt);
 
-        // Đạt ⇒ đánh dấu tổ hợp (môn + lớp) đã đủ điều conditions giảng dạy.
+        // Đạt ⇒ đánh dấu tổ hợp (môn + lớp) đã đủ điều kiện giảng dạy.
         if (score.IsPassed)
             await MarkCombinationVerifiedAsync(tutorId, dto.SubjectId, normalizedGrade, submittedAt, cancellationToken);
 
@@ -372,13 +372,13 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     {
         var normalizedGrade = NormalizeGrade(dto.GradeLevel);
         if (normalizedGrade == null)
-            return (false, 400, "Chọn lớp (grade) for môn học.");
+            return (false, 400, "Chọn lớp cho môn học.");
 
         var subjectOk = await _db.Subjects.AnyAsync(s => s.SubjectId == dto.SubjectId && s.IsActive, cancellationToken);
         if (!subjectOk)
-            return (false, 404, "Môn học không tồn tại ho chưa được kích hoạt.");
+            return (false, 404, "Môn học không tồn tại hoặc chưa được kích hoạt.");
 
-        // Kada tổ hợp phải có bài test tương応 trước đăng ký (không bài test "chung" mù quáng).
+        // Kada tổ hợp phải có bài kiểm tra tương ứng trước đăng ký (không bài kiểm tra "chung" mù quáng).
         var testExists = await _db.Questions.AnyAsync(
             question => question.IsActive && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
         if (!testExists)

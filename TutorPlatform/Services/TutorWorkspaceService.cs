@@ -117,28 +117,40 @@ public class TutorWorkspaceService
 
         var existing = await _db.TutorSubjects.Where(s => s.TutorId == tutorId).ToListAsync(cancellationToken);
 
-        // Đăng ký lại toàn bộ tổ hợp: xóa những không được chọn, thêm những mới.
+        // Đăng ký lại toàn bộ tổ hợp: giữ lại tổ hợp được chọn, xóa những không được chọn.
         var wantedKeys = wanted.Select(reg => (reg.SubjectId, Grade: reg.gradeLevel)).ToHashSet();
+        var keptRows = existing.Where(row => wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))).ToList();
         _db.TutorSubjects.RemoveRange(existing.Where(row => !wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))));
+
+        var newRows = new List<TutorSubject>();
         foreach (var reg in wanted.Where(reg =>
-            existing.All(row => !(row.SubjectId == reg.SubjectId && NormalizeGrade(row.GradeLevel) == reg.gradeLevel))))
+            keptRows.All(row => !(row.SubjectId == reg.SubjectId && NormalizeGrade(row.GradeLevel) == reg.gradeLevel))))
         {
-            _db.TutorSubjects.Add(new TutorSubject
+            var row = new TutorSubject
             {
                 TutorId = tutorId,
                 SubjectId = reg.SubjectId,
                 GradeLevel = reg.gradeLevel,
                 IsVerified = false
-            });
+            };
+            newRows.Add(row);
+            _db.TutorSubjects.Add(row);
         }
 
-        // Bắt buộce hoàn thành bài kiểm chuyên môn trước công công quỷ giảng dạy.
+        // Bắt buộc hoàn thành bài kiểm tra chuyên môn trước khi công bố hồ sơ giảng dạy.
         if (dto.IsPublished)
         {
-            var pending = await _db.TutorSubjects
-                .Where(s => s.TutorId == tutorId && !s.IsVerified)
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync(cancellationToken);
+            var totalCombos = keptRows.Count + newRows.Count;
+            if (totalCombos == 0)
+                return (false, 400,
+                    "Chưa thể công bố hồ sơ: hãy chọn ít nhất một tổ hợp (cấp học + môn học + lớp) rồi hoàn thành bài kiểm tra chuyên môn tương ứng.",
+                    null);
+
+            // Case 1: tổ hợp nào chưa đạt chuyên môn thì không được công bố.
+            var pending = keptRows.Where(row => !row.IsVerified)
+                .Concat(newRows)
+                .OrderBy(row => row.SubjectId)
+                .ToList();
             if (pending.Count > 0)
             {
                 var pendingSubjects = await _db.Subjects
@@ -151,7 +163,7 @@ public class TutorWorkspaceService
                         + (string.IsNullOrWhiteSpace(p.GradeLevel) ? " (chưa chọn lớp)" : (" – " + p.GradeLevel)))
                     .ToList();
                 return (false, 400,
-                    "Không có quyền công công quỷ: hoàn tats bài kiểm chuyên môn bắt buộce trước for: " + string.Join(", ", descriptions) + ".",
+                    "Không có quyền công bố hồ sơ: hoàn thành bài kiểm tra chuyên môn bắt buộc trước cho: " + string.Join(", ", descriptions) + ".",
                     null);
             }
             profile.VerificationStatus = "Verified";
