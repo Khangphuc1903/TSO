@@ -9,6 +9,58 @@ namespace TutorPlatform.Tests;
 public class TutorTestServiceTests
 {
     [Fact]
+    public async Task PedagogicalTest_CanFailRetryAndPass_WithoutChangingProfessionalTestHistory()
+    {
+        await using var db = CreateDbContext();
+        SeedComboData(db);
+        await db.SaveChangesAsync();
+
+        var service = new TutorTestService(db);
+
+        var before = await service.GetPedagogicalTestStatusAsync(1, CancellationToken.None);
+        Assert.Equal("Chưa làm", before.Status);
+
+        var questions = await service.GetPedagogicalTestQuestionsAsync(1, CancellationToken.None);
+        Assert.True(questions.Success);
+        Assert.Equal(new[] { 7, 8 }, questions.Data!.Questions.Select(question => question.QuestionId).ToArray());
+
+        var failed = await service.SubmitPedagogicalTestAsync(1, new SubmitTutorPedagogicalTestDto
+        {
+            Answers = new List<TutorTestAnswerSubmissionDto>
+            {
+                new() { QuestionId = 7, SelectedOption = "B" },
+                new() { QuestionId = 8, SelectedOption = "A" }
+            }
+        }, CancellationToken.None);
+        Assert.True(failed.Success);
+        Assert.False(failed.Data!.IsPassed);
+        Assert.Equal(1, failed.Data.AttemptNumber);
+        Assert.Equal("Không đạt", (await service.GetPedagogicalTestStatusAsync(1, CancellationToken.None)).Status);
+
+        var passed = await service.SubmitPedagogicalTestAsync(1, new SubmitTutorPedagogicalTestDto
+        {
+            Answers = new List<TutorTestAnswerSubmissionDto>
+            {
+                new() { QuestionId = 7, SelectedOption = "A" },
+                new() { QuestionId = 8, SelectedOption = "C" }
+            }
+        }, CancellationToken.None);
+        Assert.True(passed.Success);
+        Assert.True(passed.Data!.IsPassed);
+        Assert.Equal(2, passed.Data.AttemptNumber);
+        Assert.Equal("Đạt", (await service.GetPedagogicalTestStatusAsync(1, CancellationToken.None)).Status);
+        Assert.False((await service.GetPedagogicalTestQuestionsAsync(1, CancellationToken.None)).Success);
+
+        Assert.Equal(2, db.TutorTestAttempts.Count());
+        var attempt = db.TutorTestAttempts.OrderByDescending(item => item.AttemptNumber).First();
+        Assert.Equal("Pedagogical", attempt.TestType);
+        Assert.Null(attempt.SubjectId);
+        Assert.Null(attempt.GradeLevel);
+        Assert.Empty(await service.ListAttemptsAsync(1, CancellationToken.None));
+        Assert.NotEmpty(await service.ListTestsAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task LevelSubjectGradeFlow_CombosAreTrackedIndependently()
     {
         await using var db = CreateDbContext();
@@ -311,6 +363,21 @@ public class TutorTestServiceTests
         }, CancellationToken.None);
 
         var ok = await workspace.UpdateProfileAsync(1, PublishDto(), CancellationToken.None);
+        Assert.False(ok.Success);
+        Assert.Contains("sư phạm", ok.Message);
+
+        var pedagogicalPassed = await service.SubmitPedagogicalTestAsync(1, new SubmitTutorPedagogicalTestDto
+        {
+            Answers = new List<TutorTestAnswerSubmissionDto>
+            {
+                new() { QuestionId = 7, SelectedOption = "A" },
+                new() { QuestionId = 8, SelectedOption = "C" }
+            }
+        }, CancellationToken.None);
+        Assert.True(pedagogicalPassed.Success);
+        Assert.True(pedagogicalPassed.Data!.IsPassed);
+
+        ok = await workspace.UpdateProfileAsync(1, PublishDto(), CancellationToken.None);
         Assert.True(ok.Success);
         Assert.True(db.TutorProfiles.Single(p => p.TutorId == 1).IsPublished);
         Assert.Equal("Verified", db.TutorProfiles.Single(p => p.TutorId == 1).VerificationStatus);
@@ -359,6 +426,10 @@ private static TutorPlatformDbContext CreateDbContext()
             Question(5, 9, "Lớp 12", "C"),
             Question(6, 9, "Lớp 12", "A"));
 
+        db.Questions.AddRange(
+            PedagogicalQuestion(7, "A"),
+            PedagogicalQuestion(8, "C"));
+
         db.PlatformSettings.Add(new PlatformSetting
         {
             SettingKey = "TutorTestPassThreshold",
@@ -374,6 +445,22 @@ private static TutorPlatformDbContext CreateDbContext()
         GradeLevel = grade,
         TestType = "Professional",
         Content = $"Question {questionId} ({grade})",
+        OptionA = "Option A",
+        OptionB = "Option B",
+        OptionC = "Option C",
+        OptionD = "Option D",
+        CorrectAnswer = correctAnswer,
+        IsActive = true,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    private static Question PedagogicalQuestion(int questionId, string correctAnswer) => new()
+    {
+        QuestionId = questionId,
+        TestType = "Pedagogical",
+        SubjectId = null,
+        GradeLevel = null,
+        Content = $"Pedagogical question {questionId}",
         OptionA = "Option A",
         OptionB = "Option B",
         OptionC = "Option C",
