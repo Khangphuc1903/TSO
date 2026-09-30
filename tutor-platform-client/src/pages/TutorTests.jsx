@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import {
   GraduationCap,
   BookOpen,
+  BookOpenCheck,
   ClipboardList,
   CheckCircle2,
   XCircle,
@@ -70,6 +71,14 @@ export default function TutorTests() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Bài kiểm tra kỹ năng sư phạm (bắt buộc)
+  const [pedStatus, setPedStatus] = useState(null);
+  const [pedQuestions, setPedQuestions] = useState(null);
+  const [pedAnswers, setPedAnswers] = useState({});
+  const [pedResult, setPedResult] = useState(null);
+  const [pedLoading, setPedLoading] = useState(true);
+  const [pedSubmitting, setPedSubmitting] = useState(false);
+
   const loadCatalog = async () => {
     try {
       const res = await axiosClient.get("/tutor/me/tests/catalog");
@@ -84,11 +93,28 @@ export default function TutorTests() {
     }
   };
 
+  const loadPedStatus = async () => {
+    setPedLoading(true);
+    try {
+      const res = await axiosClient.get("/tutor/me/tests/pedagogical/status");
+      setPedStatus(res.data);
+    } catch {
+      setPedStatus(null);
+    } finally {
+      setPedLoading(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
-      await loadCatalog();
+      if (role !== "Tutor") {
+        setPedLoading(false);
+        await loadCatalog();
+        return;
+      }
+      await Promise.all([loadCatalog(), loadPedStatus()]);
     })();
-  }, []);
+  }, [role]);
 
   const levels = useMemo(() => catalog ?? [], [catalog]);
   const levelSubjects = useMemo(() => {
@@ -148,6 +174,53 @@ const resetSelection = () => {
       setError(err.response?.data?.message || "Không thể nộp bài kiểm tra.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const startPedTest = async () => {
+    setError("");
+    setPedSubmitting(true);
+    try {
+      const res = await axiosClient.get(
+        "/tutor/me/tests/pedagogical/questions",
+      );
+      setPedQuestions(res.data);
+      setPedAnswers({});
+      setPedResult(null);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Không thể bắt đầu bài kiểm tra kỹ năng sư phạm.",
+      );
+    } finally {
+      setPedSubmitting(false);
+    }
+  };
+
+  const submitPedTest = async () => {
+    setError("");
+    setPedSubmitting(true);
+    try {
+      const answerList = Object.entries(pedAnswers).map(
+        ([questionId, option]) => ({
+          questionId: Number(questionId),
+          selectedOption: option,
+        }),
+      );
+      const res = await axiosClient.post("/tutor/me/tests/pedagogical/submit", {
+        startedAt: pedQuestions.startedAt,
+        answers: answerList,
+      });
+      setPedResult(res.data);
+      setPedQuestions(null);
+      await loadPedStatus();
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Không thể nộp bài kiểm tra kỹ năng sư phạm.",
+      );
+    } finally {
+      setPedSubmitting(false);
     }
   };
 
@@ -300,8 +373,228 @@ function renderTaking() {
   function renderBody() {
     if (questions) return renderTaking();
     if (result) return renderResult();
-    return renderWizard();
+    return (
+      <>
+        {role === "Tutor" && renderPedagogical()}
+        {renderWizard()}
+      </>
+    );
   }
+
+  function renderPedagogical() {
+    if (pedQuestions) return renderPedTaking();
+    if (pedResult) return renderPedResult();
+    if (pedLoading) {
+      return (
+        <div className="mt-8 flex items-center justify-center py-12 text-slate-400">
+          <Loader2 className="animate-spin mr-2" size={18} />
+          Đang tải trạng thái bài kiểm tra kỹ năng sư phạm...
+        </div>
+      );
+    }
+    const passed = pedStatus?.latestIsPassed === true;
+    return (
+      <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+              <BookOpenCheck size={22} />
+            </span>
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Bài kiểm tra kỹ năng sư phạm (bắt buộc)
+              </h2>
+              <p className="text-sm text-slate-500 mt-0.5 max-w-2xl">
+                Kiểm tra khả năng xử lý tình huống sư phạm khi giảng dạy. Gia sư
+                phải đạt bài kiểm tra này trước khi được công bố hồ sơ dạy học.
+              </p>
+              {pedStatus?.latestScorePercent != null && (
+                <p className="text-xs text-slate-400 mt-1">
+                  Điểm gần nhất {pedStatus.latestScorePercent}% · Lần làm{" "}
+                  {pedStatus.latestAttemptNumber}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <StatusBadge status={pedStatus?.status || "Chưa làm"} />
+            <button
+              type="button"
+              disabled={pedSubmitting || passed}
+              onClick={startPedTest}
+              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+            >
+              {passed ? <CheckCircle2 size={15} /> : <Play size={15} />}
+              {passed
+                ? "Đã hoàn thành"
+                : pedStatus?.status === "Không đạt"
+                  ? "Làm lại"
+                  : "Bắt đầu"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPedTaking() {
+    return (
+      <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <BookOpen size={18} className="text-brand-600" />
+            <div>
+              <p className="font-semibold text-slate-900">
+                Bài kiểm tra kỹ năng sư phạm
+              </p>
+              <p className="text-xs text-slate-500">
+                {pedQuestions.questions.length} câu hỏi · đạt từ{" "}
+                {pedQuestions.passThreshold}% trở lên
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPedQuestions(null);
+              setPedResult(null);
+            }}
+            className="text-sm text-slate-500 hover:text-slate-700"
+          >
+            ← Quay lại danh sách
+          </button>
+        </div>
+
+        <div className="px-6 py-6 space-y-6">
+          {pedQuestions.questions.map((q, index) => (
+            <div
+              key={q.questionId}
+              className="rounded-xl border border-slate-100 bg-slate-50/60 p-5"
+            >
+              <p className="text-sm font-medium text-slate-900 mb-4">
+                <span className="text-slate-400 mr-2">Câu {index + 1}:</span>
+                {q.content}
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {[q.optionA, q.optionB, q.optionC, q.optionD].map(
+                  (option, i) => {
+                    const letter = OPTION_LABELS[i];
+                    const selected = pedAnswers[q.questionId] === letter;
+                    return (
+                      <button
+                        key={letter}
+                        type="button"
+                        onClick={() =>
+                          setPedAnswers((prev) => ({
+                            ...prev,
+                            [q.questionId]: letter,
+                          }))
+                        }
+                        className={`flex items-start gap-3 text-left rounded-lg border px-4 py-3 text-sm transition-colors ${
+                          selected
+                            ? "border-brand-500 bg-brand-50 text-brand-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                            selected
+                              ? "bg-brand-600 text-white"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {letter}
+                        </span>
+                        <span className="pt-0.5">{option}</span>
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-sm text-slate-500">
+              Đã trả lời {Object.keys(pedAnswers).length}/
+              {pedQuestions.questions.length} câu
+            </p>
+            <button
+              type="button"
+              disabled={pedSubmitting}
+              onClick={submitPedTest}
+              className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-medium rounded-lg px-6 py-2.5 transition-colors"
+            >
+              {pedSubmitting ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <ArrowRight size={18} />
+              )}
+              Nộp bài
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPedResult() {
+    return (
+      <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-6 py-8 text-center">
+          {pedResult.isPassed ? (
+            <CheckCircle2 size={48} className="mx-auto mb-3 text-verified-600" />
+          ) : (
+            <XCircle size={48} className="mx-auto mb-3 text-red-500" />
+          )}
+          <h2 className="text-xl font-bold text-slate-900 mb-1">
+            Bài kiểm tra kỹ năng sư phạm
+          </h2>
+          <p
+            className={`text-sm font-semibold mb-4 ${
+              pedResult.isPassed ? "text-verified-600" : "text-red-500"
+            }`}
+          >
+            {pedResult.isPassed ? "ĐẠT" : "KHÔNG ĐẠT"}
+          </p>
+          <div className="mx-auto max-w-xs rounded-xl border border-slate-100 bg-slate-50 p-4 mb-6">
+            <p className="text-3xl font-bold text-slate-900">
+              {pedResult.scorePercent}%
+            </p>
+            <p className="text-xs text-slate-500">
+              Trả lời đúng {pedResult.correctCount}/{pedResult.totalQuestions}
+              {" "}câu · Ngưỡng đạt {pedResult.passThreshold}%
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Lần làm {pedResult.attemptNumber}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setPedResult(null);
+                setPedQuestions(null);
+              }}
+              className="inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:underline"
+            >
+              ← Danh sách bài test
+            </button>
+            {!pedResult.isPassed && (
+              <button
+                type="button"
+                onClick={() => setPedResult(null)}
+                className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg px-5 py-2.5 transition-colors"
+              >
+                <RotateCcw size={16} /> Làm lại
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 function renderResult() {
     return (
       <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
