@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 **/bin/
 **/obj/
 *.log
@@ -28,3 +29,21 @@ dist-ssr
 *.sln
 *.sw?
 >>>>>>> origin/Frontend
+=======
+## Build results
+**/bin/
+**/obj/
+*.log
+
+## Visual Studio & Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosv
+*.sln.docstates
+
+## OS Files
+.DS_Store
+Thumbs.db
+>>>>>>> origin/backend-payment-escrow
