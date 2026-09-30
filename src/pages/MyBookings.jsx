@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { CalendarClock, Sparkles } from "lucide-react";
 import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
+import CancelRefundModal from "../components/CancelRefundModal";
 import { getUser, isLoggedIn } from "../auth";
 import { confirmBooking, getMyBookings, openConversation, rejectBooking } from "../api/study";
 
@@ -21,6 +22,7 @@ export default function MyBookings() {
   const [filter, setFilter] = useState(isTutor ? "pending" : "all");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [cancelBookingId, setCancelBookingId] = useState(null);
 
   const load = () => getMyBookings().then(setItems);
 
@@ -119,35 +121,86 @@ export default function MyBookings() {
                 }}
                 actions={
                   isTutor && b.status === "Pending" ? (
-                    <>
-                      <button
-                        type="button"
-                        className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors"
-                        onClick={async () => {
-                          const res = await confirmBooking(b.bookingId);
-                          setInfo(res.message);
-                          load();
-                        }}
-                      >
-                        Xác nhận
-                      </button>
+                    <div className="flex items-center gap-2">
+                      {b.paymentStatus !== "Success" && Number(b.price) > 0 ? (
+                        <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                          Chờ học viên thanh toán
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors shadow-sm"
+                          onClick={async () => {
+                            try {
+                              const res = await confirmBooking(b.bookingId);
+                              setInfo(res.message);
+                              load();
+                            } catch (err) {
+                              setError(err.response?.data?.message || "Lỗi khi xác nhận buổi học.");
+                            }
+                          }}
+                        >
+                          Xác nhận
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="h-9 px-4 rounded-lg border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors"
                         onClick={async () => {
-                          const res = await rejectBooking(b.bookingId);
-                          setInfo(res.message);
-                          load();
+                          const confirmText = b.paymentStatus === "Success"
+                            ? "Bạn có chắc muốn từ chối buổi học này? Hệ thống sẽ tự động hoàn 100% tiền tạm giữ cho học viên."
+                            : "Bạn có chắc muốn từ chối buổi học này?";
+                          if (window.confirm(confirmText)) {
+                            try {
+                              const res = await rejectBooking(b.bookingId);
+                              setInfo(res.message);
+                              load();
+                            } catch (err) {
+                              setError(err.response?.data?.message || "Lỗi khi từ chối buổi học.");
+                            }
+                          }
                         }}
                       >
                         Từ chối
                       </button>
-                    </>
+                    </div>
+                  ) : !isTutor ? (
+                    <div className="flex items-center gap-2">
+                      {(b.paymentStatus === "Unpaid" || b.paymentStatus === "Pending") && b.status !== "Cancelled" && b.status !== "Rejected" && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/checkout/${b.bookingId}`)}
+                          className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors shadow-sm"
+                        >
+                          Thanh toán
+                        </button>
+                      )}
+                      {(b.status === "Confirmed" || b.status === "Pending") && (
+                        <button
+                          type="button"
+                          onClick={() => setCancelBookingId(b.bookingId)}
+                          className="h-9 px-3.5 rounded-lg border border-slate-200 hover:border-red-200 text-slate-600 hover:text-red-600 text-sm font-medium hover:bg-red-50/50 transition-colors"
+                        >
+                          Hủy buổi học
+                        </button>
+                      )}
+                    </div>
                   ) : null
                 }
               />
             ))}
           </div>
+        )}
+
+        {cancelBookingId && (
+          <CancelRefundModal
+            bookingId={cancelBookingId}
+            onClose={() => setCancelBookingId(null)}
+            onSuccess={(msg) => {
+              setInfo(msg);
+              load();
+            }}
+          />
         )}
 
         <p className="text-xs text-slate-400 mt-6">
