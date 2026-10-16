@@ -21,7 +21,7 @@ export default function VerifyEmail() {
     setLoading(true);
     try {
       const res = await axiosClient.post("/Auth/confirm-email", { email, code });
-      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding);
+      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding, false, res.data.refreshToken);
     } catch (err) {
       setError(err.response?.data?.message || "Verification failed.");
     } finally {

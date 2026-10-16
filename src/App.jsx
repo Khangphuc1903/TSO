@@ -17,9 +17,17 @@ import CreateStudyGroup from "./pages/CreateStudyGroup";
 import StudyGroupDetail from "./pages/StudyGroupDetail";
 import MyBookings from "./pages/MyBookings";
 import Onboarding from "./pages/Onboarding";
+import TutorTests from "./pages/TutorTests";
+import TutorIdentity from "./pages/TutorIdentity";
+import AdminDashboard from "./pages/AdminDashboard";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Faq from "./pages/Faq";
 import Checkout from "./pages/Checkout";
 import PaymentResult from "./pages/PaymentResult";
 import Cart from "./pages/Cart";
+import Wishlist from "./pages/Wishlist";
+import PaymentHistory from "./pages/PaymentHistory";
 import { CartProvider } from "./context/CartContext";
 import { getUser, isLoggedIn } from "./auth";
 
@@ -27,7 +35,9 @@ function OnboardingGate({ children }) {
   const loc = useLocation();
   const pending =
     isLoggedIn() &&
-    ((getUser()?.role || "").toLowerCase() === "pending" || localStorage.getItem("needsOnboarding") === "1");
+    ((getUser()?.role || "").toLowerCase() === "pending" ||
+      sessionStorage.getItem("needsOnboarding") === "1" ||
+      localStorage.getItem("needsOnboarding") === "1");
   const allowed = ["/onboarding", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
   if (pending && !allowed.includes(loc.pathname)) {
     return <Navigate to="/onboarding" replace />;
@@ -54,12 +64,21 @@ function App() {
             <Route path="/tutors" element={<FindTutors />} />
             <Route path="/tutors/:tutorId" element={<TutorProfile />} />
             <Route path="/tutor" element={<TutorDesk />} />
+            <Route path="/tutor-tests" element={<TutorTests />} />
+            <Route path="/tutor-identity" element={<TutorIdentity />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/faq" element={<Faq />} />
+            <Route path="/help" element={<Faq />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/study-groups" element={<StudyGroups />} />
             <Route path="/study-groups/new" element={<CreateStudyGroup />} />
             <Route path="/study-groups/:groupId" element={<StudyGroupDetail />} />
             <Route path="/bookings" element={<MyBookings />} />
             <Route path="/cart" element={<Cart />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/payments" element={<PaymentHistory />} />
             <Route path="/checkout/:bookingId" element={<Checkout />} />
             <Route path="/payment/result" element={<PaymentResult />} />
           </Routes>

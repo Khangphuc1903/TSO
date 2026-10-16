@@ -20,8 +20,10 @@ import {
   Play,
   Lock
 } from "lucide-react";
+import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { getDefaultTutors } from "../api/tutorSearch";
+import { getPublicHome } from "../api/admin";
 import { formatVnd } from "../utils/format";
 
 export default function Home() {
@@ -31,6 +33,7 @@ export default function Home() {
   const [level, setLevel] = useState("");
   const [featured, setFeatured] = useState([]);
   const [loadingTutors, setLoadingTutors] = useState(true);
+  const [homeStats, setHomeStats] = useState(null);
 
   useEffect(() => {
     setLoadingTutors(true);
@@ -40,6 +43,7 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setLoadingTutors(false));
+    getPublicHome().then(setHomeStats).catch(() => {});
   }, []);
 
   const handleSearch = (e) => {
@@ -89,26 +93,29 @@ export default function Home() {
             </h1>
 
             <p className="text-sm sm:text-base lg:text-lg text-white/70 mt-5 max-w-xl leading-relaxed">
-              Kết nối với hơn 2.500+ gia sư đã xác thực trên khắp cả nước. Thanh toán an toàn qua hệ thống Escrow ký quỹ – hoàn tiền 100% nếu không hài lòng.
+              Kết nối gia sư đã xác thực CCCD với học viên trên toàn quốc. Thanh toán ký quỹ PayOS – hoàn tiền theo chính sách hủy.
             </p>
 
             {/* Stats row */}
             <div className="flex flex-wrap gap-8 mt-8 pt-6 border-t border-white/10">
               <div>
-                <p className="text-2xl sm:text-3xl font-black text-white">2,500+</p>
-                <p className="text-[11px] text-white/50 font-medium mt-0.5">Gia sư xác thực</p>
+                <p className="text-2xl sm:text-3xl font-black text-white">{homeStats?.tutorCount ?? "—"}</p>
+                <p className="text-[11px] text-white/50 font-medium mt-0.5">Gia sư đang mở lớp</p>
               </div>
               <div>
-                <p className="text-2xl sm:text-3xl font-black text-white">50k+</p>
-                <p className="text-[11px] text-white/50 font-medium mt-0.5">Học viên tin dùng</p>
+                <p className="text-2xl sm:text-3xl font-black text-white">{homeStats?.studentCount ?? "—"}</p>
+                <p className="text-[11px] text-white/50 font-medium mt-0.5">Học viên</p>
               </div>
               <div>
-                <p className="text-2xl sm:text-3xl font-black text-white">4.9<span className="text-lg text-amber-300">★</span></p>
+                <p className="text-2xl sm:text-3xl font-black text-white">
+                  {homeStats?.averageRating ? Number(homeStats.averageRating).toFixed(1) : "—"}
+                  <span className="text-lg text-amber-300">★</span>
+                </p>
                 <p className="text-[11px] text-white/50 font-medium mt-0.5">Đánh giá trung bình</p>
               </div>
               <div>
-                <p className="text-2xl sm:text-3xl font-black text-emerald-300">100%</p>
-                <p className="text-[11px] text-white/50 font-medium mt-0.5">Bảo đảm hoàn tiền</p>
+                <p className="text-2xl sm:text-3xl font-black text-emerald-300">{homeStats?.reviewCount ?? 0}</p>
+                <p className="text-[11px] text-white/50 font-medium mt-0.5">Lượt đánh giá</p>
               </div>
             </div>
           </div>
@@ -309,6 +316,21 @@ export default function Home() {
         )}
       </section>
 
+      {homeStats?.testimonials?.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 pb-8">
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-6">Học viên nói gì</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {homeStats.testimonials.map((t, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5">
+                <p className="text-amber-500 text-sm font-bold">{"★".repeat(t.rating)}</p>
+                <p className="text-sm text-slate-700 mt-2 leading-relaxed">“{t.comment}”</p>
+                <p className="text-xs text-slate-500 mt-3">{t.studentName} · gia sư {t.tutorName}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ═══════════════════ CTA: NHÓM HỌC ═══════════════════ */}
       <section className="max-w-7xl mx-auto px-6 pb-16">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE] p-8 sm:p-12 lg:p-16">
@@ -374,21 +396,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══════════════════ FOOTER ═══════════════════ */}
-      <footer className="border-t border-slate-100 bg-white py-10 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <GraduationCap size={20} className="text-brand-600" />
-            <span className="text-sm font-bold text-slate-900">TSG – Tutor Study Group</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-6 text-xs text-slate-400">
-            <span className="flex items-center gap-1"><Lock size={12} /> SSL 256-bit</span>
-            <span className="flex items-center gap-1"><ShieldCheck size={12} /> NAPAS 24/7</span>
-            <span className="flex items-center gap-1"><CheckCircle2 size={12} /> PayOS Verified</span>
-          </div>
-          <p className="text-xs text-slate-400">© 2026 TSG Platform. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

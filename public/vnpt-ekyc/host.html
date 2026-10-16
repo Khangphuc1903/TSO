@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VNPT eKYC</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #fff; }
+      #ekyc_sdk_intergrated { min-height: 100%; width: 100%; }
+      .boot { padding: 24px; color: #475569; font-size: 14px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.7.4/lottie.min.js"></script>
+    <script src="./lib/VNPTBrowserSDKAppV4.1.0.js"></script>
+    <script src="./web-sdk-version-3.0.js"></script>
+  </head>
+  <body>
+    <div id="ekyc_sdk_intergrated">
+      <p class="boot">Đang tải giao diện VNPT eKYC…</p>
+    </div>
+    <script>
+      function ready() {
+        parent.postMessage({ type: "VNPT_READY" }, "*");
+      }
+      window.addEventListener("message", function (event) {
+        var data = event.data || {};
+        if (data.type === "VNPT_PING") {
+          ready();
+          return;
+        }
+        if (data.type !== "VNPT_LAUNCH") return;
+        if (!window.SDK || typeof window.SDK.launch !== "function") {
+          parent.postMessage({ type: "VNPT_ERROR", message: "Không tải được SDK VNPT." }, "*");
+          return;
+        }
+        var cfg = Object.assign({}, data.config || {}, {
+          HAS_QR_SCAN: false,
+          SHOW_TAB_RESULT_QRCODE: false,
+          LIST_TYPE_DOCUMENT: [-1],
+          DOCUMENT_TYPE_START: -1,
+          URL_WEB_OVAL: "./lib/web-oval.json",
+          URL_MOBILE_OVAL: "./lib/mobile-oval.json",
+          CALL_BACK_END_FLOW: function (result) {
+            parent.postMessage({ type: "VNPT_RESULT", result: result }, "*");
+          },
+        });
+        window.SDK.launch(cfg);
+      });
+      if (document.readyState === "complete") ready();
+      else window.addEventListener("load", ready);
+    </script>
+  </body>
+</html>

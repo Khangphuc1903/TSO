@@ -19,3 +19,8 @@ export async function cancelAndRefundBooking(bookingId, reason) {
   const res = await axiosClient.post(`/payments/booking/${bookingId}/cancel`, { reason });
   return res.data;
 }
+
+export async function getMyPayments() {
+  const res = await axiosClient.get("/payments/mine");
+  return res.data;
+}

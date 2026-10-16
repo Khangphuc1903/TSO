@@ -44,3 +44,8 @@ export async function sendStudyGroupMessage(id, content) {
   const res = await axiosClient.post(`/study-groups/${id}/messages`, { content });
   return res.data;
 }
+
+export async function removeStudyGroupMember(groupId, userId) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/members/${userId}/remove`);
+  return res.data;
+}
