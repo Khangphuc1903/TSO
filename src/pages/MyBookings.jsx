@@ -5,13 +5,14 @@ import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
 import CancelRefundModal from "../components/CancelRefundModal";
 import { getUser, isLoggedIn } from "../auth";
-import { confirmBooking, getMyBookings, openConversation, rejectBooking } from "../api/study";
+import { completeBooking, confirmBooking, getMyBookings, openConversation, rejectBooking } from "../api/study";
 
 const FILTERS = [
   { id: "all", label: "Tất cả" },
   { id: "today", label: "Hôm nay" },
   { id: "pending", label: "Chờ xác nhận" },
   { id: "confirmed", label: "Đã xác nhận" },
+  { id: "completed", label: "Hoàn thành" },
 ];
 
 export default function MyBookings() {
@@ -35,6 +36,7 @@ export default function MyBookings() {
     if (filter === "today") return items.filter((b) => b.isToday);
     if (filter === "pending") return items.filter((b) => b.status === "Pending");
     if (filter === "confirmed") return items.filter((b) => b.status === "Confirmed");
+    if (filter === "completed") return items.filter((b) => b.status === "Completed");
     return items;
   }, [items, filter]);
 
@@ -109,20 +111,22 @@ export default function MyBookings() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {visible.map((b) => (
+            {visible.map((b) => {
+              const teaching = Number(b.tutorId) === Number(user?.userId);
+              return (
               <BookingLessonCard
                 key={b.bookingId}
                 booking={b}
-                counterpartName={isTutor ? b.studentName : b.tutorName}
+                counterpartName={teaching ? b.studentName : b.tutorName}
                 onChat={async () => {
-                  const other = isTutor ? b.studentId : b.tutorId;
+                  const other = teaching ? b.studentId : b.tutorId;
                   const id = await openConversation(other, b.bookingId);
                   navigate(`/messages?c=${id}`);
                 }}
                 actions={
-                  isTutor && b.status === "Pending" ? (
+                  teaching && b.status === "Pending" ? (
                     <div className="flex items-center gap-2">
-                      {b.paymentStatus !== "Success" && Number(b.price) > 0 ? (
+                      {b.paymentType !== "InPerson" && b.paymentStatus !== "Success" && Number(b.price) > 0 ? (
                         <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
                           Chờ học viên thanh toán
                         </span>
@@ -164,9 +168,42 @@ export default function MyBookings() {
                         Từ chối
                       </button>
                     </div>
-                  ) : !isTutor ? (
+                  ) : b.status === "Confirmed" ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {((teaching && b.tutorCompleted) || (!teaching && b.studentCompleted)) ? (
+                        <span className="text-xs text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                          {teaching ? "Đã xác nhận dạy xong — chờ học viên" : "Đã xác nhận học xong — chờ gia sư"}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
+                          onClick={async () => {
+                            try {
+                              const res = await completeBooking(b.bookingId);
+                              setInfo(res.message);
+                              load();
+                            } catch (err) {
+                              setError(err.response?.data?.message || "Không xác nhận hoàn thành được.");
+                            }
+                          }}
+                        >
+                          {teaching ? "Đã dạy xong" : "Đã học xong"}
+                        </button>
+                      )}
+                      {!teaching && (
+                        <button
+                          type="button"
+                          onClick={() => setCancelBookingId(b.bookingId)}
+                          className="h-9 px-3.5 rounded-lg border border-slate-200 hover:border-red-200 text-slate-600 hover:text-red-600 text-sm font-medium hover:bg-red-50/50 transition-colors"
+                        >
+                          Hủy buổi học
+                        </button>
+                      )}
+                    </div>
+                  ) : !teaching ? (
                     <div className="flex items-center gap-2">
-                      {(b.paymentStatus === "Unpaid" || b.paymentStatus === "Pending") && b.status !== "Cancelled" && b.status !== "Rejected" && (
+                      {b.paymentType !== "InPerson" && (b.paymentStatus === "Unpaid" || b.paymentStatus === "Pending") && b.status !== "Cancelled" && b.status !== "Rejected" && (
                         <button
                           type="button"
                           onClick={() => navigate(`/checkout/${b.bookingId}`)}
@@ -175,7 +212,7 @@ export default function MyBookings() {
                           Thanh toán
                         </button>
                       )}
-                      {(b.status === "Confirmed" || b.status === "Pending") && (
+                      {b.status === "Pending" && (
                         <button
                           type="button"
                           onClick={() => setCancelBookingId(b.bookingId)}
@@ -188,7 +225,8 @@ export default function MyBookings() {
                   ) : null
                 }
               />
-            ))}
+            );
+            })}
           </div>
         )}
 

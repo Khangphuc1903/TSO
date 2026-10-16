@@ -64,7 +64,8 @@ export default function Onboarding() {
     setSaving(true);
     try {
       const res = await completeOnboarding(form);
-      if (res.token) saveSession(res.token);
+      if (res.token) saveSession(res.token, Boolean(localStorage.getItem("token")), res.refreshToken);
+      sessionStorage.removeItem("needsOnboarding");
       localStorage.removeItem("needsOnboarding");
       navigate(homeForRole(res.profile?.role || form.role));
     } catch (err) {

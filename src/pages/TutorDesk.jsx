@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import TutorSetupSteps from "../components/TutorSetupSteps";
 import { getUser, isLoggedIn } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
 import { API_ORIGIN } from "../api/axiosClient";
@@ -66,8 +67,7 @@ export default function TutorDesk() {
     university: "",
     major: "",
     yearsOfExperience: "",
-    hourlyRateMin: "",
-    hourlyRateMax: "",
+    hourlyRate: "",
     teachingMode: "Both",
     isPublished: false,
     subjectIds: [],
@@ -95,8 +95,7 @@ export default function TutorDesk() {
       university: workspace.university || "",
       major: workspace.major || "",
       yearsOfExperience: workspace.yearsOfExperience ?? "",
-      hourlyRateMin: workspace.hourlyRateMin ?? "",
-      hourlyRateMax: workspace.hourlyRateMax ?? "",
+      hourlyRate: workspace.hourlyRate ?? workspace.hourlyRateMin ?? workspace.hourlyRateMax ?? "",
       teachingMode: workspace.teachingMode || "Both",
       isPublished: Boolean(workspace.isPublished),
       subjectIds: (workspace.subjects || []).map((s) => s.subjectId),
@@ -120,6 +119,10 @@ export default function TutorDesk() {
     () => invites.filter((i) => i.status === "Pending"),
     [invites]
   );
+  const canOpenSchedule = Boolean(ws?.canOpenSchedule);
+  const passedTestCount = ws?.passedTestCount || 0;
+  const identityCompleted = Boolean(ws?.identityCompleted);
+  const setupCurrent = !identityCompleted ? "identity" : canOpenSchedule ? "schedule" : "tests";
 
   const onSaveProfile = async (e) => {
     e.preventDefault();
@@ -132,8 +135,9 @@ export default function TutorDesk() {
         university: form.university,
         major: form.major,
         yearsOfExperience: form.yearsOfExperience === "" ? null : Number(form.yearsOfExperience),
-        hourlyRateMin: form.hourlyRateMin === "" ? null : Number(form.hourlyRateMin),
-        hourlyRateMax: form.hourlyRateMax === "" ? null : Number(form.hourlyRateMax),
+        hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate),
+        hourlyRateMin: form.hourlyRate === "" ? null : Number(form.hourlyRate),
+        hourlyRateMax: form.hourlyRate === "" ? null : Number(form.hourlyRate),
         teachingMode: form.teachingMode,
         isPublished: form.isPublished,
         subjectIds: form.subjectIds,
@@ -208,13 +212,29 @@ export default function TutorDesk() {
             Bảng <span className="text-brand-600">làm việc</span>
           </h1>
           <p className="text-slate-500 mt-2 max-w-xl">
-            Cập nhật hồ sơ dạy học, chứng chỉ, lịch trống và lời mời mentor. Học viên sẽ thấy chứng chỉ trên hồ sơ công khai.
+            Cập nhật hồ sơ dạy học. Lịch trống mở sau khi xác thực CCCD và đạt bài kiểm tra chuyên môn.
           </p>
+          <div className="mt-6">
+            <TutorSetupSteps passedTestCount={passedTestCount} identityCompleted={identityCompleted} current={setupCurrent} />
+          </div>
           <div className="flex flex-wrap gap-3 mt-5">
-            <Link
-              to="/bookings"
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
-            >
+              <Link
+                to="/tutor-identity"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
+              >
+                <Sparkles size={16} />
+                Xác thực CCCD
+              </Link>
+              <Link
+                to="/tutor-tests"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
+              >
+                Làm bài test
+              </Link>
+              <Link
+                to="/bookings"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
+              >
               <CalendarClock size={16} />
               Xác nhận booking
             </Link>
@@ -269,8 +289,10 @@ export default function TutorDesk() {
         {tab === "profile" && (
           <form onSubmit={onSaveProfile} className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 space-y-4">
             <p className="text-xs text-slate-500">
-              Xác thực danh tính và 2 bài test (chuyên môn, an toàn/sư phạm) sẽ làm sau. Trạng thái
-              hiện tại: <strong>{ws?.verificationStatus || "Pending"}</strong>
+              Trạng thái hồ sơ: <strong>{ws?.verificationStatus || "Pending"}</strong>
+              {canOpenSchedule
+                ? " · Đã xác thực CCCD và đạt bài test, có thể mở lịch dạy."
+                : " · Chưa đủ CCCD + bài test — chưa mở được lịch trống."}
             </p>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Giới thiệu</span>
@@ -320,25 +342,18 @@ export default function TutorDesk() {
                   <option value="Offline">Offline</option>
                 </select>
               </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Giá tối thiểu (VNĐ/giờ)</span>
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Giá theo giờ (VNĐ)</span>
                 <input
                   type="number"
                   min="0"
+                  step="1000"
                   className={`${inputClass} mt-1`}
-                  value={form.hourlyRateMin}
-                  onChange={(e) => setForm({ ...form, hourlyRateMin: e.target.value })}
+                  value={form.hourlyRate}
+                  onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })}
+                  placeholder="Ví dụ: 150000"
                 />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Giá tối đa (VNĐ/giờ)</span>
-                <input
-                  type="number"
-                  min="0"
-                  className={`${inputClass} mt-1`}
-                  value={form.hourlyRateMax}
-                  onChange={(e) => setForm({ ...form, hourlyRateMax: e.target.value })}
-                />
+                <span className="text-xs text-slate-400 mt-1 block">Một mức giá duy nhất cho 1 giờ dạy. Học phí buổi = giá/giờ × số giờ khung.</span>
               </label>
             </div>
             <div>
@@ -375,9 +390,13 @@ export default function TutorDesk() {
               <input
                 type="checkbox"
                 checked={form.isPublished}
+                disabled={!canOpenSchedule}
                 onChange={(e) => setForm({ ...form, isPublished: e.target.checked })}
               />
               Công khai hồ sơ trên Find Tutors
+              {!canOpenSchedule && (
+                <span className="text-xs text-slate-400">(cần CCCD + bài test)</span>
+              )}
             </label>
             <button
               type="submit"
@@ -491,6 +510,24 @@ export default function TutorDesk() {
 
         {tab === "slots" && (
           <div className="space-y-4">
+            {!canOpenSchedule ? (
+              <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
+                <Clock className="mx-auto text-brand-600 mb-3" size={28} />
+                <p className="font-semibold text-slate-900">Lịch dạy chưa được mở</p>
+                <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
+                  {identityCompleted
+                    ? "Hoàn thành bài kiểm tra chuyên môn trước khi mở lịch."
+                    : "Hoàn tất CCCD và khuôn mặt trước, rồi làm bài test chuyên môn."}
+                </p>
+                <Link
+                  to={identityCompleted ? "/tutor-tests" : "/tutor-identity"}
+                  className="inline-flex mt-5 h-10 items-center px-5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
+                >
+                  {identityCompleted ? "Đi làm bài test" : "Xác thực CCCD"}
+                </Link>
+              </div>
+            ) : (
+          <>
             <form
               onSubmit={onAddSlot}
               className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 space-y-4"
@@ -610,6 +647,8 @@ export default function TutorDesk() {
                 </li>
               ))}
             </ul>
+            </>
+            )}
           </div>
         )}
 

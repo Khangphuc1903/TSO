@@ -72,7 +72,7 @@ export default function Register() {
         <GoogleSignInButton
           label="Continue with Google"
           onError={setError}
-          onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding)}
+          onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding, false, data.refreshToken)}
         />
 
         <div className="flex items-center gap-3 my-6">

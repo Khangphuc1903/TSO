@@ -4,6 +4,8 @@ import {
   ArrowRight,
   Bell,
   CalendarClock,
+  Camera,
+  GraduationCap,
   Eye,
   EyeOff,
   Lock,
@@ -17,9 +19,13 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
-import { avatarUrl, getUser, isLoggedIn } from "../auth";
+import { avatarUrl, getUser, isLoggedIn, saveSession, updateStoredUser } from "../auth";
+import { API_ORIGIN } from "../api/axiosClient";
+import { fileHref } from "../utils/format";
 import {
   changePassword,
+  becomeTutor,
+  completeBooking,
   confirmBooking,
   getMyBookings,
   getMyProfile,
@@ -27,6 +33,7 @@ import {
   openConversation,
   rejectBooking,
   updateMyProfile,
+  uploadMyAvatar,
 } from "../api/study";
 import LocationFields from "../components/LocationFields";
 import { phoneError, regionError } from "../data/locations";
@@ -65,6 +72,8 @@ export default function Profile() {
     district: "",
   });
   const [pwd, setPwd] = useState({ currentPassword: "", newPassword: "", confirm: "" });
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [becomeBusy, setBecomeBusy] = useState(false);
 
   const load = async () => {
     const [p, b, n] = await Promise.all([
@@ -84,6 +93,7 @@ export default function Profile() {
     });
     setBookings(Array.isArray(b) ? b : []);
     setReminders((n.items || []).filter((x) => x.type === "LessonReminder"));
+    if (p?.avatarUrl) updateStoredUser({ avatarUrl: p.avatarUrl });
   };
 
   useEffect(() => {
@@ -100,39 +110,88 @@ export default function Profile() {
   );
   const pending = useMemo(() => bookings.filter((b) => b.status === "Pending"), [bookings]);
 
+  const asTutorOn = (b) => Number(b.tutorId) === Number(session?.userId || profile?.userId);
+
   const chat = async (b) => {
-    const other = isTutor ? b.studentId : b.tutorId;
+    const other = asTutorOn(b) ? b.studentId : b.tutorId;
     const id = await openConversation(other, b.bookingId);
     navigate(`/messages?c=${id}`);
   };
 
-  const tutorActions = (b) =>
-    isTutor && b.status === "Pending" ? (
-      <>
+  const switchToTutor = async () => {
+    if (!window.confirm("Chuyển tài khoản thành gia sư? Bạn sẽ vào bảng làm việc để xác thực CCCD, làm bài test và mở lịch dạy. Lịch học cũ vẫn giữ."))
+      return;
+    setError("");
+    setInfo("");
+    setBecomeBusy(true);
+    try {
+      const res = await becomeTutor();
+      const remember = Boolean(localStorage.getItem("token"));
+      if (res.token) saveSession(res.token, remember, res.refreshToken);
+      setInfo(res.message);
+      navigate("/tutor");
+    } catch (err) {
+      setError(err.response?.data?.message || "Không chuyển được thành gia sư.");
+    } finally {
+      setBecomeBusy(false);
+    }
+  };
+
+  const tutorActions = (b) => {
+    const teaching = asTutorOn(b);
+    if (teaching && b.status === "Pending") {
+      const waitPay = b.paymentType !== "InPerson" && b.paymentStatus !== "Success" && Number(b.price) > 0;
+      return (
+        <>
+          {waitPay ? (
+            <span className="text-xs text-amber-600">Chờ học viên thanh toán</span>
+          ) : (
+            <button
+              type="button"
+              className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors"
+              onClick={async () => {
+                const res = await confirmBooking(b.bookingId);
+                setInfo(res.message);
+                await load();
+              }}
+            >
+              Xác nhận
+            </button>
+          )}
+          <button
+            type="button"
+            className="h-9 px-4 rounded-lg border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors"
+            onClick={async () => {
+              const res = await rejectBooking(b.bookingId);
+              setInfo(res.message);
+              await load();
+            }}
+          >
+            Từ chối
+          </button>
+        </>
+      );
+    }
+    if (b.status === "Confirmed") {
+      const mineDone = teaching ? b.tutorCompleted : b.studentCompleted;
+      return mineDone ? (
+        <span className="text-xs text-slate-500">{teaching ? "Đã dạy xong — chờ học viên" : "Đã học xong — chờ gia sư"}</span>
+      ) : (
         <button
           type="button"
-          className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors"
+          className="h-9 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium"
           onClick={async () => {
-            const res = await confirmBooking(b.bookingId);
+            const res = await completeBooking(b.bookingId);
             setInfo(res.message);
             await load();
           }}
         >
-          Xác nhận
+          {teaching ? "Đã dạy xong" : "Đã học xong"}
         </button>
-        <button
-          type="button"
-          className="h-9 px-4 rounded-lg border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors"
-          onClick={async () => {
-            const res = await rejectBooking(b.bookingId);
-            setInfo(res.message);
-            await load();
-          }}
-        >
-          Từ chối
-        </button>
-      </>
-    ) : null;
+      );
+    }
+    return null;
+  };
 
   const saveInfo = async (e) => {
     e.preventDefault();
@@ -153,11 +212,11 @@ export default function Profile() {
       const res = await updateMyProfile(form);
       setInfo(res.message);
       setProfile(res.profile);
-      const stored = getUser() || {};
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ ...stored, email: res.profile.email, role: res.profile.role })
-      );
+      updateStoredUser({
+        email: res.profile.email,
+        role: res.profile.role,
+        avatarUrl: res.profile.avatarUrl,
+      });
     } catch (err) {
       setError(err.response?.data?.message || "Không lưu được thông tin.");
     } finally {
@@ -185,7 +244,29 @@ export default function Profile() {
     }
   };
 
-  const photo = profile?.avatarUrl || avatarUrl(profile?.fullName || profile?.email || session?.email);
+  const photo =
+    fileHref(profile?.avatarUrl, API_ORIGIN) || avatarUrl(profile?.fullName || profile?.email || session?.email);
+
+  const onAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setInfo("");
+    setAvatarBusy(true);
+    try {
+      const res = await uploadMyAvatar(file);
+      setInfo(res.message || "Đã cập nhật ảnh đại diện.");
+      if (res.profile) {
+        setProfile(res.profile);
+        updateStoredUser({ avatarUrl: res.profile.avatarUrl });
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Không tải được ảnh đại diện.");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
   const locationText = [profile?.district, profile?.city].filter(Boolean).join(", ") || "Chưa cập nhật khu vực";
 
   return (
@@ -210,13 +291,38 @@ export default function Profile() {
           <p className="text-slate-500 mt-2 max-w-xl">
             Quản lý hồ sơ, đổi mật khẩu, theo dõi lịch học và đơn chờ xác nhận trong một nơi.
           </p>
+          {!isTutor && (session?.role || "").toLowerCase() !== "admin" && (
+            <button
+              type="button"
+              disabled={becomeBusy}
+              onClick={switchToTutor}
+              className="inline-flex mt-4 h-10 items-center gap-2 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium"
+            >
+              <GraduationCap size={16} />
+              {becomeBusy ? "Đang chuyển..." : "Trở thành gia sư"}
+            </button>
+          )}
           {isTutor && (
+            <>
+            <Link
+              to="/tutor-identity"
+              className="inline-flex mt-4 mr-3 h-10 items-center px-4 rounded-lg border border-brand-200 text-brand-700 text-sm font-medium hover:bg-brand-50"
+            >
+              Xác thực CCCD
+            </Link>
+            <Link
+              to="/tutor-tests"
+              className="inline-flex mt-4 mr-3 h-10 items-center px-4 rounded-lg border border-brand-200 text-brand-700 text-sm font-medium hover:bg-brand-50"
+            >
+              Làm bài kiểm tra
+            </Link>
             <Link
               to="/tutor"
               className="inline-flex mt-4 h-10 items-center px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
             >
               Mở bảng gia sư
             </Link>
+            </>
           )}
         </div>
       </section>
@@ -224,7 +330,13 @@ export default function Profile() {
       <main className="max-w-5xl mx-auto px-6 pb-16">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 mb-6">
           <div className="flex flex-col sm:flex-row items-start gap-5">
-            <img src={photo} alt="" className="h-24 w-24 rounded-full object-cover ring-4 ring-brand-50" />
+            <div className="relative shrink-0">
+              <img src={photo} alt="" className="h-24 w-24 rounded-full object-cover ring-4 ring-brand-50" />
+              <label className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center cursor-pointer shadow-sm">
+                <Camera size={14} />
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={onAvatarChange} disabled={avatarBusy} />
+              </label>
+            </div>
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold text-slate-900">{profile?.fullName || "Hồ sơ của bạn"}</h2>
@@ -418,7 +530,7 @@ export default function Profile() {
                       <BookingLessonCard
                         key={b.bookingId}
                         booking={b}
-                        counterpartName={isTutor ? b.studentName : b.tutorName}
+                        counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
                         actions={tutorActions(b)}
                       />
@@ -443,7 +555,7 @@ export default function Profile() {
                       <BookingLessonCard
                         key={b.bookingId}
                         booking={b}
-                        counterpartName={isTutor ? b.studentName : b.tutorName}
+                        counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
                         actions={tutorActions(b)}
                       />
@@ -463,7 +575,7 @@ export default function Profile() {
                       <BookingLessonCard
                         key={b.bookingId}
                         booking={b}
-                        counterpartName={isTutor ? b.studentName : b.tutorName}
+                        counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
                         actions={tutorActions(b)}
                       />

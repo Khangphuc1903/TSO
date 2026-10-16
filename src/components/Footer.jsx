@@ -1,34 +1,29 @@
 import { ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const FOOTER_COLUMNS = [
   {
-    title: "ACADEMIC NETWORK",
+    title: "Nền tảng",
     links: [
-      { label: "Find Qualified Tutors", to: "/tutors" },
-      { label: "Browse Study Groups", to: "/study-groups" },
-      { label: "Become a Peer Tutor", to: "/become-tutor" },
-      { label: "Course Syllabi Catalog", to: "/syllabi" },
-      { label: "Campus Chapters", to: "/chapters" },
+      { label: "Tìm gia sư", to: "/tutors" },
+      { label: "Nhóm học", to: "/study-groups" },
+      { label: "Về chúng tôi", to: "/about" },
     ],
   },
   {
-    title: "PLATFORM TRUST",
+    title: "An toàn",
     links: [
-      { label: "Tutor Credentialing", to: "/credentialing" },
-      { label: "Academic Integrity Policy", to: "/integrity-policy" },
-      { label: "Safety & Community Guidelines", to: "/guidelines" },
-      { label: "Student Reviews & Ratings", to: "/reviews" },
-      { label: "Dispute Resolution", to: "/disputes" },
+      { label: "FAQ / Trợ giúp", to: "/faq" },
+      { label: "Liên hệ", to: "/contact" },
+      { label: "Đánh giá", to: "/reviews" },
     ],
   },
   {
-    title: "INSTITUTION & SUPPORT",
+    title: "Tài khoản",
     links: [
-      { label: "Partner Universities", to: "/partners" },
-      { label: "Help & Knowledge Center", to: "/help" },
-      { label: "Research & Case Studies", to: "/research" },
-      { label: "Accessibility Standards", to: "/accessibility" },
-      { label: "Contact Campus Success", to: "/contact" },
+      { label: "Đăng nhập", to: "/login" },
+      { label: "Đăng ký", to: "/register" },
+      { label: "Trở thành gia sư", to: "/register" },
     ],
   },
 ];
@@ -37,7 +32,6 @@ export default function Footer() {
   return (
     <footer className="bg-brand-50/60">
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
-        {/* Brand column */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg font-bold text-brand-700">TSG</span>
@@ -46,55 +40,31 @@ export default function Footer() {
             </span>
           </div>
           <p className="text-sm text-slate-500 leading-relaxed mb-4">
-            The authoritative platform connecting university students with
-            verified peer tutors and structured peer study circles for
-            collaborative academic excellence.
+            Nền tảng kết nối học viên với gia sư đã xác thực CCCD, đạt bài test và thanh toán ký quỹ.
           </p>
           <div className="flex items-center gap-1.5 text-sm text-slate-600">
             <ShieldCheck size={16} className="text-verified-600" />
-            Accredited Higher-Ed Network
+            VNPT eKYC · PayOS
           </div>
         </div>
-
-        {/* Link columns */}
         {FOOTER_COLUMNS.map((col) => (
           <div key={col.title}>
-            <h4 className="text-xs font-bold tracking-wide text-slate-900 mb-4">
-              {col.title}
-            </h4>
+            <h4 className="text-xs font-bold tracking-wide text-slate-900 mb-4">{col.title}</h4>
             <ul className="space-y-3">
               {col.links.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.to}
-                    className="text-sm text-slate-600 hover:text-brand-600 transition-colors"
-                  >
+                  <Link to={link.to} className="text-sm text-slate-600 hover:text-brand-600 transition-colors">
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
           </div>
         ))}
       </div>
-
       <div className="border-t border-brand-100">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-slate-500">
-            © {new Date().getFullYear()} TSG Education Technologies Inc. All
-            academic rights reserved.
-          </p>
-          <div className="flex items-center gap-6 text-xs text-slate-500">
-            <a href="/privacy" className="hover:text-slate-700">
-              Privacy Policy
-            </a>
-            <a href="/terms" className="hover:text-slate-700">
-              Terms of Service
-            </a>
-            <a href="/ferpa" className="hover:text-slate-700">
-              FERPA Compliance
-            </a>
-          </div>
+        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-slate-500">
+          © {new Date().getFullYear()} TSG Tutor Platform
         </div>
       </div>
     </footer>

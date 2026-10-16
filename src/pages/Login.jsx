@@ -22,7 +22,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axiosClient.post("/Auth/login", form);
-      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding);
+      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding, rememberMe, res.data.refreshToken);
     } catch (err) {
       if (!err.response) {
         setError("Không thể kết nối đến máy chủ Backend (Port 5008). Vui lòng thử lại sau.");
@@ -87,7 +87,7 @@ export default function Login() {
 
           <GoogleSignInButton
             onError={setError}
-            onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding)}
+            onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding, rememberMe, data.refreshToken)}
           />
 
           <div className="flex items-center gap-3 my-6">

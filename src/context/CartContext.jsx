@@ -31,6 +31,7 @@ export function CartProvider({ children }) {
       const unpaid = (bookings || []).filter(
         (b) =>
           b.status === "Pending" &&
+          b.paymentType !== "InPerson" &&
           (b.paymentStatus === "Unpaid" || b.paymentStatus === "Pending")
       );
       setCartItems(unpaid);

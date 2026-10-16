@@ -4,6 +4,8 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import Navbar from "../components/Navbar";
 import TutorResultCard from "../components/TutorResultCard";
 import { getSubjects, searchTutors } from "../api/tutorSearch";
+import { wishlistApi } from "../api/wishlist";
+import { isLoggedIn } from "../auth";
 import LocationFields from "../components/LocationFields";
 
 export default function FindTutors() {
@@ -13,6 +15,7 @@ export default function FindTutors() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savedIds, setSavedIds] = useState(() => new Set());
 
   const [filters, setFilters] = useState({
     keyword: searchParams.get("keyword") || "",
@@ -30,6 +33,12 @@ export default function FindTutors() {
     getSubjects()
       .then(setSubjects)
       .catch(() => setSubjects([]));
+    if (isLoggedIn()) {
+      wishlistApi
+        .ids()
+        .then((ids) => setSavedIds(new Set((ids || []).map(Number))))
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -235,7 +244,19 @@ export default function FindTutors() {
           ) : (
             <div className="grid sm:grid-cols-2 gap-5">
               {tutors.map((tutor) => (
-                <TutorResultCard key={tutor.id} tutor={tutor} />
+                <TutorResultCard
+                  key={tutor.id}
+                  tutor={tutor}
+                  saved={savedIds.has(Number(tutor.id))}
+                  onWishlistChange={(next) => {
+                    setSavedIds((prev) => {
+                      const copy = new Set(prev);
+                      if (next) copy.add(Number(tutor.id));
+                      else copy.delete(Number(tutor.id));
+                      return copy;
+                    });
+                  }}
+                />
               ))}
             </div>
           )}

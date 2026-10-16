@@ -46,12 +46,13 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
     hubRef.current = hub;
     hub.on("ReceiveGroupMessage", (msg) => {
       if (Number(msg.groupId) !== Number(groupId)) return;
-      setMessages((prev) => (prev.some((m) => m.messageId === msg.messageId) ? prev : [...prev, msg]));
+      setMessages((prev) => (prev.some((m) => Number(m.messageId) === Number(msg.messageId)) ? prev : [...prev, msg]));
     });
     hub.start()
       .then(() => hub.invoke("JoinGroupChat", Number(groupId)))
       .catch(() => {});
     return () => {
+      hub.off("ReceiveGroupMessage");
       hub.stop();
     };
   }, [groupId]);

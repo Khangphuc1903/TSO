@@ -15,6 +15,7 @@ export default function Messages() {
   const groupId = Number(searchParams.get("g") || 0);
   const me = getUser();
   const myId = Number(me?.userId || 0);
+  const myEmail = (me?.email || "").toLowerCase();
 
   const [convos, setConvos] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -39,7 +40,19 @@ export default function Messages() {
 
   const loadMessages = async (id) => {
     const data = await getMessages(id);
-    setMessages(data || []);
+    const list = Array.isArray(data) ? data : [];
+    const seen = new Set();
+    setMessages(list.filter((m) => {
+      const idn = Number(m.messageId);
+      if (!idn || seen.has(idn)) return false;
+      seen.add(idn);
+      return true;
+    }));
+  };
+
+  const appendMessage = (msg) => {
+    if (!msg?.messageId) return;
+    setMessages((prev) => (prev.some((m) => Number(m.messageId) === Number(msg.messageId)) ? prev : [...prev, msg]));
   };
 
   useEffect(() => {
@@ -53,16 +66,44 @@ export default function Messages() {
     const hub = createAppHub();
     hubRef.current = hub;
     hub.on("ReceiveMessage", (msg) => {
-      if (Number(msg.conversationId) === Number(new URLSearchParams(window.location.search).get("c"))) {
-        setMessages((prev) => [...prev, msg]);
-      }
+      if (msg?.groupId && !msg?.conversationId) return;
+      const cid = Number(msg?.conversationId);
+      if (!cid) return;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "groups") return;
+      const openId = Number(params.get("c") || 0);
+      if (cid === openId) appendMessage(msg);
       loadConvos();
     });
+    hub.on("ReceiveGroupMessage", (msg) => {
+      if (!msg?.groupId) return;
+      loadGroups();
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "groups") return;
+      if (!params.get("c")) {
+        setSearchParams({ tab: "groups", g: String(msg.groupId) });
+      }
+    });
     hub.start()
-      .then(() => setHubReady(true))
+      .then(async () => {
+        setHubReady(true);
+        try {
+          const data = await getMyStudyGroupChats();
+          const list = Array.isArray(data) ? data : data.items || [];
+          for (const g of list) {
+            if (g?.groupId) await hub.invoke("JoinGroupChat", Number(g.groupId));
+          }
+        } catch {
+          /* ignore */
+        }
+      })
       .catch(() => {});
     return () => {
+      hub.off("ReceiveMessage");
+      hub.off("ReceiveGroupMessage");
       hub.stop();
+      hubRef.current = null;
+      setHubReady(false);
     };
   }, []);
 
@@ -86,7 +127,7 @@ export default function Messages() {
     setSendError("");
     try {
       const msg = await sendMessage(activeId, text.trim());
-      setMessages((prev) => (prev.some((m) => m.messageId === msg.messageId) ? prev : [...prev, msg]));
+      appendMessage(msg);
       setText("");
       loadConvos();
     } catch (err) {
@@ -96,9 +137,14 @@ export default function Messages() {
 
   const active = convos.find((c) => c.conversationId === activeId);
   const activeGroup = groups.find((g) => g.groupId === groupId);
-  const filteredConvos = convos.filter((c) =>
-    (c.otherUserName || "").toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const filteredConvos = convos.filter((c) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (c.otherUserName || "").toLowerCase().includes(q) ||
+      (c.otherUserEmail || "").toLowerCase().includes(q)
+    );
+  });
   const filteredGroups = groups.filter((g) =>
     (g.title || "").toLowerCase().includes(query.trim().toLowerCase())
   );
@@ -202,6 +248,7 @@ export default function Messages() {
                               </span>
                             )}
                           </div>
+                          <p className="text-[11px] text-slate-400 truncate">{c.otherUserEmail}</p>
                           <p className="text-xs text-slate-500 truncate mt-0.5">
                             {c.lastMessage || "Chưa có tin nhắn"}
                           </p>
@@ -288,12 +335,15 @@ export default function Messages() {
                       />
                       <div>
                         <p className="font-semibold text-slate-900">{active?.otherUserName || "Chat"}</p>
-                        <p className="text-xs text-verified-600">Đã kết nối qua TSG</p>
+                        <p className="text-xs text-slate-500">
+                          {active?.otherUserEmail || "Đã kết nối qua TSG"}
+                          {myEmail ? ` · bạn: ${myEmail}` : ""}
+                        </p>
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-surface/60">
                       {messages.map((m) => {
-                        const mine = m.senderId === myId;
+                        const mine = myId > 0 && Number(m.senderId) === myId;
                         return (
                           <div key={m.messageId} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                             <div
@@ -303,6 +353,12 @@ export default function Messages() {
                                   : "bg-white text-slate-800 border border-slate-100 rounded-bl-md"
                               }`}
                             >
+                              {!mine && (
+                                <p className="text-[11px] font-medium text-brand-600 mb-0.5">
+                                  {m.senderName}
+                                  {m.senderEmail ? ` · ${m.senderEmail}` : ""}
+                                </p>
+                              )}
                               <p>{m.content}</p>
                               {m.sentAt && (
                                 <p className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-slate-400"}`}>

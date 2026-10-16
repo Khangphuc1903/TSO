@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { Star, BadgeCheck, Bookmark } from "lucide-react";
+import { Star, BadgeCheck } from "lucide-react";
 import { formatVnd } from "../utils/format";
+import WishlistButton from "./WishlistButton";
 
 const TIER_STYLES = {
   "Top 1%": "bg-brand-50 text-brand-700",
@@ -9,7 +10,7 @@ const TIER_STYLES = {
   Verified: "bg-verified-50 text-verified-600",
 };
 
-export default function TutorResultCard({ tutor }) {
+export default function TutorResultCard({ tutor, saved = false, onWishlistChange }) {
   const {
     name,
     university,
@@ -80,13 +81,7 @@ export default function TutorResultCard({ tutor }) {
           <span className="text-xs text-slate-400"> /giờ</span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Save tutor"
-            className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-brand-600 hover:border-brand-200 transition-colors"
-          >
-            <Bookmark size={16} />
-          </button>
+          <WishlistButton tutorId={tutor.id} saved={saved} onChange={onWishlistChange} />
           <Link
             to={`/tutors/${tutor.id}`}
             state={{ tutor }}

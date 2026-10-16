@@ -45,14 +45,16 @@ export default function GoogleSignInButton({ onError, onSuccess, label = "Sign I
         await loadGis();
         if (cancelled || !boxRef.current || !window.google?.accounts?.id) return;
         boxRef.current.innerHTML = "";
+        window.google.accounts.id.disableAutoSelect();
         window.google.accounts.id.initialize({
           client_id: res.data.clientId,
+          auto_select: false,
           callback: async (response) => {
             try {
               const result = await axiosClient.post("/Auth/google", {
                 idToken: response.credential,
               });
-              saveSession(result.data.token);
+              saveSession(result.data.token, false, result.data.refreshToken);
               onSuccess?.(result.data);
             } catch (err) {
               onError?.(err.response?.data?.message || "Google login thất bại.");

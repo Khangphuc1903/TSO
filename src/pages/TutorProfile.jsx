@@ -19,9 +19,12 @@ import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
 import { getSubjects, getTutorDetail } from "../api/tutorSearch";
-import { createTutorReview, getEligibleReviewBookings, getTutorReviews } from "../api/reviews";
+import { createTutorReview, getEligibleReviewBookings, getTutorReviews, replyToReview } from "../api/reviews";
 import { createBooking } from "../api/bookings";
 import { openConversation } from "../api/study";
+import { createReport } from "../api/admin";
+import { wishlistApi } from "../api/wishlist";
+import WishlistButton from "../components/WishlistButton";
 import { useCart } from "../context/CartContext";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref, formatVnd, slotHours } from "../utils/format";
@@ -103,7 +106,7 @@ export default function TutorProfile() {
   const isStudent = (user?.role || "").toLowerCase() === "student";
   const isParent = (user?.role || "").toLowerCase() === "parent";
   const isOwnProfile = Number(user?.userId) === Number(tutorId);
-  const canBook = (isStudent || isParent) && !isOwnProfile;
+  const canBook = (isStudent || isParent || (user?.role || "").toLowerCase() === "tutor") && !isOwnProfile;
 
   const [tutor, setTutor] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -112,9 +115,16 @@ export default function TutorProfile() {
 
   const [formError, setFormError] = useState("");
   const [formOk, setFormOk] = useState("");
+  const [savedWishlist, setSavedWishlist] = useState(false);
+  const [flagOpen, setFlagOpen] = useState(false);
+  const [flagReason, setFlagReason] = useState("Harassment");
+  const [flagNote, setFlagNote] = useState("");
+  const [flagMsg, setFlagMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ bookingId: "", rating: 5, comment: "" });
   const [eligibleBookings, setEligibleBookings] = useState([]);
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [replyBusy, setReplyBusy] = useState(null);
 
   const { refreshCart } = useCart();
   const [bookingError, setBookingError] = useState("");
@@ -127,6 +137,7 @@ export default function TutorProfile() {
   const [bookingPrice, setBookingPrice] = useState("");
   const [addedToCartModal, setAddedToCartModal] = useState(false);
   const [lastAddedBooking, setLastAddedBooking] = useState(null);
+  const [paymentType, setPaymentType] = useState("Online");
 
   const loadAll = async () => {
     const [detail, reviews, sysSubjects] = await Promise.all([
@@ -138,7 +149,8 @@ export default function TutorProfile() {
     setSummary(reviews);
     setAllSubjects(sysSubjects || []);
 
-    if (isLoggedIn() && (getUser()?.role || "").toLowerCase() === "student") {
+    const role = (getUser()?.role || "").toLowerCase();
+    if (isLoggedIn() && (role === "student" || role === "tutor") && !isOwnProfile) {
       try {
         const eligible = await getEligibleReviewBookings(tutorId);
         setEligibleBookings(Array.isArray(eligible) ? eligible : []);
@@ -174,6 +186,16 @@ export default function TutorProfile() {
       }
     };
     load();
+    if (isLoggedIn() && !isOwnProfile) {
+      wishlistApi
+        .ids()
+        .then((ids) => {
+          if (!cancelled) setSavedWishlist((ids || []).map(Number).includes(Number(tutorId)));
+        })
+        .catch(() => {});
+    } else {
+      setSavedWishlist(false);
+    }
     return () => {
       cancelled = true;
     };
@@ -182,8 +204,8 @@ export default function TutorProfile() {
   useEffect(() => {
     if (!selectedSlot || !tutor) return;
     const hours = slotHours(selectedSlot);
-    const minRate = Number(tutor.hourlyRateMin ?? tutor.hourlyRateMax ?? 0);
-    setBookingPrice(String(Math.round(hours * minRate)));
+    const rate = Number(tutor.hourlyRate ?? tutor.hourlyRateMin ?? tutor.hourlyRateMax ?? 0);
+    setBookingPrice(String(Math.round(hours * rate)));
   }, [selectedSlot, tutor]);
 
   const handleReview = async (e) => {
@@ -264,6 +286,7 @@ export default function TutorProfile() {
         slotId: selectedSlot.slotId,
         subjectId: Number(bookingSubjectId),
         price: bookingPrice === "" ? undefined : Number(bookingPrice),
+        paymentType,
       };
       if (selectedSlot.isRecurring && !selectedSlot.specificDate) {
         if (!scheduledDate) {
@@ -283,7 +306,10 @@ export default function TutorProfile() {
       const res = await createBooking(payload);
       await refreshCart();
 
-      if (isDirectCheckout) {
+      if (paymentType === "InPerson") {
+        setBookingOk("Đặt lịch thành công. Thanh toán trực tiếp cho gia sư sau buổi học. Chờ gia sư xác nhận lịch.");
+        setTimeout(() => navigate("/bookings"), 800);
+      } else if (isDirectCheckout) {
         setBookingOk(`${res.message || "Đặt lịch thành công!"} Đang chuyển đến trang thanh toán...`);
         setForm((p) => ({ ...p, bookingId: String(res.booking?.bookingId || p.bookingId) }));
         if (res.booking?.bookingId) {
@@ -331,14 +357,9 @@ export default function TutorProfile() {
   const certificates = Array.isArray(tutor?.certificates) ? tutor.certificates : [];
   const locationText = [tutor?.address, tutor?.district, tutor?.city].filter(Boolean).join(", ");
   const hours = selectedSlot ? slotHours(selectedSlot) : 0;
-  const minRate = Number(tutor?.hourlyRateMin ?? tutor?.hourlyRateMax ?? 0);
-  const maxRate = Number(tutor?.hourlyRateMax ?? tutor?.hourlyRateMin ?? minRate);
-  const sessionMin = Math.round(hours * minRate);
-  const sessionMax = Math.round(hours * Math.max(maxRate, minRate));
-  const priceText =
-    tutor?.hourlyRateMin && tutor?.hourlyRateMax && tutor.hourlyRateMin !== tutor.hourlyRateMax
-      ? `${formatVnd(tutor.hourlyRateMin)} – ${formatVnd(tutor.hourlyRateMax)}`
-      : formatVnd(tutor?.hourlyRateMin ?? tutor?.hourlyRateMax ?? tutor?.price ?? 0);
+  const hourlyRate = Number(tutor?.hourlyRate ?? tutor?.hourlyRateMin ?? tutor?.hourlyRateMax ?? tutor?.price ?? 0);
+  const sessionPrice = Math.round(hours * hourlyRate);
+  const priceText = formatVnd(hourlyRate);
 
   return (
     <div className="min-h-screen bg-surface">
@@ -384,6 +405,8 @@ export default function TutorProfile() {
                     <span className="text-sm font-semibold text-slate-800">{average.toFixed(2)}</span>
                     <span className="text-sm text-slate-400">{total} đánh giá</span>
                     {!isOwnProfile && (
+                      <div className="ml-auto flex items-center gap-3">
+                      <WishlistButton tutorId={Number(tutorId)} saved={savedWishlist} onChange={setSavedWishlist} />
                       <button
                         type="button"
                         onClick={async () => {
@@ -391,12 +414,53 @@ export default function TutorProfile() {
                           const id = await openConversation(Number(tutorId));
                           navigate(`/messages?c=${id}`);
                         }}
-                        className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
                       >
                         <MessageCircle size={16} /> Nhắn tin
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isLoggedIn()) return navigate("/login");
+                          setFlagOpen((v) => !v);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:underline"
+                      >
+                        Báo cáo
+                      </button>
+                      </div>
                     )}
                   </div>
+                  {flagOpen && !isOwnProfile && (
+                    <form
+                      className="mt-3 flex flex-col sm:flex-row gap-2"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        try {
+                          const res = await createReport({
+                            entityType: "Tutor",
+                            entityId: Number(tutorId),
+                            reason: flagReason,
+                            description: flagNote,
+                          });
+                          setFlagMsg(res.message);
+                          setFlagOpen(false);
+                        } catch (err) {
+                          setFlagMsg(err.response?.data?.message || "Không gửi được báo cáo.");
+                        }
+                      }}
+                    >
+                      <select className="h-9 border rounded-lg px-2 text-sm" value={flagReason} onChange={(e) => setFlagReason(e.target.value)}>
+                        <option value="Harassment">Quấy rối</option>
+                        <option value="Fraud">Gian lận</option>
+                        <option value="Safety">An toàn</option>
+                        <option value="Other">Khác</option>
+                      </select>
+                      <input className="flex-1 h-9 border rounded-lg px-2 text-sm" placeholder="Mô tả" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} />
+                      <button className="h-9 px-3 rounded-lg bg-red-600 text-white text-xs">Gửi</button>
+                    </form>
+                  )}
+                  {flagMsg && <p className="text-xs text-slate-500 mt-2">{flagMsg}</p>}
                   <div className="flex flex-wrap gap-2 mt-4">
                     {(tutor.tags || []).map((tag) => (
                       <span key={tag} className="text-xs bg-brand-50 text-brand-700 px-2 py-1 rounded-md">
@@ -481,6 +545,47 @@ export default function TutorProfile() {
                             <StarRating value={item.rating} readOnly size={16} />
                           </div>
                           {item.comment && <p className="text-sm text-slate-600 mt-2">{item.comment}</p>}
+                          {item.tutorReply && (
+                            <p className="text-sm text-slate-500 mt-2 bg-slate-50 rounded-lg px-3 py-2">
+                              <span className="font-medium text-slate-700">Gia sư trả lời: </span>
+                              {item.tutorReply}
+                            </p>
+                          )}
+                          {isOwnProfile && (
+                            <form
+                              className="mt-2 flex gap-2"
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                const reply = (replyDrafts[item.reviewId] || "").trim();
+                                if (!reply) return;
+                                setReplyBusy(item.reviewId);
+                                try {
+                                  const data = await replyToReview(item.reviewId, reply);
+                                  setSummary(data);
+                                  setReplyDrafts((prev) => ({ ...prev, [item.reviewId]: "" }));
+                                } catch (err) {
+                                  setFormError(err.response?.data?.message || "Không gửi được phản hồi.");
+                                } finally {
+                                  setReplyBusy(null);
+                                }
+                              }}
+                            >
+                              <input
+                                className="flex-1 h-9 border rounded-lg px-2 text-sm"
+                                placeholder="Trả lời đánh giá..."
+                                value={replyDrafts[item.reviewId] || ""}
+                                onChange={(e) =>
+                                  setReplyDrafts((prev) => ({ ...prev, [item.reviewId]: e.target.value }))
+                                }
+                              />
+                              <button
+                                disabled={replyBusy === item.reviewId}
+                                className="h-9 px-3 rounded-lg bg-slate-900 text-white text-xs disabled:opacity-50"
+                              >
+                                Gửi
+                              </button>
+                            </form>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -610,50 +715,73 @@ export default function TutorProfile() {
                       </p>
 
                       {selectedSlot && (
-                        <label className="block text-sm text-slate-600">
-                          Học phí buổi này
-                          <input
-                            type="number"
-                            min={sessionMin}
-                            max={sessionMax}
-                            step="1000"
-                            value={bookingPrice}
-                            onChange={(e) => setBookingPrice(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-                          />
+                        <div className="text-sm text-slate-600">
+                          <p className="font-medium text-slate-700">Học phí buổi này</p>
+                          <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 font-semibold">
+                            {formatVnd(sessionPrice)}
+                          </p>
                           <span className="text-xs text-slate-400 mt-1 block">
-                            {formatVnd(minRate)}/giờ · khung {formatVnd(sessionMin)}
-                            {sessionMax !== sessionMin ? ` – ${formatVnd(sessionMax)}` : ""}
+                            {formatVnd(hourlyRate)}/giờ × {hours} giờ
                           </span>
-                        </label>
+                        </div>
                       )}
 
-                      <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => handleBook(e, true)}
-                          disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
-                          className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm flex items-center justify-center gap-1.5"
-                        >
-                          {bookingLoading ? (
-                            "Đang xử lý..."
-                          ) : (
-                            <>
-                              <Wallet size={16} />
-                              Thanh toán ngay
-                            </>
-                          )}
-                        </button>
+                      <div className="space-y-2 pt-1">
+                        <p className="text-sm font-medium text-slate-700">Hình thức thanh toán</p>
+                        <label className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm cursor-pointer">
+                          <input type="radio" name="paymentType" className="mt-0.5" checked={paymentType === "Online"} onChange={() => setPaymentType("Online")} />
+                          <span>
+                            <span className="font-semibold text-slate-900">Thanh toán online ngay</span>
+                            <span className="block text-xs text-slate-500">Giữ chỗ qua PayOS trước buổi học.</span>
+                          </span>
+                        </label>
+                        <label className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm cursor-pointer">
+                          <input type="radio" name="paymentType" className="mt-0.5" checked={paymentType === "InPerson"} onChange={() => setPaymentType("InPerson")} />
+                          <span>
+                            <span className="font-semibold text-slate-900">Trả trực tiếp cho gia sư sau buổi học</span>
+                            <span className="block text-xs text-slate-500">Không qua PayOS. Thanh toán mặt sau khi học xong.</span>
+                          </span>
+                        </label>
+                      </div>
 
-                        <button
-                          type="button"
-                          onClick={(e) => handleBook(e, false)}
-                          disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
-                          className="flex-1 border border-brand-200 text-brand-700 bg-brand-50/60 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl py-3 px-3 transition flex items-center justify-center gap-1.5"
-                        >
-                          <ShoppingCart size={16} />
-                          Thêm vào giỏ
-                        </button>
+                      <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                        {paymentType === "Online" ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => handleBook(e, true)}
+                              disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
+                              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm flex items-center justify-center gap-1.5"
+                            >
+                              {bookingLoading ? (
+                                "Đang xử lý..."
+                              ) : (
+                                <>
+                                  <Wallet size={16} />
+                                  Thanh toán ngay
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleBook(e, false)}
+                              disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
+                              className="flex-1 border border-brand-200 text-brand-700 bg-brand-50/60 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl py-3 px-3 transition flex items-center justify-center gap-1.5"
+                            >
+                              <ShoppingCart size={16} />
+                              Thêm vào giỏ
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => handleBook(e, true)}
+                            disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
+                            className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm"
+                          >
+                            {bookingLoading ? "Đang xử lý..." : "Đặt lịch, trả sau buổi học"}
+                          </button>
+                        )}
                       </div>
                     </form>
                   )}
@@ -662,18 +790,18 @@ export default function TutorProfile() {
                 <div className="bg-white rounded-2xl border border-slate-100 p-6">
                   <h2 className="font-semibold text-slate-900 mb-1">Viết đánh giá</h2>
                   <p className="text-xs text-slate-500 mb-4">
-                    Chỉ buổi gia sư đã xác nhận hoặc hoàn thành mới được đánh giá.
+                    Chỉ buổi cả học viên và gia sư đã xác nhận học xong mới đánh giá được.
                   </p>
 
                   {!isLoggedIn() ? (
                     <Link to="/login" className="block text-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium">
                       Đăng nhập để đánh giá
                     </Link>
-                  ) : !isStudent ? (
-                    <p className="text-sm text-slate-500">Chỉ học viên mới gửi được đánh giá.</p>
+                  ) : isOwnProfile ? (
+                    <p className="text-sm text-slate-500">Không tự đánh giá hồ sơ của mình.</p>
                   ) : eligibleBookings.length === 0 ? (
                     <p className="text-sm text-slate-500">
-                      Bạn chưa có buổi học đã xác nhận với gia sư này, hoặc đã đánh giá hết các buổi.
+                      Chưa có buổi nào cả hai bên xác nhận đã học xong, hoặc bạn đã đánh giá hết.
                     </p>
                   ) : (
                     <form onSubmit={handleReview} className="space-y-3">

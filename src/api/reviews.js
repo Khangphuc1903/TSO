@@ -14,3 +14,8 @@ export async function getEligibleReviewBookings(tutorId) {
   const res = await axiosClient.get(`/reviews/tutor/${tutorId}/eligible`);
   return res.data;
 }
+
+export async function replyToReview(reviewId, reply) {
+  const res = await axiosClient.post(`/reviews/${reviewId}/reply`, { reply });
+  return res.data;
+}

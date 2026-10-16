@@ -25,7 +25,7 @@ import {
 import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
-import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, respondJoinRequest } from "../api/studyGroups";
+import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, removeStudyGroupMember, respondJoinRequest } from "../api/studyGroups";
 import { getDefaultTutors } from "../api/tutorSearch";
 import { openConversation } from "../api/study";
 
@@ -461,9 +461,10 @@ export default function StudyGroupDetail() {
               {(group.members || []).map((m) => {
                 const isCreator = m.userId === group.createdByUserId;
                 const isSelf = Number(m.userId) === Number(user?.userId);
+                const canRemove = isOwner && !isCreator;
 
                 return (
-                  <li key={m.userId}>
+                  <li key={m.userId} className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={async () => {
@@ -472,7 +473,7 @@ export default function StudyGroupDetail() {
                         const id = await openConversation(m.userId);
                         navigate(`/messages?c=${id}`);
                       }}
-                      className="w-full flex items-center gap-3 rounded-2xl hover:bg-slate-50 p-2.5 text-left transition group cursor-pointer"
+                      className="flex-1 min-w-0 flex items-center gap-3 rounded-2xl hover:bg-slate-50 p-2.5 text-left transition group cursor-pointer"
                     >
                       <img
                         src={m.avatarUrl || avatarUrl(m.fullName)}
@@ -494,6 +495,24 @@ export default function StudyGroupDetail() {
                         </p>
                       </div>
                     </button>
+                    {canRemove && (
+                      <button
+                        type="button"
+                        className="text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-lg px-2 py-1 shrink-0"
+                        onClick={async () => {
+                          try {
+                            const res = await removeStudyGroupMember(groupId, m.userId);
+                            setInfo(res.message);
+                            setError("");
+                            load();
+                          } catch (err) {
+                            setError(err.response?.data?.message || "Không xóa được thành viên.");
+                          }
+                        }}
+                      >
+                        Xóa
+                      </button>
+                    )}
                   </li>
                 );
               })}

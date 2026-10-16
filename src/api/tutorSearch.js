@@ -2,7 +2,7 @@ import axiosClient from "./axiosClient";
 import { avatarUrl } from "../auth";
 
 export function mapTutor(item) {
-  const price = item.hourlyRateMin ?? item.hourlyRateMax ?? 0;
+  const price = item.hourlyRate ?? item.hourlyRateMin ?? item.hourlyRateMax ?? 0;
   const tags = Array.isArray(item.subjects) ? item.subjects : [];
   const verified = (item.verificationStatus || "").toLowerCase().includes("verif");
 
@@ -23,8 +23,9 @@ export function mapTutor(item) {
     district: item.district || "",
     teachingMode: item.teachingMode || "",
     yearsOfExperience: item.yearsOfExperience ?? 0,
-    hourlyRateMin: item.hourlyRateMin,
-    hourlyRateMax: item.hourlyRateMax,
+    hourlyRate: price,
+    hourlyRateMin: price,
+    hourlyRateMax: price,
     phoneNumber: item.phoneNumber || "",
     address: item.address || "",
     verificationStatus: item.verificationStatus || "",

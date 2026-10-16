@@ -20,7 +20,7 @@ export default function BookingLessonCard({
   };
 
   if (booking.status === "Pending") {
-    if (booking.paymentStatus === "Success") {
+    if (booking.paymentType === "InPerson" || booking.paymentStatus === "Success") {
       status = { label: "Chờ gia sư duyệt", className: "bg-amber-50 text-amber-700 border border-amber-200" };
     } else {
       status = { label: "Chờ thanh toán", className: "bg-orange-50 text-orange-600 border border-orange-200" };
@@ -41,12 +41,17 @@ export default function BookingLessonCard({
           <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${status.className}`}>
             {status.label}
           </span>
+          {booking.paymentType === "InPerson" && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+              Trả trực tiếp sau buổi học
+            </span>
+          )}
           {booking.paymentStatus === "Success" && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
               Đã thanh toán (Tạm giữ)
             </span>
           )}
-          {(booking.paymentStatus === "Unpaid" || booking.paymentStatus === "Pending") && booking.status !== "Cancelled" && booking.status !== "Rejected" && (
+          {(booking.paymentStatus === "Unpaid" || booking.paymentStatus === "Pending") && booking.paymentType !== "InPerson" && booking.status !== "Cancelled" && booking.status !== "Rejected" && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
               Chưa thanh toán
             </span>
