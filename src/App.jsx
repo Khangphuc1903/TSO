@@ -1,35 +1,42 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import VerifyEmail from "./pages/VerifyEmail";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Profile from "./pages/Profile";
-import Notifications from "./pages/Notifications";
-import Messages from "./pages/Messages";
-import FindTutors from "./pages/FindTutors";
-import TutorProfile from "./pages/TutorProfile";
-import TutorDesk from "./pages/TutorDesk";
-import Reviews from "./pages/Reviews";
-import StudyGroups from "./pages/StudyGroups";
-import CreateStudyGroup from "./pages/CreateStudyGroup";
-import StudyGroupDetail from "./pages/StudyGroupDetail";
-import MyBookings from "./pages/MyBookings";
-import Onboarding from "./pages/Onboarding";
-import TutorTests from "./pages/TutorTests";
-import TutorIdentity from "./pages/TutorIdentity";
-import AdminDashboard from "./pages/AdminDashboard";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import Faq from "./pages/Faq";
-import Checkout from "./pages/Checkout";
-import PaymentResult from "./pages/PaymentResult";
-import Cart from "./pages/Cart";
-import Wishlist from "./pages/Wishlist";
-import PaymentHistory from "./pages/PaymentHistory";
+import { Spinner } from "./components/ui/Spinner";
 import { CartProvider } from "./context/CartContext";
+import { ToastProvider } from "./components/ui/Toast";
 import { getUser, isLoggedIn } from "./auth";
+import { CartProvider } from "./context/CartContext";
+import { ToastProvider } from "./components/ui/Toast";
+import { getUser, isLoggedIn } from "./auth";
+
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Messages = lazy(() => import("./pages/Messages"));
+const FindTutors = lazy(() => import("./pages/FindTutors"));
+const TutorProfile = lazy(() => import("./pages/TutorProfile"));
+const TutorDesk = lazy(() => import("./pages/TutorDesk"));
+const TutorTests = lazy(() => import("./pages/TutorTests"));
+const TutorIdentity = lazy(() => import("./pages/TutorIdentity"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const About = lazy(() => import("./pages/About"));
+const Contact = lazy(() => import("./pages/Contact"));
+const Faq = lazy(() => import("./pages/Faq"));
+const Reviews = lazy(() => import("./pages/Reviews"));
+const StudyGroups = lazy(() => import("./pages/StudyGroups"));
+const CreateStudyGroup = lazy(() => import("./pages/CreateStudyGroup"));
+const StudyGroupDetail = lazy(() => import("./pages/StudyGroupDetail"));
+const MyBookings = lazy(() => import("./pages/MyBookings"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const PaymentResult = lazy(() => import("./pages/PaymentResult"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Wishlist = lazy(() => import("./pages/Wishlist"));
+const PaymentHistory = lazy(() => import("./pages/PaymentHistory"));
 
 function OnboardingGate({ children }) {
   const loc = useLocation();
@@ -49,8 +56,16 @@ function App() {
   return (
     <BrowserRouter>
       <CartProvider>
-        <OnboardingGate>
-          <Routes>
+        <ToastProvider>
+          <OnboardingGate>
+            <Suspense
+              fallback={
+                <div className="flex min-h-[70vh] items-center justify-center bg-surface">
+                  <Spinner size="lg" className="text-brand-500" />
+                </div>
+              }
+            >
+              <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -81,8 +96,20 @@ function App() {
             <Route path="/payments" element={<PaymentHistory />} />
             <Route path="/checkout/:bookingId" element={<Checkout />} />
             <Route path="/payment/result" element={<PaymentResult />} />
-          </Routes>
-        </OnboardingGate>
+
+            <Route path="/tutor-tests" element={<TutorTests />} />
+            <Route path="/tutor-identity" element={<TutorIdentity />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/faq" element={<Faq />} />
+            <Route path="/help" element={<Faq />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/payments" element={<PaymentHistory />} />
+              </Routes>
+            </Suspense>
+          </OnboardingGate>
+        </ToastProvider>
       </CartProvider>
     </BrowserRouter>
   );

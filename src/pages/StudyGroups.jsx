@@ -20,6 +20,7 @@ import {
   Clock
 } from "lucide-react";
 import Navbar from "../components/Navbar";
+import { Skeleton } from "../components/ui/Skeleton";
 import { searchStudyGroups } from "../api/studyGroups";
 import { getSubjects } from "../api/tutorSearch";
 import LocationFields from "../components/LocationFields";
@@ -266,10 +267,26 @@ export default function StudyGroups() {
 
         {/* LOADING STATE */}
         {loading ? (
-          <div className="bg-white/80 backdrop-blur rounded-3xl border border-slate-200/80 p-16 text-center shadow-sm">
-            <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm font-bold text-slate-700">Đang tìm nhóm học phù hợp...</p>
-            <p className="text-xs text-slate-400 mt-1">Khám phá cộng đồng học tập trên TSG</p>
+          <div
+            className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
+            aria-busy="true"
+            aria-label="Đang tìm nhóm học"
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="card p-5 space-y-3">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-16 rounded-md" />
+                  <Skeleton className="h-5 w-20 rounded-md" />
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : groups.length === 0 ? (
           /* EMPTY STATE */

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { GraduationCap, Eye, EyeOff, ShieldCheck, Sparkles, BadgeCheck, Users } from "lucide-react";
 import axiosClient from "../api/axiosClient";
 import { redirectAfterAuth } from "../auth";
 import GoogleSignInButton from "../components/GoogleSignInButton";
+import Button from "../components/ui/Button";
+import Field, { Input } from "../components/ui/Field";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -35,54 +37,66 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden grid md:grid-cols-2">
+    <div className="min-h-screen bg-surface flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-pop grid md:grid-cols-2 animate-scale-in">
         {/* Left panel — brand / value proposition */}
-        <div className="relative hidden md:flex flex-col justify-between p-10 text-white overflow-hidden bg-brand-700">
+        <div className="relative hidden md:flex flex-col justify-between p-10 text-white overflow-hidden bg-gradient-to-br from-brand-800 via-brand-700 to-brand-600">
           {/* Decorative background: swap this div for a real campus photo (background-image) later */}
           <div
-            className="absolute inset-0 opacity-40"
+            className="absolute inset-0 opacity-30"
             style={{
               backgroundImage:
-                "linear-gradient(160deg, rgba(15,30,77,0.9), rgba(29,63,174,0.6)), repeating-linear-gradient(100deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 40px)",
+                "repeating-linear-gradient(100deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 40px)",
             }}
           />
 
-          <div className="relative z-10 flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
-              <GraduationCap size={20} />
+          <div className="relative z-10 flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+              <GraduationCap size={22} />
             </span>
-            <span className="text-lg font-semibold">EduConnect</span>
+            <span className="text-xl font-extrabold tracking-tight">TSG</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">
+              Tutor
+            </span>
           </div>
 
           <div className="relative z-10">
-            <h1 className="text-4xl font-bold leading-tight mb-4">
-              Join the community of elite educators and students.
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur">
+              <Sparkles size={13} className="text-amber-300" />
+              Gia sư xác thực CCCD · Thanh toán ký quỹ
+            </span>
+            <h1 className="mt-5 text-4xl font-extrabold leading-tight mb-4">
+              Học cùng người thầy phù hợp với bạn.
             </h1>
-            <p className="text-white/80 leading-relaxed mb-8 max-w-sm">
-              Access world-class curriculum, connect with verified experts,
-              and elevate your learning journey in a secure, structured
-              environment.
+            <p className="text-white/75 leading-relaxed mb-8 max-w-sm">
+              Hàng nghìn gia sư đã qua kiểm duyệt, lộ trình minh bạch và an
+              toàn — tiền được giữ ký quỹ đến khi buổi học hoàn tất.
             </p>
 
-            <div className="border-t border-white/20 pt-6 flex gap-10">
-              <div>
-                <div className="text-2xl font-bold">50k+</div>
-                <div className="text-xs text-white/70">Active Students</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold">2,500+</div>
-                <div className="text-xs text-white/70">Verified Educators</div>
-              </div>
-            </div>
+            <ul className="space-y-3 border-t border-white/15 pt-6 text-sm text-white/85">
+              <li className="flex items-center gap-2.5">
+                <BadgeCheck size={17} className="shrink-0 text-emerald-300" />
+                100% gia sư xác thực CCCD &amp; đạt bài test năng lực
+              </li>
+              <li className="flex items-center gap-2.5">
+                <ShieldCheck size={17} className="shrink-0 text-emerald-300" />
+                Hoàn tiền nếu buổi học không đúng như mô tả
+              </li>
+              <li className="flex items-center gap-2.5">
+                <Users size={17} className="shrink-0 text-emerald-300" />
+                Hơn 50.000+ buổi học diễn ra mỗi tuần
+              </li>
+            </ul>
           </div>
         </div>
 
         {/* Right panel — sign in form */}
         <div className="p-8 sm:p-12 flex flex-col justify-center">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Sign In</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 mb-2">
+            Đăng nhập
+          </h2>
           <p className="text-slate-500 mb-6">
-            Welcome back! Please enter your details.
+            Chào mừng bạn trở lại! Vui lòng nhập thông tin bên dưới.
           </p>
 
           <GoogleSignInButton
@@ -92,100 +106,95 @@ export default function Login() {
 
           <div className="flex items-center gap-3 my-6">
             <div className="h-px bg-slate-200 flex-1" />
-            <span className="text-xs text-slate-400">
-              or continue with email
+            <span className="text-xs font-medium text-slate-400">
+              hoặc tiếp tục với email
             </span>
             <div className="h-px bg-slate-200 flex-1" />
           </div>
 
           {error && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+            <div
+              role="alert"
+              className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 animate-fade-in"
+            >
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm text-slate-600 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
+            <Field label="Email" required>
+              {({ id, invalid }) => (
+                <Input
+                  id={id}
+                  invalid={invalid}
                   type="email"
                   name="email"
                   required
+                  autoComplete="email"
                   value={form.email}
                   onChange={handleChange}
-                  placeholder="name@university.edu"
-                  className="w-full rounded-lg border border-slate-200 pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                  placeholder="ten@truong.edu.vn"
                 />
-              </div>
-            </div>
+              )}
+            </Field>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm text-slate-600">
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-brand-600 hover:underline"
-                >
-                  Forgot Password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Lock
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
+            <Field label="Mật khẩu" required>
+              {({ id, invalid }) => (
+                <div className="relative">
+                  <Input
+                    id={id}
+                    invalid={invalid}
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    required
+                    autoComplete="current-password"
+                    value={form.password}
+                    onChange={handleChange}
+                    placeholder="••••••••"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg text-slate-400 transition hover:text-slate-600 focus-ring"
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              )}
+            </Field>
+
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex select-none items-center gap-2 text-sm text-slate-600">
                 <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  required
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-slate-200 pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
+                Ghi nhớ đăng nhập
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-sm font-medium text-brand-600 transition hover:text-brand-700 hover:underline"
+              >
+                Quên mật khẩu?
+              </Link>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
-              />
-              Remember me for 30 days
-            </label>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-medium rounded-lg py-2.5 transition-colors"
-            >
-              {loading ? "Signing In..." : "Sign In Securely"}
-              {!loading && <ArrowRight size={18} />}
-            </button>
+            <Button type="submit" size="lg" loading={loading} className="w-full">
+              {loading ? "Đang đăng nhập..." : "Đăng nhập an toàn"}
+            </Button>
           </form>
 
-          <p className="text-center text-sm text-slate-500 mt-6">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-brand-600 font-medium hover:underline">
-              Create an account
+          <p className="mt-6 text-center text-sm text-slate-500">
+            Chưa có tài khoản?{" "}
+            <Link
+              to="/register"
+              className="font-semibold text-brand-600 transition hover:text-brand-700 hover:underline"
+            >
+              Đăng ký miễn phí
             </Link>
           </p>
         </div>

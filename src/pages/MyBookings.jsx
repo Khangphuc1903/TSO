@@ -5,7 +5,15 @@ import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
 import CancelRefundModal from "../components/CancelRefundModal";
 import { getUser, isLoggedIn } from "../auth";
-import { completeBooking, confirmBooking, getMyBookings, openConversation, rejectBooking } from "../api/study";
+import {
+  completeBooking,
+  confirmBooking,
+  getMyBookings,
+  openConversation,
+  rejectBooking,
+} from "../api/study";
+import EmptyState from "../components/ui/EmptyState";
+import { Spinner } from "../components/ui/Spinner";
 
 const FILTERS = [
   { id: "all", label: "Tất cả" },
@@ -24,8 +32,12 @@ export default function MyBookings() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [cancelBookingId, setCancelBookingId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const load = () => getMyBookings().then(setItems);
+  const load = () =>
+    getMyBookings()
+      .then(setItems)
+      .finally(() => setLoading(false));
 
   useEffect(() => {
     if (!isLoggedIn()) navigate("/login");
@@ -97,17 +109,22 @@ export default function MyBookings() {
           </div>
         )}
 
-        {visible.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
-            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 mb-3">
-              <CalendarClock size={26} />
-            </span>
-            <p className="font-medium text-slate-900">Chưa có buổi học</p>
-            <p className="text-sm text-slate-500 mt-1">
-              {isTutor
-                ? "Khi học viên đặt lịch, đơn sẽ hiện tại đây để bạn xác nhận hoặc từ chối."
-                : "Khi bạn đặt lịch, buổi học sẽ hiện tại đây."}
-            </p>
+        {loading ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-slate-400">
+            <Spinner size="lg" className="text-brand-500" />
+            <p className="text-sm">Đang tải lịch học...</p>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-100">
+            <EmptyState
+              icon={<CalendarClock size={26} />}
+              title="Chưa có buổi học"
+              description={
+                isTutor
+                  ? "Khi học viên đặt lịch, đơn sẽ hiện tại đây để bạn xác nhận hoặc từ chối."
+                  : "Khi bạn đặt lịch, buổi học sẽ hiện tại đây."
+              }
+            />
           </div>
         ) : (
           <div className="grid gap-4">

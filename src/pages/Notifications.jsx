@@ -4,11 +4,17 @@ import { Bell, Sparkles } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { isLoggedIn } from "../auth";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../api/study";
+import { useToast } from "../components/ui/ToastContext";
+import Button from "../components/ui/Button";
+import EmptyState from "../components/ui/EmptyState";
+import { Spinner } from "../components/ui/Spinner";
 
 export default function Notifications() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { success } = useToast();
 
   const load = async () => {
     try {
@@ -16,6 +22,8 @@ export default function Notifications() {
       setItems(data.items || []);
     } catch {
       setError("Đăng nhập để xem thông báo.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -42,22 +50,30 @@ export default function Notifications() {
             </span>
             <h1 className="text-3xl font-bold text-slate-900">Thông báo</h1>
           </div>
-          {items.length > 0 && (
-            <button
-              type="button"
+          {items.length > 0 && !loading && (
+            <Button
+              variant="outline"
+              size="sm"
               onClick={async () => {
                 await markAllNotificationsRead();
-                load();
+                await load();
+                success("Đã đánh dấu tất cả thông báo là đã đọc.");
               }}
-              className="text-sm font-medium text-brand-600 hover:underline"
             >
               Đánh dấu đã đọc
-            </button>
+            </Button>
           )}
         </div>
       </section>
 
       <main className="max-w-3xl mx-auto px-6 pb-16">
+        {loading && (
+          <div className="flex flex-col items-center gap-3 py-16 text-slate-400">
+            <Spinner size="lg" className="text-brand-500" />
+            <p className="text-sm">Đang tải thông báo...</p>
+          </div>
+        )}
+
         {error && (
           <div className="text-sm text-slate-500 bg-white border border-slate-100 rounded-2xl p-10 text-center">
             {error}{" "}
@@ -69,13 +85,13 @@ export default function Notifications() {
           </div>
         )}
 
-        {!error && items.length === 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
-            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 mb-3">
-              <Bell size={26} />
-            </span>
-            <p className="font-medium text-slate-900">Bạn chưa có thông báo mới</p>
-            <p className="text-sm text-slate-500 mt-1">Khi gia sư xác nhận lịch, bạn sẽ thấy tại đây.</p>
+        {!error && !loading && items.length === 0 && (
+          <div className="bg-white rounded-3xl border border-slate-100">
+            <EmptyState
+              icon={<Bell size={26} />}
+              title="Bạn chưa có thông báo mới"
+              description="Khi gia sư xác nhận lịch học, thông báo sẽ xuất hiện tại đây."
+            />
           </div>
         )}
 

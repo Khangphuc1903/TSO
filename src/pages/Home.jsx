@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import Button from "../components/ui/Button";
+import { SkeletonTutorCard } from "../components/ui/Skeleton";
 import { getDefaultTutors } from "../api/tutorSearch";
 import { getPublicHome } from "../api/admin";
 import { formatVnd } from "../utils/format";
@@ -298,14 +300,24 @@ export default function Home() {
         </div>
 
         {loadingTutors ? (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-16 text-center shadow-sm">
-            <div className="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-600">Đang tải danh sách gia sư...</p>
+          <div
+            className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
+            aria-busy="true"
+            aria-label="Đang tải danh sách gia sư"
+          >
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonTutorCard key={i} />
+            ))}
           </div>
         ) : featured.length === 0 ? (
           <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center shadow-sm">
             <GraduationCap size={40} className="text-slate-300 mx-auto mb-3" />
             <p className="text-sm text-slate-500">Chưa có gia sư nào. Hãy thử lại sau hoặc kiểm tra kết nối Backend.</p>
+            <div className="mt-5">
+              <Button to="/tutors" variant="outline">
+                Xem tất cả gia sư
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">

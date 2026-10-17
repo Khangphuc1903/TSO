@@ -1,7 +1,24 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, GraduationCap, Heart, MessageCircle, LogOut, User, ShoppingCart, Wallet } from "lucide-react";
-import { avatarUrl, getRefreshToken, getUser, isLoggedIn, logout } from "../auth";
+import {
+  Bell,
+  GraduationCap,
+  Heart,
+  MessageCircle,
+  LogOut,
+  User,
+  ShoppingCart,
+  Wallet,
+  Menu,
+  X,
+} from "lucide-react";
+import {
+  avatarUrl,
+  getRefreshToken,
+  getUser,
+  isLoggedIn,
+  logout,
+} from "../auth";
 import axiosClient, { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
 import { useCart } from "../context/CartContext";
@@ -21,8 +38,10 @@ export default function Navbar() {
     sessionStorage.getItem("needsOnboarding") === "1" ||
     localStorage.getItem("needsOnboarding") === "1";
   const [menuOpen, setMenuOpen] = useState(false);
+
   const [notifUnread, setNotifUnread] = useState(0);
   const [chatUnreadPeople, setChatUnreadPeople] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -30,7 +49,9 @@ export default function Navbar() {
       setChatUnreadPeople(0);
       return;
     }
+
     let cancelled = false;
+
     const loadBadges = async () => {
       try {
         const data = await getInboxBadges();
@@ -41,15 +62,20 @@ export default function Navbar() {
         /* ignore */
       }
     };
+
     loadBadges();
+
     const onInbox = () => loadBadges();
     window.addEventListener("inbox-updated", onInbox);
+
     const timer = setInterval(loadBadges, 15000);
     const hub = createAppHub();
+
     hub.on("ReceiveNotification", loadBadges);
     hub.on("ReceiveMessage", loadBadges);
     hub.on("ReceiveGroupMessage", loadBadges);
     hub.start().catch(() => {});
+
     return () => {
       cancelled = true;
       window.removeEventListener("inbox-updated", onInbox);
@@ -61,18 +87,24 @@ export default function Navbar() {
     };
   }, [loggedIn, location.pathname]);
 
+  useEffect(() => {
+    setMenuOpen(false);
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   const navLinks = isPending
     ? [{ label: "Hoàn tất hồ sơ", to: "/onboarding" }]
     : isAdmin
       ? [
-          { label: "Dashboard", to: "/admin" },
+          { label: "Bảng điều khiển", to: "/admin" },
           { label: "Trang chủ", to: "/" },
         ]
       : [
-        { label: "Discovery", to: "/" },
-        { label: "Find Tutors", to: "/tutors" },
-        { label: "Find Study Groups", to: "/study-groups" },
-        { label: "FAQ", to: "/faq" },
+          { label: "Trang chủ", to: "/" },
+          { label: "Tìm gia sư", to: "/tutors" },
+          { label: "Nhóm học", to: "/study-groups" },
+          { label: "Hỏi đáp", to: "/faq" },
+
         { label: isTutor ? "Lịch dạy" : "Lịch học", to: "/bookings" },
         ...(isTutor
           ? [
@@ -98,9 +130,16 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-100">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
-        <Link to="/" className="flex items-center gap-2">
-          <GraduationCap size={24} className="text-brand-600" />
-          <span className="text-lg font-bold text-slate-900">TSG</span>
+        <Link to="/" className="flex shrink-0 items-center gap-2.5 focus-ring rounded-xl">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm">
+            <GraduationCap size={19} />
+          </span>
+          <span className="text-lg font-extrabold tracking-tight text-brand-900">
+            TSG
+            <span className="ml-1 hidden text-[10px] font-bold uppercase tracking-wider text-brand-400 sm:inline">
+              Tutor
+            </span>
+          </span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -110,8 +149,10 @@ export default function Navbar() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`text-sm font-medium transition-colors ${
-                  isActive ? "text-brand-600" : "text-slate-600 hover:text-slate-900"
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
+                  isActive
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-700 focus-ring"
                 }`}
               >
                 {link.label}
@@ -120,11 +161,12 @@ export default function Navbar() {
           })}
         </nav>
 
+        <div className="flex items-center gap-2">
         {loggedIn ? (
           <div className="flex items-center gap-2">
             <Link
               to="/notifications"
-              aria-label="Notifications"
+              aria-label="Thông báo"
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
             >
               <Bell size={20} />
@@ -135,8 +177,10 @@ export default function Navbar() {
 
             <Link
               to="/messages"
-              aria-label="Messages"
+
+              aria-label="Tin nhắn"
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
+
             >
               <MessageCircle size={20} />
               {chatUnreadPeople > 0 && (
@@ -175,14 +219,15 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="ml-1 h-9 w-9 rounded-full overflow-hidden ring-2 ring-slate-100 hover:ring-brand-200 transition"
-                aria-label="Profile menu"
+                className="ml-1 h-9 w-9 rounded-full overflow-hidden ring-2 ring-slate-100 hover:ring-brand-200 transition focus-ring"
+                aria-label="Menu tài khoản"
+                aria-expanded={menuOpen}
               >
                 <img src={fileHref(user?.avatarUrl, API_ORIGIN) || avatarUrl(user?.email)} alt="Avatar" className="h-full w-full object-cover" />
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-100 bg-white shadow-lg py-1">
+                <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-pop animate-scale-in">
                   <p className="px-3 py-2 text-xs text-slate-500 truncate">{user?.email}</p>
                   <Link
                     to="/profile"
@@ -261,17 +306,48 @@ export default function Navbar() {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-5">
-            <Link to="/register" className="hidden sm:block text-sm font-medium text-brand-600 hover:underline">
-              Register
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/register"
+              className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 sm:block focus-ring"
+            >
+              Đăng ký
             </Link>
             <Link
               to="/login"
-              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-px hover:bg-brand-700 hover:shadow-md focus-ring"
             >
-              Sign In
+              Đăng nhập
             </Link>
           </div>
+        )}
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((v) => !v)}
+            aria-label="Menu điều hướng"
+            aria-expanded={mobileNavOpen}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 md:hidden focus-ring"
+          >
+            {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+        {mobileNavOpen && (
+          <nav className="absolute inset-x-0 top-full z-50 border-b border-slate-200 bg-white px-4 pb-4 pt-2 shadow-pop animate-scale-in md:hidden">
+            {navLinks.map((link) => (
+              <Link
+                key={`m-${link.to}`}
+                to={link.to}
+                onClick={() => setMobileNavOpen(false)}
+                className={`block rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  location.pathname === link.to
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-700"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
         )}
       </div>
     </header>
