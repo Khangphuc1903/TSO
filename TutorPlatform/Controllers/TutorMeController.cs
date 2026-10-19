@@ -187,11 +187,29 @@ public class TutorMeController : ControllerBase
             : StatusCode(result.StatusCode, new { message = result.Message });
     }
 
-    [HttpGet("tests/questions")]
-    public async Task<IActionResult> TestQuestions(
-        [FromQuery] int subjectId, [FromQuery] string gradeLevel, CancellationToken cancellationToken)
+    [HttpGet("tests/common")]
+    public async Task<IActionResult> TestCommon(CancellationToken cancellationToken)
     {
         if (UserId is not int id) return Unauthorized();
+        return Ok(await _tests.ListCommonTestsAsync(id, cancellationToken));
+    }
+
+    [HttpGet("tests/questions")]
+    public async Task<IActionResult> TestQuestions(
+        [FromQuery] int subjectId, [FromQuery] string? gradeLevel, [FromQuery] string? testType, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+
+        if (string.Equals(testType, "Pedagogical", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(testType, "Safety", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(testType, "Pedagogy", StringComparison.OrdinalIgnoreCase))
+        {
+            var pedResult = await _tests.GetPedagogicalTestQuestionsAsync(id, cancellationToken);
+            return pedResult.Success
+                ? Ok(pedResult.Data)
+                : StatusCode(pedResult.StatusCode, new { message = pedResult.Message });
+        }
+
         var result = await _tests.GetQuestionsAsync(id, subjectId, gradeLevel, cancellationToken);
         return result.Success
             ? Ok(result.Data)
@@ -202,6 +220,21 @@ public class TutorMeController : ControllerBase
     public async Task<IActionResult> SubmitTest([FromBody] SubmitTutorTestDto dto, CancellationToken cancellationToken)
     {
         if (UserId is not int id) return Unauthorized();
+
+        if (string.Equals(dto.TestType, "Pedagogical", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(dto.TestType, "Safety", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(dto.TestType, "Pedagogy", StringComparison.OrdinalIgnoreCase))
+        {
+            var pedResult = await _tests.SubmitPedagogicalTestAsync(id, new SubmitTutorPedagogicalTestDto
+            {
+                StartedAt = dto.StartedAt,
+                Answers = dto.Answers
+            }, cancellationToken);
+            return pedResult.Success
+                ? Ok(pedResult.Data)
+                : StatusCode(pedResult.StatusCode, new { message = pedResult.Message });
+        }
+
         var result = await _tests.SubmitAsync(id, dto, cancellationToken);
         return result.Success
             ? Ok(result.Data)

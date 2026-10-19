@@ -5,9 +5,6 @@ import { Spinner } from "./components/ui/Spinner";
 import { CartProvider } from "./context/CartContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { getUser, isLoggedIn } from "./auth";
-import { CartProvider } from "./context/CartContext";
-import { ToastProvider } from "./components/ui/Toast";
-import { getUser, isLoggedIn } from "./auth";
 
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));

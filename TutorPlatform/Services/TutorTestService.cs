@@ -62,7 +62,8 @@ public class TutorTestService
                     Status = StatusOf(latest),
                     LatestScorePercent = latest?.ScorePercent,
                     LatestIsPassed = latest?.IsPassed,
-                    LatestAttemptNumber = latest?.AttemptNumber
+                    LatestAttemptNumber = latest?.AttemptNumber,
+                    RetryAvailableAt = latest?.RetryAvailableAt
                 });
                 subjectDto.QuestionCount += entry.Count;
             }
@@ -112,7 +113,8 @@ public class TutorTestService
                 Status = StatusOf(latest),
                 LatestScorePercent = latest?.ScorePercent,
                 LatestIsPassed = latest?.IsPassed,
-                LatestAttemptNumber = latest?.AttemptNumber
+                LatestAttemptNumber = latest?.AttemptNumber,
+                RetryAvailableAt = latest?.RetryAvailableAt
             });
         }
 
@@ -150,12 +152,14 @@ public class TutorTestService
                     Status = StatusOf(latest),
                     LatestScorePercent = latest?.ScorePercent,
                     LatestIsPassed = latest?.IsPassed,
-                    LatestAttemptNumber = latest?.AttemptNumber
+                    LatestAttemptNumber = latest?.AttemptNumber,
+                    RetryAvailableAt = latest?.RetryAvailableAt
                 };
             })
             .ToList();
     }
-public async Task<(bool Success, int StatusCode, string Message, TutorTestStatusDto? Data)> GetTestStatusAsync(
+
+    public async Task<(bool Success, int StatusCode, string Message, TutorTestStatusDto? Data)> GetTestStatusAsync(
         int tutorId, int subjectId, string? gradeLevel, CancellationToken cancellationToken)
     {
         var normalizedGrade = NormalizeGrade(gradeLevel);
@@ -190,13 +194,45 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             LatestScorePercent = latest?.ScorePercent,
             LatestIsPassed = latest?.IsPassed,
             LatestAttemptNumber = latest?.AttemptNumber,
-            IsRegistered = isRegistered
+            IsRegistered = isRegistered,
+            RetryAvailableAt = latest?.RetryAvailableAt
         });
+    }
+
+    public async Task<List<TutorTestCommonDto>> ListCommonTestsAsync(int tutorId, CancellationToken cancellationToken)
+    {
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var pedQuestionsCount = await _db.Questions.CountAsync(
+            q => q.IsActive && q.TestType == PedagogicalTestType && q.SubjectId == null && q.GradeLevel == null, cancellationToken);
+
+        var latestAttempt = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(a => a.TutorId == tutorId && a.TestType == PedagogicalTestType)
+            .OrderByDescending(a => a.SubmittedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var status = latestAttempt == null ? "Chưa làm" : latestAttempt.IsPassed ? "Đạt" : "Không đạt";
+        var retryAt = (latestAttempt != null && !latestAttempt.IsPassed)
+            ? (DateTime?)latestAttempt.SubmittedAt.Add(cooldown)
+            : null;
+
+        return new List<TutorTestCommonDto>
+        {
+            new TutorTestCommonDto
+            {
+                TestType = "Pedagogical",
+                Title = "Kỹ năng sư phạm & Quy tắc ứng xử",
+                QuestionCount = pedQuestionsCount,
+                Status = status,
+                RetryAvailableAt = retryAt
+            }
+        };
     }
 
     public async Task<TutorPedagogicalTestStatusDto> GetPedagogicalTestStatusAsync(
         int tutorId, CancellationToken cancellationToken)
     {
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
         var latest = await _db.TutorTestAttempts
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId
@@ -209,7 +245,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             {
                 attempt.ScorePercent,
                 attempt.IsPassed,
-                attempt.AttemptNumber
+                attempt.AttemptNumber,
+                attempt.SubmittedAt
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -223,26 +260,32 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             }),
             LatestScorePercent = latest?.ScorePercent,
             LatestIsPassed = latest?.IsPassed,
-            LatestAttemptNumber = latest?.AttemptNumber
+            LatestAttemptNumber = latest?.AttemptNumber,
+            RetryAvailableAt = (latest != null && !latest.IsPassed) ? (DateTime?)latest.SubmittedAt.Add(cooldown) : null
         };
     }
 
     public async Task<(bool Success, int StatusCode, string Message, TutorPedagogicalTestQuestionsDto? Data)> GetPedagogicalTestQuestionsAsync(
         int tutorId, CancellationToken cancellationToken)
     {
-        var status = await GetPedagogicalTestStatusAsync(tutorId, cancellationToken);
-        if (status.LatestIsPassed == true)
-            return (false, 409, "Đã hoàn thành bài kiểm tra kỹ năng sư phạm.", null);
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, PedagogicalTestType, null, null, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
 
-        var questions = await LoadPedagogicalQuestionsAsync(cancellationToken);
-        if (questions.Count == 0)
+        var pool = await LoadPedagogicalQuestionsAsync(cancellationToken);
+        if (pool.Count == 0)
             return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra kỹ năng sư phạm.", null);
+
+        var sampled = SampleQuestions(pool, 25);
+        var now = DateTime.UtcNow;
 
         return (true, 200, string.Empty, new TutorPedagogicalTestQuestionsDto
         {
-            PassThreshold = await GetPassThresholdAsync(cancellationToken),
-            StartedAt = DateTime.UtcNow,
-            Questions = questions.Select(question => new TutorTestQuestionDto
+            PassThreshold = await GetPassThresholdAsync(PedagogicalTestType, cancellationToken),
+            StartedAt = now,
+            DurationMinutes = 25,
+            EndsAt = now.AddMinutes(25),
+            Questions = sampled.Select(question => new TutorTestQuestionDto
             {
                 QuestionId = question.QuestionId,
                 Content = question.Content,
@@ -258,29 +301,38 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     public async Task<(bool Success, int StatusCode, string Message, TutorPedagogicalTestResultDto? Data)> SubmitPedagogicalTestAsync(
         int tutorId, SubmitTutorPedagogicalTestDto dto, CancellationToken cancellationToken)
     {
-        var status = await GetPedagogicalTestStatusAsync(tutorId, cancellationToken);
-        if (status.LatestIsPassed == true)
-            return (false, 409, "Đã hoàn thành bài kiểm tra kỹ năng sư phạm.", null);
-
-        var questions = await LoadPedagogicalQuestionsAsync(cancellationToken);
-        if (questions.Count == 0)
-            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra kỹ năng sư phạm.", null);
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, PedagogicalTestType, null, null, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
 
         var submittedAnswers = dto.Answers ?? new List<TutorTestAnswerSubmissionDto>();
+        if (submittedAnswers.Count == 0)
+            return (false, 400, "Bài làm không có câu trả lời nào.", null);
+
         if (submittedAnswers.GroupBy(answer => answer.QuestionId).Any(group => group.Count() > 1))
             return (false, 400, "Không được gửi câu trả lời trùng lặp.", null);
+
         if (submittedAnswers.Any(answer =>
                 NormalizeOption(answer.SelectedOption) is { } option && option is not ("A" or "B" or "C" or "D")))
             return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
 
-        var questionIds = questions.Select(question => question.QuestionId).ToHashSet();
-        if (submittedAnswers.Any(answer => !questionIds.Contains(answer.QuestionId)))
+        var submittedQuestionIds = submittedAnswers.Select(a => a.QuestionId).Distinct().ToList();
+        var questions = await _db.Questions
+            .Where(q => q.IsActive
+                && q.TestType == PedagogicalTestType
+                && q.SubjectId == null
+                && q.GradeLevel == null
+                && submittedQuestionIds.Contains(q.QuestionId))
+            .ToListAsync(cancellationToken);
+
+        if (questions.Count != submittedQuestionIds.Count)
             return (false, 400, "Bài làm chứa câu hỏi không thuộc bài kiểm tra này.", null);
 
         var answers = submittedAnswers.ToDictionary(
             answer => answer.QuestionId,
             answer => NormalizeOption(answer.SelectedOption));
-        var passThreshold = await GetPassThresholdAsync(cancellationToken);
+
+        var passThreshold = await GetPassThresholdAsync(PedagogicalTestType, cancellationToken);
         var score = ScoreAnswers(questions, answers, passThreshold);
         var submittedAt = DateTime.UtcNow;
         var startedAt = dto.StartedAt?.ToUniversalTime() ?? submittedAt;
@@ -294,6 +346,9 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
                 && attempt.GradeLevel == null)
             .Select(attempt => (int?)attempt.AttemptNumber)
             .MaxAsync(cancellationToken) ?? 0) + 1;
+
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
 
         var attempt = new TutorTestAttempt
         {
@@ -330,7 +385,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             IsPassed = attempt.IsPassed,
             AttemptNumber = attempt.AttemptNumber,
             StartedAt = attempt.StartedAt,
-            SubmittedAt = attempt.SubmittedAt
+            SubmittedAt = attempt.SubmittedAt,
+            RetryAvailableAt = retryAvailableAt
         });
     }
 
@@ -338,29 +394,47 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
     public async Task<List<TutorTestAttemptDto>> ListAttemptsAsync(int tutorId, CancellationToken cancellationToken)
     {
-        return await _db.TutorTestAttempts
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var attempts = await _db.TutorTestAttempts
             .AsNoTracking()
-            .Where(attempt => attempt.TutorId == tutorId
-                && attempt.TestType == ProfessionalTestType
-                && attempt.SubjectId != null)
+            .Where(attempt => attempt.TutorId == tutorId)
             .OrderByDescending(attempt => attempt.SubmittedAt)
-            .Select(attempt => new TutorTestAttemptDto
+            .Select(attempt => new
             {
-                AttemptId = attempt.AttemptId,
+                attempt.AttemptId,
+                attempt.TestType,
                 SubjectId = attempt.SubjectId ?? 0,
-                SubjectName = attempt.Subject == null ? null : attempt.Subject.SubjectName,
+                SubjectName = attempt.Subject == null ? (attempt.TestType == PedagogicalTestType ? "Kỹ năng sư phạm & An toàn" : null) : attempt.Subject.SubjectName,
                 EducationLevel = attempt.Subject == null ? "" : (attempt.Subject.EducationLevel ?? ""),
-                GradeLevel = attempt.GradeLevel,
-                TotalQuestions = attempt.TotalQuestions,
-                CorrectCount = attempt.CorrectCount,
-                ScorePercent = attempt.ScorePercent,
-                PassThreshold = attempt.PassThreshold,
-                IsPassed = attempt.IsPassed,
-                AttemptNumber = attempt.AttemptNumber,
-                StartedAt = attempt.StartedAt,
-                SubmittedAt = attempt.SubmittedAt
+                attempt.GradeLevel,
+                attempt.TotalQuestions,
+                attempt.CorrectCount,
+                attempt.ScorePercent,
+                attempt.PassThreshold,
+                attempt.IsPassed,
+                attempt.AttemptNumber,
+                attempt.StartedAt,
+                attempt.SubmittedAt
             })
             .ToListAsync(cancellationToken);
+
+        return attempts.Select(attempt => new TutorTestAttemptDto
+        {
+            AttemptId = attempt.AttemptId,
+            SubjectId = attempt.SubjectId,
+            SubjectName = attempt.SubjectName,
+            EducationLevel = attempt.EducationLevel,
+            GradeLevel = attempt.GradeLevel,
+            TotalQuestions = attempt.TotalQuestions,
+            CorrectCount = attempt.CorrectCount,
+            ScorePercent = attempt.ScorePercent,
+            PassThreshold = attempt.PassThreshold,
+            IsPassed = attempt.IsPassed,
+            AttemptNumber = attempt.AttemptNumber,
+            StartedAt = attempt.StartedAt,
+            SubmittedAt = attempt.SubmittedAt,
+            RetryAvailableAt = attempt.IsPassed ? null : (DateTime?)attempt.SubmittedAt.Add(cooldown)
+        }).ToList();
     }
 
     // ---------------- QUESTION SET ----------------
@@ -372,7 +446,6 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         if (normalizedGrade == null)
             return (false, 400, "Chọn lớp để làm bài kiểm tra.", null);
 
-        // Tutor chỉ truy cập bài kiểm tra của tổ hợp (môn + lớp) mà họ đã đăng ký.
         var isRegistered = await _db.TutorSubjects.AnyAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == subjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
         if (!isRegistered)
@@ -380,16 +453,23 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         var subject = await _db.Subjects
             .AsNoTracking()
-            .Where(subject => subject.SubjectId == subjectId && subject.IsActive)
-            .Select(subject => new { subject.SubjectName, subject.EducationLevel })
+            .Where(s => s.SubjectId == subjectId && s.IsActive)
+            .Select(s => new { s.SubjectName, s.EducationLevel })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (subject == null)
             return (false, 404, "Môn học không tồn tại hoặc chưa được kích hoạt.", null);
 
-        var questions = await LoadQuestionsAsync(subjectId, normalizedGrade, cancellationToken);
-        if (questions.Count == 0)
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, ProfessionalTestType, subjectId, normalizedGrade, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
+
+        var pool = await LoadQuestionsAsync(subjectId, normalizedGrade, cancellationToken);
+        if (pool.Count == 0)
             return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra này (môn + lớp).", null);
+
+        var sampled = SampleQuestions(pool, 25);
+        var now = DateTime.UtcNow;
 
         return (true, 200, string.Empty, new TutorTestQuestionsDto
         {
@@ -397,9 +477,11 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             SubjectName = subject.SubjectName,
             EducationLevel = subject.EducationLevel,
             GradeLevel = normalizedGrade,
-            PassThreshold = await GetPassThresholdAsync(cancellationToken),
-            StartedAt = DateTime.UtcNow,
-            Questions = questions.Select(question => new TutorTestQuestionDto
+            PassThreshold = await GetPassThresholdAsync(ProfessionalTestType, cancellationToken),
+            StartedAt = now,
+            DurationMinutes = 25,
+            EndsAt = now.AddMinutes(25),
+            Questions = sampled.Select(question => new TutorTestQuestionDto
             {
                 QuestionId = question.QuestionId,
                 Content = question.Content,
@@ -411,7 +493,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             }).ToList()
         });
     }
-// ---------------- SUBMIT + SCORING ----------------
+
+    // ---------------- SUBMIT + SCORING ----------------
 
     public async Task<(bool Success, int StatusCode, string Message, TutorTestAttemptDto? Data)> SubmitAsync(
         int tutorId, SubmitTutorTestDto dto, CancellationToken cancellationToken)
@@ -425,30 +508,45 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         if (!isRegistered)
             return (false, 403, "Đăng ký tổ hợp trước khi nộp bài kiểm tra.", null);
 
-        var questions = await LoadQuestionsAsync(dto.SubjectId, normalizedGrade, cancellationToken);
-        if (questions.Count == 0)
-            return (false, 404, "Hiện chưa có câu hỏi cho bài kiểm tra này (môn + lớp).", null);
-
         var subjectInfo = await _db.Subjects
             .Where(subject => subject.SubjectId == dto.SubjectId)
             .Select(subject => new { subject.SubjectName, subject.EducationLevel })
-            .FirstAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
+        if (subjectInfo == null)
+            return (false, 404, "Môn học không tồn tại.", null);
+
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, ProfessionalTestType, dto.SubjectId, normalizedGrade, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
 
         var submittedAnswers = dto.Answers ?? new List<TutorTestAnswerSubmissionDto>();
+        if (submittedAnswers.Count == 0)
+            return (false, 400, "Bài làm không có câu trả lời nào.", null);
+
         if (submittedAnswers.GroupBy(answer => answer.QuestionId).Any(group => group.Count() > 1))
             return (false, 400, "Không được gửi câu trả lời trùng lặp.", null);
+
         if (submittedAnswers.Any(answer =>
                 NormalizeOption(answer.SelectedOption) is { } option && option is not ("A" or "B" or "C" or "D")))
             return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
 
-        var questionIds = questions.Select(question => question.QuestionId).ToHashSet();
-        if (submittedAnswers.Any(answer => !questionIds.Contains(answer.QuestionId)))
-            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài kiểm tra này.", null);
+        var submittedQuestionIds = submittedAnswers.Select(a => a.QuestionId).Distinct().ToList();
+        var questions = await _db.Questions
+            .Where(q => q.IsActive
+                && q.TestType == ProfessionalTestType
+                && q.SubjectId == dto.SubjectId
+                && q.GradeLevel == normalizedGrade
+                && submittedQuestionIds.Contains(q.QuestionId))
+            .ToListAsync(cancellationToken);
+
+        if (questions.Count != submittedQuestionIds.Count)
+            return (false, 400, "Bài làm chứa câu hỏi không hợp lệ hoặc không thuộc bài kiểm tra này.", null);
 
         var answers = submittedAnswers.ToDictionary(
             answer => answer.QuestionId,
             answer => NormalizeOption(answer.SelectedOption));
-        var passThreshold = await GetPassThresholdAsync(cancellationToken);
+
+        var passThreshold = await GetPassThresholdAsync(ProfessionalTestType, cancellationToken);
         var score = ScoreAnswers(questions, answers, passThreshold);
         var submittedAt = DateTime.UtcNow;
         var startedAt = dto.StartedAt?.ToUniversalTime() ?? submittedAt;
@@ -461,6 +559,9 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
                 && attempt.GradeLevel == normalizedGrade)
             .Select(attempt => (int?)attempt.AttemptNumber)
             .MaxAsync(cancellationToken) ?? 0) + 1;
+
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
 
         var attempt = new TutorTestAttempt
         {
@@ -487,7 +588,6 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
 
         _db.TutorTestAttempts.Add(attempt);
 
-        // Đạt ⇒ đánh dấu tổ hợp (môn + lớp) đã đủ điều kiện giảng dạy.
         if (score.IsPassed)
             await MarkCombinationVerifiedAsync(tutorId, dto.SubjectId, normalizedGrade, submittedAt, cancellationToken);
 
@@ -507,10 +607,12 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             IsPassed = attempt.IsPassed,
             AttemptNumber = attempt.AttemptNumber,
             StartedAt = attempt.StartedAt,
-            SubmittedAt = attempt.SubmittedAt
+            SubmittedAt = attempt.SubmittedAt,
+            RetryAvailableAt = retryAvailableAt
         });
     }
-// ---------------- REGISTRATION ----------------
+
+    // ---------------- REGISTRATION ----------------
 
     public async Task<(bool Success, int StatusCode, string Message)> RegisterCombinationAsync(
         int tutorId, RegisterTestCombinationDto dto, CancellationToken cancellationToken)
@@ -523,12 +625,11 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         if (!subjectOk)
             return (false, 404, "Môn học không tồn tại hoặc chưa được kích hoạt.");
 
-        // Kada tổ hợp phải có bài kiểm tra tương ứng trước đăng ký (không bài kiểm tra "chung" mù quáng).
         var testExists = await _db.Questions.AnyAsync(
             question => question.IsActive && question.TestType == ProfessionalTestType
                 && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
         if (!testExists)
-            return (false, 409, "Hiện chưa có bài test for tổ hợp cấp + môn + lớp này.");
+            return (false, 409, "Hiện chưa có bài test cho tổ hợp cấp + môn + lớp này.");
 
         var existing = await _db.TutorSubjects.FirstOrDefaultAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
@@ -548,6 +649,133 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         return (true, 200, "Đã đăng ký tổ hợp " + normalizedGrade + ".");
     }
 
+    // ---------------- RETAKE & COOLDOWN VALIDATION ----------------
+
+    private async Task<(bool Allowed, int StatusCode, string Message, DateTime? RetryAvailableAt)> CheckRetakeAllowedAsync(
+        int tutorId, string testType, int? subjectId, string? gradeLevel, CancellationToken cancellationToken)
+    {
+        var attempts = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(a => a.TutorId == tutorId
+                && a.TestType == testType
+                && a.SubjectId == subjectId
+                && a.GradeLevel == gradeLevel)
+            .OrderByDescending(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
+
+        // 1. If tutor already passed, retaking is locked
+        if (attempts.Any(a => a.IsPassed))
+        {
+            return (false, 409, "Bạn đã hoàn thành bài kiểm tra và đạt chuẩn. Không cần thi lại.", null);
+        }
+
+        var latest = attempts.FirstOrDefault();
+        if (latest == null)
+        {
+            return (true, 200, string.Empty, null);
+        }
+
+        // 2. Max 3 failed attempts in the last 30 days
+        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+        var attemptsInWindow = attempts.Where(a => a.SubmittedAt >= thirtyDaysAgo).ToList();
+        if (attemptsInWindow.Count >= 3)
+        {
+            var earliest = attemptsInWindow.MinBy(a => a.SubmittedAt);
+            var retryDate = earliest!.SubmittedAt.AddDays(30);
+            if (DateTime.UtcNow < retryDate)
+            {
+                return (false, 429, $"Bạn đã thi không đạt 3 lần trong vòng 30 ngày. Vui lòng ôn tập thêm và thử lại sau {retryDate:dd/MM/yyyy HH:mm}.", retryDate);
+            }
+        }
+
+        // 3. Cooldown between attempts
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var retryAvailableAt = latest.SubmittedAt.Add(cooldown);
+        if (DateTime.UtcNow < retryAvailableAt)
+        {
+            var remaining = retryAvailableAt - DateTime.UtcNow;
+            var remainingMinutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+            return (false, 429, $"Bạn cần đợi thời gian ôn tập trước khi thi lại (còn khoảng {remainingMinutes} phút).", retryAvailableAt);
+        }
+
+        return (true, 200, string.Empty, null);
+    }
+
+    // ---------------- DIFFICULTY MATRIX SAMPLING ----------------
+
+    private static List<Question> SampleQuestions(List<Question> pool, int targetCount = 25)
+    {
+        if (pool.Count <= targetCount)
+        {
+            var fullList = pool.ToList();
+            Shuffle(fullList);
+            return fullList;
+        }
+
+        // Difficulty Matrix:
+        // Easy (~15%): 3-4 questions
+        // Medium (~60%): ~15 questions
+        // Hard (~25%): 5-6 questions
+        var easyList = new List<Question>();
+        var mediumList = new List<Question>();
+        var hardList = new List<Question>();
+
+        foreach (var q in pool)
+        {
+            var diff = CategorizeDifficulty(q.Difficulty);
+            if (diff == "Easy") easyList.Add(q);
+            else if (diff == "Hard") hardList.Add(q);
+            else mediumList.Add(q);
+        }
+
+        Shuffle(easyList);
+        Shuffle(mediumList);
+        Shuffle(hardList);
+
+        var targetEasy = Math.Min(easyList.Count, Math.Max(1, (int)Math.Round(targetCount * 0.15)));
+        var targetHard = Math.Min(hardList.Count, Math.Max(1, (int)Math.Round(targetCount * 0.25)));
+        var targetMedium = Math.Min(mediumList.Count, targetCount - targetEasy - targetHard);
+
+        var selected = new List<Question>();
+        selected.AddRange(easyList.Take(targetEasy));
+        selected.AddRange(hardList.Take(targetHard));
+        selected.AddRange(mediumList.Take(targetMedium));
+
+        // If targetCount still not reached due to small bucket counts, pull from remaining
+        if (selected.Count < targetCount)
+        {
+            var selectedIds = selected.Select(q => q.QuestionId).ToHashSet();
+            var remaining = pool.Where(q => !selectedIds.Contains(q.QuestionId)).ToList();
+            Shuffle(remaining);
+            selected.AddRange(remaining.Take(targetCount - selected.Count));
+        }
+
+        // Shuffle the final set so easy/medium/hard questions are evenly intermixed
+        Shuffle(selected);
+        return selected;
+    }
+
+    private static string CategorizeDifficulty(string? diff)
+    {
+        if (string.IsNullOrWhiteSpace(diff)) return "Medium";
+        var d = diff.Trim().ToLowerInvariant();
+        if (d.Contains("dễ") || d.Contains("easy") || d.Contains("nhận biết") || d.Contains("thông hiểu"))
+            return "Easy";
+        if (d.Contains("khó") || d.Contains("hard") || d.Contains("nâng cao") || d.Contains("sư phạm") || d.Contains("tình huống") || d.Contains("bảo vệ") || d.Contains("quy tắc an toàn"))
+            return "Hard";
+        return "Medium";
+    }
+
+    private static void Shuffle<T>(IList<T> list)
+    {
+        var rng = Random.Shared;
+        for (var i = list.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+
     // ---------------- PUBLIC STATIC SCORING ----------------
 
     public static (int CorrectCount, decimal ScorePercent, bool IsPassed) ScoreAnswers(
@@ -563,7 +791,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
             : Math.Round(correctCount * 100m / questions.Count, 2, MidpointRounding.AwayFromZero);
         return (correctCount, scorePercent, scorePercent >= passThreshold);
     }
-// ---------------- HELPERS ----------------
+
+    // ---------------- HELPERS ----------------
 
     private async Task<List<Question>> LoadQuestionsAsync(int subjectId, string gradeLevel, CancellationToken cancellationToken)
     {
@@ -616,6 +845,7 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
     private async Task<Dictionary<string, LatestAttempt>> LoadLatestAttemptsAsync(
         int tutorId, CancellationToken cancellationToken)
     {
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
         var attempts = await _db.TutorTestAttempts
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId
@@ -629,7 +859,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
                 attempt.GradeLevel,
                 attempt.ScorePercent,
                 attempt.IsPassed,
-                attempt.AttemptNumber
+                attempt.AttemptNumber,
+                attempt.SubmittedAt
             })
             .ToListAsync(cancellationToken);
 
@@ -638,12 +869,17 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         {
             var key = KeyOf(attempt.SubjectId!.Value, attempt.GradeLevel);
             if (!result.ContainsKey(key))
+            {
+                var retryAt = attempt.IsPassed ? null : (DateTime?)attempt.SubmittedAt.Add(cooldown);
                 result[key] = new LatestAttempt
                 {
                     ScorePercent = attempt.ScorePercent,
                     IsPassed = attempt.IsPassed,
-                    AttemptNumber = attempt.AttemptNumber
+                    AttemptNumber = attempt.AttemptNumber,
+                    SubmittedAt = attempt.SubmittedAt,
+                    RetryAvailableAt = retryAt
                 };
+            }
         }
         return result;
     }
@@ -671,18 +907,43 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         }
     }
 
-    private async Task<decimal> GetPassThresholdAsync(CancellationToken cancellationToken)
+    private async Task<decimal> GetPassThresholdAsync(string testType, CancellationToken cancellationToken)
     {
+        var settingKey = testType == PedagogicalTestType ? "SAFETY_TEST_PASS_SCORE" : "SUBJECT_TEST_PASS_SCORE";
         var rawValue = await _db.PlatformSettings
             .AsNoTracking()
-            .Where(setting => setting.SettingKey == PassThresholdSettingKey)
+            .Where(setting => setting.SettingKey == settingKey || setting.SettingKey == PassThresholdSettingKey)
+            .OrderByDescending(setting => setting.SettingKey == settingKey ? 1 : 0)
             .Select(setting => setting.SettingValue)
             .FirstOrDefaultAsync(cancellationToken);
 
         return decimal.TryParse(rawValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var threshold)
             && threshold is >= 0m and <= 100m
             ? threshold
-            : DefaultPassThreshold;
+            : (testType == PedagogicalTestType ? 80m : DefaultPassThreshold);
+    }
+
+    private async Task<TimeSpan> GetRetryCooldownAsync(CancellationToken cancellationToken)
+    {
+        var minutesStr = await _db.PlatformSettings
+            .AsNoTracking()
+            .Where(s => s.SettingKey == "TEST_RETRY_WAIT_MINUTES")
+            .Select(s => s.SettingValue)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (int.TryParse(minutesStr, out var minutes) && minutes > 0)
+            return TimeSpan.FromMinutes(minutes);
+
+        var daysStr = await _db.PlatformSettings
+            .AsNoTracking()
+            .Where(s => s.SettingKey == "TEST_RETRY_WAIT_DAYS")
+            .Select(s => s.SettingValue)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (double.TryParse(daysStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var days) && days > 0)
+            return TimeSpan.FromDays(days);
+
+        return TimeSpan.FromMinutes(30);
     }
 
     private static string? NormalizeGrade(string? grade)
@@ -713,6 +974,8 @@ public async Task<(bool Success, int StatusCode, string Message, TutorTestStatus
         public decimal ScorePercent { get; set; }
         public bool IsPassed { get; set; }
         public int AttemptNumber { get; set; }
+        public DateTime SubmittedAt { get; set; }
+        public DateTime? RetryAvailableAt { get; set; }
     }
 
     private static string? NormalizeOption(string? option)

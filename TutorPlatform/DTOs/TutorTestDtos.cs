@@ -19,11 +19,16 @@ public class TutorTestQuestionsDto
     public string? GradeLevel { get; set; }
     public decimal PassThreshold { get; set; }
     public DateTime StartedAt { get; set; }
+    public int DurationMinutes { get; set; } = 25;
+    public DateTime EndsAt { get; set; }
+    public string Title => $"{SubjectName} · {GradeLevel}";
+    public string TestType => "Professional";
     public List<TutorTestQuestionDto> Questions { get; set; } = new();
 }
 
 public class SubmitTutorTestDto
 {
+    public string? TestType { get; set; }
     public int SubjectId { get; set; }
     public string? GradeLevel { get; set; }
     public DateTime? StartedAt { get; set; }
@@ -47,6 +52,7 @@ public class TutorTestListItemDto
     public decimal? LatestScorePercent { get; set; }
     public bool? LatestIsPassed { get; set; }
     public int? LatestAttemptNumber { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class TutorTestAttemptDto
@@ -64,6 +70,7 @@ public class TutorTestAttemptDto
     public int AttemptNumber { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime SubmittedAt { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class RegisterTestCombinationDto
@@ -83,12 +90,17 @@ public class TutorTestStatusDto
     public bool? LatestIsPassed { get; set; }
     public int? LatestAttemptNumber { get; set; }
     public bool IsRegistered { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class TutorPedagogicalTestQuestionsDto
 {
     public decimal PassThreshold { get; set; }
     public DateTime StartedAt { get; set; }
+    public int DurationMinutes { get; set; } = 25;
+    public DateTime EndsAt { get; set; }
+    public string Title => "Bài kiểm tra Kỹ năng Sư phạm & An toàn";
+    public string TestType => "Pedagogical";
     public List<TutorTestQuestionDto> Questions { get; set; } = new();
 }
 
@@ -104,6 +116,7 @@ public class TutorPedagogicalTestStatusDto
     public decimal? LatestScorePercent { get; set; }
     public bool? LatestIsPassed { get; set; }
     public int? LatestAttemptNumber { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class TutorPedagogicalTestResultDto
@@ -116,6 +129,7 @@ public class TutorPedagogicalTestResultDto
     public int AttemptNumber { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime SubmittedAt { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class TutorTestGradeDto
@@ -126,6 +140,7 @@ public class TutorTestGradeDto
     public decimal? LatestScorePercent { get; set; }
     public bool? LatestIsPassed { get; set; }
     public int? LatestAttemptNumber { get; set; }
+    public DateTime? RetryAvailableAt { get; set; }
 }
 
 public class TutorTestSubjectDto
@@ -140,4 +155,13 @@ public class TutorTestLevelDto
 {
     public string EducationLevel { get; set; } = null!;
     public List<TutorTestSubjectDto> Subjects { get; set; } = new();
+}
+
+public class TutorTestCommonDto
+{
+    public string TestType { get; set; } = null!;
+    public string Title { get; set; } = null!;
+    public int QuestionCount { get; set; }
+    public string Status { get; set; } = "Chưa làm";
+    public DateTime? RetryAvailableAt { get; set; }
 }
