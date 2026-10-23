@@ -82,6 +82,8 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<Wishlist> Wishlists { get; set; }
 
+    public virtual DbSet<UserBankAccount> UserBankAccounts { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -809,6 +811,25 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.TutorId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Wishlist_Tutor");
+        });
+
+        modelBuilder.Entity<UserBankAccount>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("UserBankAccounts");
+            entity.Property(e => e.BankCode).HasMaxLength(20);
+            entity.Property(e => e.BankName).HasMaxLength(100);
+            entity.Property(e => e.AccountNumber).HasMaxLength(30);
+            entity.Property(e => e.AccountHolderName).HasMaxLength(100);
+            entity.Property(e => e.QrCodeUrl).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnType("datetime");
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_UserBankAccounts_Users");
         });
 
         OnModelCreatingPartial(modelBuilder);

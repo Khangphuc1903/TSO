@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Bell,
   CalendarClock,
+  CreditCard,
   Camera,
   GraduationCap,
   Eye,
@@ -36,10 +37,12 @@ import {
   uploadMyAvatar,
 } from "../api/study";
 import LocationFields from "../components/LocationFields";
+import BankAccountManager from "../components/BankAccountManager";
 import { phoneError, regionError } from "../data/locations";
 
 const TABS = [
   { id: "info", label: "Thông tin", icon: UserRound },
+  { id: "bank", label: "Tài khoản nhận tiền", icon: CreditCard },
   { id: "password", label: "Mật khẩu", icon: Lock },
   { id: "today", label: "Hôm nay", icon: CalendarClock },
   { id: "pending", label: "Chờ xác nhận", icon: ShieldCheck },
@@ -584,6 +587,8 @@ export default function Profile() {
                 )}
               </div>
             )}
+
+            {tab === "bank" && <BankAccountManager />}
           </div>
         </div>
 

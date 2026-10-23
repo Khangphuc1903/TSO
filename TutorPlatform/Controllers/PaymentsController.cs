@@ -102,6 +102,58 @@ public class PaymentsController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [Authorize]
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMyPayments(CancellationToken ct)
+    {
+        var userIdVal = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdVal, out var userId))
+            return Unauthorized();
+
+        var list = await _paymentService.GetMyPaymentsAsync(userId, ct);
+        return Ok(list);
+    }
+
+    [Authorize]
+    [HttpGet("bank-account")]
+    public async Task<IActionResult> GetBankAccount(CancellationToken ct)
+    {
+        var userIdVal = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdVal, out var userId))
+            return Unauthorized();
+
+        var account = await _paymentService.GetUserBankAccountAsync(userId, ct);
+        return Ok(account);
+    }
+
+    [Authorize]
+    [HttpPost("bank-account")]
+    public async Task<IActionResult> SaveBankAccount([FromBody] SaveUserBankAccountRequest request, CancellationToken ct)
+    {
+        var userIdVal = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdVal, out var userId))
+            return Unauthorized();
+
+        var result = await _paymentService.SaveUserBankAccountAsync(userId, request, ct);
+        return result.Success
+            ? StatusCode(result.StatusCode, result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("upload-qr")]
+    public async Task<IActionResult> UploadQrImage([FromForm] IFormFile file, CancellationToken ct)
+    {
+        var userIdVal = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdVal, out var userId))
+            return Unauthorized();
+
+        var result = await _paymentService.UploadQrImageAsync(userId, file, ct);
+        return result.Success
+            ? Ok(new { url = result.Url, message = result.Message })
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
 }
 
 public class ConfirmWebhookRequest

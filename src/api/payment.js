@@ -24,3 +24,20 @@ export async function getMyPayments() {
   const res = await axiosClient.get("/payments/mine");
   return res.data;
 }
+
+export async function getBankAccount() {
+  const res = await axiosClient.get("/payments/bank-account");
+  return res.data;
+}
+
+export async function saveBankAccount(data) {
+  const res = await axiosClient.post("/payments/bank-account", data);
+  return res.data;
+}
+
+export async function uploadQrImage(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await axiosClient.post("/payments/upload-qr", formData);
+  return res.data;
+}

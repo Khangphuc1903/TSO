@@ -21,6 +21,12 @@ public class PaymentService
     private readonly NotificationService _notifications;
     private readonly IHubContext<AppHub> _hub;
     private readonly ILogger<PaymentService> _logger;
+    private readonly IWebHostEnvironment _env;
+
+    private static readonly HashSet<string> AllowedQrExt = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp", ".jfif"
+    };
 
     public PaymentService(
         TutorPlatformDbContext db,
@@ -28,7 +34,8 @@ public class PaymentService
         IConfiguration config,
         NotificationService notifications,
         IHubContext<AppHub> hub,
-        ILogger<PaymentService> logger)
+        ILogger<PaymentService> logger,
+        IWebHostEnvironment env)
     {
         _db = db;
         _payOS = payOS;
@@ -36,6 +43,7 @@ public class PaymentService
         _notifications = notifications;
         _hub = hub;
         _logger = logger;
+        _env = env;
     }
 
     public async Task<(bool Success, int StatusCode, string Message, PaymentIntentResponse? Data)> CreatePaymentIntentAsync(
@@ -53,7 +61,7 @@ public class PaymentService
             return (false, StatusCodes.Status404NotFound, "Không tìm thấy thông tin buổi học.", null);
 
         if (booking.StudentId != studentId)
-            return (false, StatusCodes.Status403Forbidden, "Bạn không có quyền thanh toán cho buổi học này.", null);
+            return (false, StatusCodes.Status403Forbidden, $"Bạn không có quyền thanh toán cho buổi học #{booking.BookingId} (đơn thuộc học viên #{booking.StudentId}, bạn đang đăng nhập tài khoản #{studentId}).", null);
 
         if (booking.Status == "Confirmed")
             return (false, StatusCodes.Status400BadRequest, "Buổi học này đã được xác nhận thanh toán rồi.", null);
@@ -501,5 +509,159 @@ public class PaymentService
     {
         var res = await _payOS.Webhooks.ConfirmAsync(webhookUrl);
         return res?.WebhookUrl ?? webhookUrl;
+    }
+
+    public async Task<List<UserPaymentHistoryDto>> GetMyPaymentsAsync(int userId, CancellationToken ct = default)
+    {
+        var payments = await _db.Payments
+            .Include(p => p.Booking)
+                .ThenInclude(b => b.Subject)
+            .Include(p => p.Booking)
+                .ThenInclude(b => b.Tutor)
+                    .ThenInclude(t => t.Tutor)
+            .Where(p => p.PayerUserId == userId || p.Booking.TutorId == userId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(ct);
+
+        return payments.Select(p => new UserPaymentHistoryDto
+        {
+            PaymentId = p.PaymentId,
+            BookingId = p.BookingId,
+            SubjectName = p.Booking?.Subject?.SubjectName ?? "Môn học",
+            TutorName = p.Booking?.Tutor?.Tutor?.FullName ?? "Gia sư",
+            Amount = p.Amount,
+            Status = p.Status,
+            PaymentMethod = p.PaymentMethod,
+            TransactionCode = p.TransactionCode,
+            CreatedAt = p.CreatedAt,
+            PaidAt = p.PaidAt
+        }).ToList();
+    }
+
+    public async Task<UserBankAccountDto?> GetUserBankAccountAsync(int userId, CancellationToken ct = default)
+    {
+        var account = await _db.UserBankAccounts
+            .Where(b => b.UserId == userId)
+            .OrderByDescending(b => b.IsDefault)
+            .ThenByDescending(b => b.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (account == null) return null;
+
+        return new UserBankAccountDto
+        {
+            Id = account.Id,
+            UserId = account.UserId,
+            BankCode = account.BankCode,
+            BankName = account.BankName,
+            AccountNumber = account.AccountNumber,
+            AccountHolderName = account.AccountHolderName,
+            QrCodeUrl = account.QrCodeUrl,
+            IsDefault = account.IsDefault,
+            CreatedAt = account.CreatedAt
+        };
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message, UserBankAccountDto? Data)> SaveUserBankAccountAsync(
+        int userId,
+        SaveUserBankAccountRequest request,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.BankCode))
+            return (false, StatusCodes.Status400BadRequest, "Vui lòng chọn ngân hàng.", null);
+
+        if (string.IsNullOrWhiteSpace(request.AccountNumber))
+            return (false, StatusCodes.Status400BadRequest, "Vui lòng nhập số tài khoản ngân hàng.", null);
+
+        if (string.IsNullOrWhiteSpace(request.AccountHolderName))
+            return (false, StatusCodes.Status400BadRequest, "Vui lòng nhập tên chủ tài khoản.", null);
+
+        var cleanAccNum = request.AccountNumber.Trim().Replace(" ", "").Replace("-", "");
+        var cleanHolder = request.AccountHolderName.Trim().ToUpper();
+        var cleanBankCode = request.BankCode.Trim().ToUpper();
+
+        // Tự động sinh link mã VietQR chuẩn nếu không tải ảnh riêng
+        var qrUrl = request.QrCodeUrl;
+        if (string.IsNullOrWhiteSpace(qrUrl))
+        {
+            qrUrl = $"https://img.vietqr.io/image/{cleanBankCode}-{cleanAccNum}-compact2.png?accountName={Uri.EscapeDataString(cleanHolder)}";
+        }
+
+        var existing = await _db.UserBankAccounts
+            .FirstOrDefaultAsync(b => b.UserId == userId, ct);
+
+        if (existing != null)
+        {
+            existing.BankCode = cleanBankCode;
+            existing.BankName = string.IsNullOrWhiteSpace(request.BankName) ? cleanBankCode : request.BankName.Trim();
+            existing.AccountNumber = cleanAccNum;
+            existing.AccountHolderName = cleanHolder;
+            existing.QrCodeUrl = qrUrl;
+            existing.IsDefault = request.IsDefault;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            existing = new UserBankAccount
+            {
+                UserId = userId,
+                BankCode = cleanBankCode,
+                BankName = string.IsNullOrWhiteSpace(request.BankName) ? cleanBankCode : request.BankName.Trim(),
+                AccountNumber = cleanAccNum,
+                AccountHolderName = cleanHolder,
+                QrCodeUrl = qrUrl,
+                IsDefault = request.IsDefault,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.UserBankAccounts.Add(existing);
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        var dto = new UserBankAccountDto
+        {
+            Id = existing.Id,
+            UserId = existing.UserId,
+            BankCode = existing.BankCode,
+            BankName = existing.BankName,
+            AccountNumber = existing.AccountNumber,
+            AccountHolderName = existing.AccountHolderName,
+            QrCodeUrl = existing.QrCodeUrl,
+            IsDefault = existing.IsDefault,
+            CreatedAt = existing.CreatedAt
+        };
+
+        return (true, StatusCodes.Status200OK, "Lưu thông tin tài khoản ngân hàng và tạo mã VietQR thành công.", dto);
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message, string? Url)> UploadQrImageAsync(
+        int userId,
+        IFormFile? file,
+        CancellationToken ct = default)
+    {
+        if (file == null || file.Length == 0)
+            return (false, StatusCodes.Status400BadRequest, "Vui lòng chọn tệp ảnh mã QR.", null);
+
+        if (file.Length > 10 * 1024 * 1024)
+            return (false, StatusCodes.Status400BadRequest, "Dung lượng ảnh tối đa 10MB.", null);
+
+        var ext = Path.GetExtension(file.FileName);
+        if (string.IsNullOrEmpty(ext) || !AllowedQrExt.Contains(ext))
+            return (false, StatusCodes.Status400BadRequest, "Chỉ chấp nhận định dạng ảnh JPG, PNG, WEBP.", null);
+
+        var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+        var dir = Path.Combine(webRoot, "uploads", "qr", userId.ToString());
+        Directory.CreateDirectory(dir);
+
+        var safeName = $"qr_{userId}_{DateTime.UtcNow.Ticks}{ext.ToLowerInvariant()}";
+        var physical = Path.Combine(dir, safeName);
+
+        await using (var stream = File.Create(physical))
+        {
+            await file.CopyToAsync(stream, ct);
+        }
+
+        var relativeUrl = $"/uploads/qr/{userId}/{safeName}";
+        return (true, StatusCodes.Status200OK, "Tải ảnh mã QR thành công.", relativeUrl);
     }
 }

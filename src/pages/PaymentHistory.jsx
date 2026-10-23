@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Wallet, CreditCard } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { isLoggedIn } from "../auth";
 import { getMyPayments } from "../api/payment";
@@ -34,9 +34,17 @@ export default function PaymentHistory() {
     <div className="min-h-screen bg-surface">
       <Navbar />
       <main className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet size={20} className="text-brand-600" />
-          <h1 className="text-2xl font-bold text-slate-900">Lịch sử thanh toán</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2">
+            <Wallet size={20} className="text-brand-600" />
+            <h1 className="text-2xl font-bold text-slate-900">Lịch sử thanh toán</h1>
+          </div>
+          <Link
+            to="/profile"
+            className="text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3.5 py-1.5 rounded-xl border border-brand-200 transition flex items-center gap-1.5"
+          >
+            <CreditCard size={14} /> Cài đặt tài khoản ngân hàng nhận tiền &rarr;
+          </Link>
         </div>
         <p className="text-sm text-slate-500 mb-6">Các khoản đã thanh toán, hoàn tiền và đang chờ qua PayOS.</p>
         {error && <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}

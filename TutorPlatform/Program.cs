@@ -19,11 +19,15 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:5174")
+        policy.SetIsOriginAllowed(origin => !string.IsNullOrEmpty(origin) && (new Uri(origin).Host is "localhost" or "127.0.0.1"))
+
+
+
+
+
+
+
+
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -170,6 +174,23 @@ if (args.Contains("--seed-demo"))
 {
     await DemoTutorSeeder.SeedAsync(app.Services);
     return;
+}
+
+if (app.Environment.IsDevelopment())
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TutorPlatformDbContext>();
+        if (!await db.TutorProfiles.AnyAsync())
+        {
+            await DemoTutorSeeder.SeedAsync(app.Services);
+        }
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Không thể tự động nạp gia sư demo lúc khởi động.");
+    }
 }
 
 if (app.Environment.IsDevelopment())

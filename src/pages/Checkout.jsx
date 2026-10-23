@@ -93,10 +93,13 @@ export default function Checkout() {
   const initPayment = useCallback(async (bId) => {
     try {
       setPaying(true);
+      setError("");
       const res = await createPaymentIntent(Number(bId));
       setPaymentData(res);
-    } catch {
-      // Cho phép người dùng bấm lại nút nếu auto-init gặp sự cố mạng
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "Không thể khởi tạo mã VietQR tự động.";
+      console.warn("Payment auto-init error:", msg);
+      setError(msg);
     } finally {
       setPaying(false);
     }
