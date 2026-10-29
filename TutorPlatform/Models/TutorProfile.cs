@@ -29,6 +29,12 @@ public partial class TutorProfile
 
     public bool IsPublished { get; set; }
 
+    public bool IsSosReady { get; set; }
+
+    public DateTime? SosReadyAt { get; set; }
+
+    public DateTime? LastSosHeartbeat { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

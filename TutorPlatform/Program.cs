@@ -91,6 +91,7 @@ builder.Services.AddScoped<GroupChatService>();
 builder.Services.AddScoped<TutorWorkspaceService>();
 builder.Services.AddScoped<TutorTestService>();
 builder.Services.AddScoped<PaymentService>();
+builder.Services.AddScoped<SosService>();
 
 var payOsSection = builder.Configuration.GetSection("PayOS");
 builder.Services.AddSingleton(new PayOS.PayOSClient(
@@ -100,6 +101,7 @@ builder.Services.AddSingleton(new PayOS.PayOSClient(
 ));
 
 builder.Services.AddHostedService<LessonReminderService>();
+builder.Services.AddHostedService<SosSessionExpiryService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 10_000_000;

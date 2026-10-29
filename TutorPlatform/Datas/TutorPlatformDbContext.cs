@@ -84,6 +84,10 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<UserBankAccount> UserBankAccounts { get; set; }
 
+    public virtual DbSet<SosRequest> SosRequests { get; set; }
+
+    public virtual DbSet<SosSession> SosSessions { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -210,6 +214,7 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.LastMessageAt).HasColumnType("datetime");
+            entity.Property(e => e.GroupId);
 
             entity.HasOne(d => d.Booking).WithMany(p => p.Conversations)
                 .HasForeignKey(d => d.BookingId)
@@ -284,6 +289,8 @@ public partial class TutorPlatformDbContext : DbContext
             entity.HasKey(e => e.MessageId).HasName("PK__Messages__C87C0C9C4A0B76CF");
 
             entity.Property(e => e.Content).HasMaxLength(2000);
+            entity.Property(e => e.AttachmentUrl).HasMaxLength(500);
+            entity.Property(e => e.AttachmentType).HasMaxLength(50);
             entity.Property(e => e.SentAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -681,6 +688,9 @@ public partial class TutorPlatformDbContext : DbContext
             entity.Property(e => e.VerificationStatus)
                 .HasMaxLength(30)
                 .HasDefaultValue("Pending");
+            entity.Property(e => e.IsSosReady).HasDefaultValue(false);
+            entity.Property(e => e.SosReadyAt).HasColumnType("datetime");
+            entity.Property(e => e.LastSosHeartbeat).HasColumnType("datetime");
 
             entity.HasOne(d => d.Tutor).WithOne(p => p.TutorProfile)
                 .HasForeignKey<TutorProfile>(d => d.TutorId)
@@ -830,6 +840,50 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_UserBankAccounts_Users");
+        });
+
+        modelBuilder.Entity<SosRequest>(entity =>
+        {
+            entity.ToTable("SosRequests");
+            entity.HasKey(e => e.RequestId);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.QuestionNote).HasMaxLength(1000);
+            entity.Property(e => e.FeeAmount).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            entity.Property(e => e.ExpiresAt).HasColumnType("datetime");
+            entity.Property(e => e.ClaimedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.ClaimedByTutor).WithMany().HasForeignKey(e => e.ClaimedByTutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Conversation).WithMany().HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<SosSession>(entity =>
+        {
+            entity.ToTable("SosSessions");
+            entity.HasKey(e => e.SessionId);
+            entity.Property(e => e.VideoRoomId).HasMaxLength(200);
+            entity.Property(e => e.StartedAt).HasColumnType("datetime");
+            entity.Property(e => e.EndsAt).HasColumnType("datetime").ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.EndedAt).HasColumnType("datetime");
+            entity.Property(e => e.FeeAmount).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.PayoutStatus).HasMaxLength(20);
+            entity.Property(e => e.GatewayTransactionId).HasMaxLength(100);
+
+            entity.HasOne(e => e.Request).WithMany().HasForeignKey(e => e.RequestId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Tutor).WithMany().HasForeignKey(e => e.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Conversation).WithMany().HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);
