@@ -11,6 +11,8 @@ public partial class Question
 
     public int? SubjectId { get; set; }
 
+    public string? GradeLevel { get; set; }
+
     public string Content { get; set; } = null!;
 
     public string OptionA { get; set; } = null!;

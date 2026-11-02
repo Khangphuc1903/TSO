@@ -11,6 +11,8 @@ public partial class TutorSubject
 
     public int SubjectId { get; set; }
 
+    public string? GradeLevel { get; set; }
+
     public bool IsVerified { get; set; }
 
     public DateTime? VerifiedAt { get; set; }

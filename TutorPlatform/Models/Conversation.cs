@@ -11,6 +11,8 @@ public partial class Conversation
 
     public int User2Id { get; set; }
 
+    public int? GroupId { get; set; }
+
     public int? BookingId { get; set; }
 
     public DateTime CreatedAt { get; set; }

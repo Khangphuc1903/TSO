@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { GraduationCap, ClipboardList } from "lucide-react";
+import { GraduationCap, ClipboardList, BookOpenCheck } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Discovery", to: "/" },
@@ -51,6 +51,13 @@ export default function Navbar() {
             className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
           >
             Sign In
+          </Link>
+
+          <Link
+            to="/tutor-tests"
+            className="hidden lg:flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
+          >
+            <BookOpenCheck size={16} /> Tutor Test
           </Link>
 
           <div className="hidden sm:block h-6 w-px bg-slate-200" />

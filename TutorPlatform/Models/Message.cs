@@ -13,6 +13,10 @@ public partial class Message
 
     public string Content { get; set; } = null!;
 
+    public string? AttachmentUrl { get; set; }
+
+    public string? AttachmentType { get; set; }
+
     public bool IsRead { get; set; }
 
     public DateTime SentAt { get; set; }

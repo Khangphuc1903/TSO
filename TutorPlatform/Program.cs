@@ -19,11 +19,15 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:5174")
+        policy.SetIsOriginAllowed(origin => !string.IsNullOrEmpty(origin) && (new Uri(origin).Host is "localhost" or "127.0.0.1"))
+
+
+
+
+
+
+
+
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -85,7 +89,19 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<StudyGroupService>();
 builder.Services.AddScoped<GroupChatService>();
 builder.Services.AddScoped<TutorWorkspaceService>();
+builder.Services.AddScoped<TutorTestService>();
+builder.Services.AddScoped<PaymentService>();
+builder.Services.AddScoped<SosService>();
+
+var payOsSection = builder.Configuration.GetSection("PayOS");
+builder.Services.AddSingleton(new PayOS.PayOSClient(
+    payOsSection["ClientId"] ?? "",
+    payOsSection["ApiKey"] ?? "",
+    payOsSection["ChecksumKey"] ?? ""
+));
+
 builder.Services.AddHostedService<LessonReminderService>();
+builder.Services.AddHostedService<SosSessionExpiryService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 10_000_000;
@@ -122,6 +138,37 @@ BEGIN
     );
     CREATE INDEX IX_StudyGroupMessages_Group_SentAt ON dbo.StudyGroupMessages(GroupId, SentAt);
 END
+
+-- ==== Tutor subject knowledge test: Level + Subject + Grade (Lớp) support ====
+-- Backward-compatible: only adds NULLABLE columns; never drops/modifies existing data.
+IF OBJECT_ID(N'dbo.Questions', N'U') IS NOT NULL AND COL_LENGTH('Questions','GradeLevel') IS NULL
+    ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.Question', N'U') IS NOT NULL AND COL_LENGTH('Question','GradeLevel') IS NULL
+    ALTER TABLE Question ADD GradeLevel NVARCHAR(50) NULL;
+
+IF OBJECT_ID(N'dbo.TutorTestAttempts', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempts','GradeLevel') IS NULL
+    ALTER TABLE TutorTestAttempts ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.TutorTestAttempt', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempt','GradeLevel') IS NULL
+    ALTER TABLE TutorTestAttempt ADD GradeLevel NVARCHAR(50) NULL;
+
+IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL AND COL_LENGTH('TutorSubjects','GradeLevel') IS NULL
+    ALTER TABLE TutorSubjects ADD GradeLevel NVARCHAR(50) NULL;
+IF OBJECT_ID(N'dbo.TutorSubject', N'U') IS NOT NULL AND COL_LENGTH('TutorSubject','GradeLevel') IS NULL
+    ALTER TABLE TutorSubject ADD GradeLevel NVARCHAR(50) NULL;
+
+-- One tutor may register the same subject for several grades, so the old
+-- (TutorId, SubjectId) unique index is replaced by grade-aware unique indexes.
+IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_TutorSubject' AND parent_object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        ALTER TABLE TutorSubjects DROP CONSTRAINT UQ_TutorSubject;
+    ELSE IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        DROP INDEX UQ_TutorSubject ON TutorSubjects;
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_Combo' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_Combo ON TutorSubjects (TutorId, SubjectId, GradeLevel) WHERE GradeLevel IS NOT NULL;');
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_NoGrade' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;');
+END
 ");
 }
 
@@ -129,6 +176,23 @@ if (args.Contains("--seed-demo"))
 {
     await DemoTutorSeeder.SeedAsync(app.Services);
     return;
+}
+
+if (app.Environment.IsDevelopment())
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TutorPlatformDbContext>();
+        if (!await db.TutorProfiles.AnyAsync())
+        {
+            await DemoTutorSeeder.SeedAsync(app.Services);
+        }
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Không thể tự động nạp gia sư demo lúc khởi động.");
+    }
 }
 
 if (app.Environment.IsDevelopment())

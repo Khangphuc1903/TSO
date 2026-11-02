@@ -82,6 +82,12 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<Wishlist> Wishlists { get; set; }
 
+    public virtual DbSet<UserBankAccount> UserBankAccounts { get; set; }
+
+    public virtual DbSet<SosRequest> SosRequests { get; set; }
+
+    public virtual DbSet<SosSession> SosSessions { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -208,6 +214,7 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.LastMessageAt).HasColumnType("datetime");
+            entity.Property(e => e.GroupId);
 
             entity.HasOne(d => d.Booking).WithMany(p => p.Conversations)
                 .HasForeignKey(d => d.BookingId)
@@ -282,6 +289,8 @@ public partial class TutorPlatformDbContext : DbContext
             entity.HasKey(e => e.MessageId).HasName("PK__Messages__C87C0C9C4A0B76CF");
 
             entity.Property(e => e.Content).HasMaxLength(2000);
+            entity.Property(e => e.AttachmentUrl).HasMaxLength(500);
+            entity.Property(e => e.AttachmentType).HasMaxLength(50);
             entity.Property(e => e.SentAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -387,6 +396,7 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Difficulty).HasMaxLength(20);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.OptionA).HasMaxLength(255);
             entity.Property(e => e.OptionB).HasMaxLength(255);
@@ -678,6 +688,9 @@ public partial class TutorPlatformDbContext : DbContext
             entity.Property(e => e.VerificationStatus)
                 .HasMaxLength(30)
                 .HasDefaultValue("Pending");
+            entity.Property(e => e.IsSosReady).HasDefaultValue(false);
+            entity.Property(e => e.SosReadyAt).HasColumnType("datetime");
+            entity.Property(e => e.LastSosHeartbeat).HasColumnType("datetime");
 
             entity.HasOne(d => d.Tutor).WithOne(p => p.TutorProfile)
                 .HasForeignKey<TutorProfile>(d => d.TutorId)
@@ -689,8 +702,14 @@ public partial class TutorPlatformDbContext : DbContext
         {
             entity.HasKey(e => e.TutorSubjectId).HasName("PK__TutorSub__2D58B9FBB68C7880");
 
-            entity.HasIndex(e => new { e.TutorId, e.SubjectId }, "UQ_TutorSubject").IsUnique();
+            entity.HasIndex(e => new { e.GradeLevel, e.SubjectId, e.TutorId }, "UQ_TutorSubject_Combo")
+                .IsUnique()
+                .HasFilter("([GradeLevel] IS NOT NULL)");
+            entity.HasIndex(e => new { e.SubjectId, e.TutorId }, "UQ_TutorSubject_NoGrade")
+                .IsUnique()
+                .HasFilter("([GradeLevel] IS NULL)");
 
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.VerifiedAt).HasColumnType("datetime");
 
             entity.HasOne(d => d.Subject).WithMany(p => p.TutorSubjects)
@@ -729,6 +748,7 @@ public partial class TutorPlatformDbContext : DbContext
             entity.HasKey(e => e.AttemptId).HasName("PK__TutorTes__891A68E6D1E8EAD4");
 
             entity.Property(e => e.AttemptNumber).HasDefaultValue(1);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
             entity.Property(e => e.PassThreshold).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.ScorePercent).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.StartedAt).HasColumnType("datetime");
@@ -801,6 +821,69 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.TutorId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Wishlist_Tutor");
+        });
+
+        modelBuilder.Entity<UserBankAccount>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("UserBankAccounts");
+            entity.Property(e => e.BankCode).HasMaxLength(20);
+            entity.Property(e => e.BankName).HasMaxLength(100);
+            entity.Property(e => e.AccountNumber).HasMaxLength(30);
+            entity.Property(e => e.AccountHolderName).HasMaxLength(100);
+            entity.Property(e => e.QrCodeUrl).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnType("datetime");
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_UserBankAccounts_Users");
+        });
+
+        modelBuilder.Entity<SosRequest>(entity =>
+        {
+            entity.ToTable("SosRequests");
+            entity.HasKey(e => e.RequestId);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.QuestionNote).HasMaxLength(1000);
+            entity.Property(e => e.FeeAmount).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            entity.Property(e => e.ExpiresAt).HasColumnType("datetime");
+            entity.Property(e => e.ClaimedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.ClaimedByTutor).WithMany().HasForeignKey(e => e.ClaimedByTutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Conversation).WithMany().HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<SosSession>(entity =>
+        {
+            entity.ToTable("SosSessions");
+            entity.HasKey(e => e.SessionId);
+            entity.Property(e => e.VideoRoomId).HasMaxLength(200);
+            entity.Property(e => e.StartedAt).HasColumnType("datetime");
+            entity.Property(e => e.EndsAt).HasColumnType("datetime").ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.EndedAt).HasColumnType("datetime");
+            entity.Property(e => e.FeeAmount).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.PayoutStatus).HasMaxLength(20);
+            entity.Property(e => e.GatewayTransactionId).HasMaxLength(100);
+
+            entity.HasOne(e => e.Request).WithMany().HasForeignKey(e => e.RequestId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Tutor).WithMany().HasForeignKey(e => e.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(e => e.Conversation).WithMany().HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -177,6 +177,8 @@ public class BookingListItemDto
     public string TeachingMode { get; set; } = null!;
     public string? Location { get; set; }
     public bool IsToday { get; set; }
+    public string? PaymentStatus { get; set; }
+    public string? PaymentUrl { get; set; }
 }
 
 public class UserProfileDto

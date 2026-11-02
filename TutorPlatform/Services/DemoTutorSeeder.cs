@@ -50,7 +50,7 @@ public static class DemoTutorSeeder
                 "https://i.pravatar.cc/300?img=13", "0901111001",
                 "Gia su Data Science, huong dan Python, Machine Learning va thong ke ung dung cho sinh vien.",
                 "Dai hoc Bach Khoa Ha Noi", "Khoa hoc May tinh", 8, 250000, 450000, "Online", "Verified", 4.90m, 12,
-                new[] { "Tieng Anh", "Toan" },
+                new[] { "Tiếng Anh", "Toán" },
                 new[] { ("IELTS 8.0", "British Council", "2022-05-10"), ("AWS Cloud Practitioner", "Amazon", "2023-01-20") },
                 new[] { (1, "18:00", "20:00"), (3, "19:00", "21:00"), (6, "09:00", "11:00") }),
             new DemoTutor(
@@ -58,7 +58,7 @@ public static class DemoTutorSeeder
                 "https://i.pravatar.cc/300?img=47", "0901111002",
                 "Chuyen Toan cap 3 va luyen thi Dai hoc. Giai de chi tiet, tap trung tu duy.",
                 "Dai hoc Su Pham Ha Noi", "Su pham Toan", 6, 180000, 300000, "Both", "Verified", 5.00m, 20,
-                new[] { "Toan", "Vat Ly" },
+                new[] { "Toán", "Vật Lý" },
                 new[] { ("Chung chi Su pham Toan", "Bo GD&DT", "2020-08-01"), ("IMO Trainer", "VMO", "2021-11-15") },
                 new[] { (2, "17:30", "19:30"), (4, "17:30", "19:30"), (0, "08:00", "10:00") }),
             new DemoTutor(
@@ -66,7 +66,7 @@ public static class DemoTutorSeeder
                 "https://i.pravatar.cc/300?img=12", "0901111003",
                 "Full-stack web: React, Node.js, CSS. Kem cap do an va phong van junior.",
                 "RMIT Vietnam", "Software Engineering", 5, 220000, 400000, "Online", "Verified", 4.80m, 9,
-                new[] { "Tieng Anh" },
+                new[] { "Tiếng Anh" },
                 new[] { ("Meta Front-End Certificate", "Coursera", "2023-03-12") },
                 new[] { (1, "20:00", "22:00"), (5, "20:00", "22:00") }),
             new DemoTutor(
@@ -74,7 +74,7 @@ public static class DemoTutorSeeder
                 "https://i.pravatar.cc/300?img=48", "0901111004",
                 "Luyen Writing va van hoc Anh. Sua bai luan, IELTS Writing task 1-2.",
                 "University of Cambridge", "English Literature", 10, 300000, 550000, "Both", "Verified", 4.90m, 18,
-                new[] { "Van", "Tieng Anh" },
+                new[] { "Ngữ Văn", "Tiếng Anh" },
                 new[] { ("CELTA", "Cambridge English", "2018-06-01"), ("IELTS 8.5", "IDP", "2024-02-02") },
                 new[] { (2, "19:00", "21:00"), (6, "14:00", "16:00") }),
             new DemoTutor(
@@ -82,7 +82,7 @@ public static class DemoTutorSeeder
                 "https://i.pravatar.cc/300?img=15", "0901111005",
                 "Gia su Hoa va Sinh cap 3, on thi khoi B. Bai tap theo chuyen de, de minh hoa.",
                 "Dai hoc Y Duoc Hue", "Hoa Sinh", 4, 150000, 250000, "Offline", "Verified", 4.70m, 7,
-                new[] { "Hoa Hoc", "Sinh Hoc" },
+                new[] { "Hóa Học", "Sinh Học" },
                 new[] { ("Olympic Hoa sinh vien", "Bo GD&DT", "2019-04-18") },
                 new[] { (3, "18:00", "20:00"), (5, "18:00", "20:00"), (6, "09:00", "11:00") })
         };
@@ -114,8 +114,8 @@ public static class DemoTutorSeeder
     {
         var needed = new (string Name, string Level)[]
         {
-            ("Toan", "Secondary"), ("Van", "Secondary"), ("Tieng Anh", "Secondary"),
-            ("Vat Ly", "HighSchool"), ("Hoa Hoc", "HighSchool"), ("Sinh Hoc", "HighSchool")
+            ("Toán", "Secondary"), ("Ngữ Văn", "Secondary"), ("Tiếng Anh", "Secondary"),
+            ("Vật Lý", "HighSchool"), ("Hóa Học", "HighSchool"), ("Sinh Học", "HighSchool")
         };
         foreach (var (name, level) in needed)
         {

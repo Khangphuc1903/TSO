@@ -13,6 +13,8 @@ public partial class TutorTestAttempt
 
     public int? SubjectId { get; set; }
 
+    public string? GradeLevel { get; set; }
+
     public int TotalQuestions { get; set; }
 
     public int CorrectCount { get; set; }
