@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Send, Users, X } from "lucide-react";
+import { ChevronRight, Users, X } from "lucide-react";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
 import { createAppHub } from "../api/hub";
-import { getStudyGroup, getStudyGroupMessages, sendStudyGroupMessage } from "../api/studyGroups";
+import { getStudyGroup, getStudyGroupMessages, sendStudyGroupAttachment, sendStudyGroupMessage } from "../api/studyGroups";
 import { openConversation } from "../api/study";
+import { ChatComposer, ChatMessageBody } from "./ChatMedia";
 
 export default function GroupChatPane({ groupId, title, members: membersProp = [], className = "" }) {
   const navigate = useNavigate();
@@ -14,7 +15,6 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
   const [members, setMembers] = useState(membersProp);
   const [groupTitle, setGroupTitle] = useState(title || "Chat nhóm");
   const [showMembers, setShowMembers] = useState(false);
-  const [text, setText] = useState("");
   const [error, setError] = useState("");
   const bottomRef = useRef(null);
   const hubRef = useRef(null);
@@ -61,16 +61,16 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!text.trim()) return;
+  const handleSend = async ({ content, file }) => {
     try {
-      const msg = await sendStudyGroupMessage(groupId, text.trim());
+      const msg = file
+        ? await sendStudyGroupAttachment(groupId, { content, file })
+        : await sendStudyGroupMessage(groupId, content);
       setMessages((prev) => (prev.some((m) => m.messageId === msg.messageId) ? prev : [...prev, msg]));
-      setText("");
       setError("");
     } catch (err) {
       setError(err.response?.data?.message || "Không gửi được tin nhắn.");
+      throw err;
     }
   };
 
@@ -130,7 +130,7 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
                   }`}
                 >
                   {!mine && <p className="text-[11px] font-medium text-brand-600 mb-0.5">{m.senderName}</p>}
-                  <p>{m.content}</p>
+                  <ChatMessageBody m={m} mine={mine} />
                   {m.sentAt && (
                     <p className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-slate-400"}`}>
                       {new Date(m.sentAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
@@ -143,21 +143,7 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={handleSend} className="p-3 border-t border-slate-100 flex gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Nhắn với nhóm..."
-            className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-          />
-          <button
-            type="submit"
-            className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg px-4 text-sm transition-colors"
-          >
-            Gửi
-            <Send size={15} />
-          </button>
-        </form>
+        <ChatComposer onSend={handleSend} placeholder="Nhắn với nhóm, gửi ảnh hoặc file..." />
       </div>
 
       {showMembers && (

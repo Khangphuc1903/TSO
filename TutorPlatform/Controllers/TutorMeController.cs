@@ -51,6 +51,7 @@ public class TutorMeController : ControllerBase
     }
 
     [HttpPost("certificates")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10_000_000)]
     [RequestFormLimits(MultipartBodyLengthLimit = 10_000_000)]

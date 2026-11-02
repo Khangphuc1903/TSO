@@ -124,6 +124,15 @@ public sealed class SosService
         return MapRequest(request, subjectName);
     }
 
+    public async Task<object> GetConfigAsync(CancellationToken cancellationToken)
+    {
+        decimal fee;
+        try { fee = await GetSettingDecimalAsync("SosFeeAmount", cancellationToken); }
+        catch { fee = 25000m; }
+        var minutes = await GetSettingIntAsync("SosDurationMinutes", 15, cancellationToken);
+        return new { feeAmount = fee, durationMinutes = minutes };
+    }
+
     public async Task<List<SosRequestDto>> OpenRequestsAsync(int tutorId, CancellationToken cancellationToken)
     {
         await RequireReadyTutorAsync(tutorId, cancellationToken);
@@ -134,7 +143,7 @@ public sealed class SosService
                         r.Subject.TutorSubjects.Any(ts => ts.TutorId == tutorId && ts.IsVerified))
             .OrderBy(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
-        return requests.Select(r => MapRequest(r, r.Subject.SubjectName)).ToList();
+        return await MapRequestsAsync(requests, cancellationToken);
     }
 
     public async Task<List<SosRequestDto>> MyRequestsAsync(int userId, CancellationToken cancellationToken)
@@ -144,7 +153,7 @@ public sealed class SosService
             .Where(r => r.StudentId == userId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
-        return requests.Select(r => MapRequest(r, r.Subject.SubjectName)).ToList();
+        return await MapRequestsAsync(requests, cancellationToken);
     }
 
     public async Task<SosRequestDto> GetRequestAsync(
@@ -172,7 +181,11 @@ public sealed class SosService
         if (!allowed)
             throw new UnauthorizedAccessException();
 
-        return MapRequest(request, request.Subject.SubjectName);
+        var sessionId = await _db.SosSessions.AsNoTracking()
+            .Where(s => s.RequestId == request.RequestId)
+            .Select(s => (int?)s.SessionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return MapRequest(request, request.Subject.SubjectName, sessionId);
     }
 
     public async Task<SosRequestDto> ClaimAsync(int tutorId, int requestId, CancellationToken cancellationToken)
@@ -228,7 +241,7 @@ public sealed class SosService
             new { requestId, tutorId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
         await _hub.Clients.User(tutorId.ToString()).SendAsync("SosSessionStarted",
             new { requestId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
-        return MapRequest(claimed, claimed.Subject.SubjectName);
+        return MapRequest(claimed, claimed.Subject.SubjectName, session.SessionId);
     }
 
     public async Task SetReadyAsync(int tutorId, bool isReady, CancellationToken cancellationToken)
@@ -261,7 +274,11 @@ public sealed class SosService
 
     public async Task<SosSessionDto> GetSessionAsync(int userId, int sessionId, CancellationToken cancellationToken)
     {
-        var session = await _db.SosSessions.AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken)
+        var session = await _db.SosSessions.AsNoTracking()
+            .Include(s => s.Request).ThenInclude(r => r.Subject)
+            .Include(s => s.Student)
+            .Include(s => s.Tutor).ThenInclude(t => t.Tutor)
+            .SingleOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken)
             ?? throw new KeyNotFoundException("Không tìm thấy phiên SOS.");
         if (session.StudentId != userId && session.TutorId != userId)
             throw new UnauthorizedAccessException();
@@ -367,7 +384,7 @@ public sealed class SosService
         var value = await _db.PlatformSettings.Where(s => s.SettingKey == key)
             .Select(s => s.SettingValue).SingleOrDefaultAsync(ct);
         if (!decimal.TryParse(value, out var amount) || amount < 0)
-            throw new InvalidOperationException("Cấu hình SosFeeAmount không hợp lệ.");
+            return 25000m;
         return amount;
     }
 
@@ -424,19 +441,42 @@ public sealed class SosService
         }
     }
 
-    private static SosRequestDto MapRequest(SosRequest request, string subjectName) => new()
+    private async Task<List<SosRequestDto>> MapRequestsAsync(List<SosRequest> requests, CancellationToken cancellationToken)
+    {
+        if (requests.Count == 0) return new List<SosRequestDto>();
+        var ids = requests.Select(r => r.RequestId).ToList();
+        var sessions = await _db.SosSessions.AsNoTracking()
+            .Where(s => ids.Contains(s.RequestId))
+            .Select(s => new { s.RequestId, s.SessionId })
+            .ToListAsync(cancellationToken);
+        var map = sessions.ToDictionary(s => s.RequestId, s => (int?)s.SessionId);
+        return requests.Select(r =>
+        {
+            map.TryGetValue(r.RequestId, out var sid);
+            return MapRequest(r, r.Subject.SubjectName, sid);
+        }).ToList();
+    }
+
+    private static SosRequestDto MapRequest(SosRequest request, string subjectName, int? sessionId = null) => new()
     {
         RequestId = request.RequestId, StudentId = request.StudentId, SubjectId = request.SubjectId,
         SubjectName = subjectName, ImageUrl = request.ImageUrl, QuestionNote = request.QuestionNote,
         FeeAmount = request.FeeAmount, Status = request.Status, ClaimedByTutorId = request.ClaimedByTutorId,
-        ConversationId = request.ConversationId, CreatedAt = request.CreatedAt, ExpiresAt = request.ExpiresAt,
+        ConversationId = request.ConversationId, SessionId = sessionId,
+        CreatedAt = request.CreatedAt, ExpiresAt = request.ExpiresAt,
         ClaimedAt = request.ClaimedAt
     };
 
     private static SosSessionDto MapSession(SosSession session) => new()
     {
         SessionId = session.SessionId, RequestId = session.RequestId, StudentId = session.StudentId,
-        TutorId = session.TutorId, ConversationId = session.ConversationId, StartedAt = session.StartedAt,
+        StudentName = session.Student?.FullName,
+        TutorId = session.TutorId, TutorName = session.Tutor?.Tutor?.FullName,
+        ConversationId = session.ConversationId,
+        SubjectName = session.Request?.Subject?.SubjectName,
+        ImageUrl = session.Request?.ImageUrl,
+        QuestionNote = session.Request?.QuestionNote,
+        StartedAt = session.StartedAt,
         EndsAt = session.EndsAt ?? session.StartedAt.AddMinutes(session.DurationMinutes),
         EndedAt = session.EndedAt, DurationMinutes = session.DurationMinutes, FeeAmount = session.FeeAmount,
         PayoutStatus = session.PayoutStatus

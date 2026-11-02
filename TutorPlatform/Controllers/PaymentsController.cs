@@ -79,6 +79,7 @@ public class PaymentsController : ControllerBase
     }
 
     [AllowAnonymous]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPost("payos-webhook")]
     public async Task<IActionResult> HandlePayOsWebhook([FromBody] Webhook body, CancellationToken ct)
     {
@@ -142,6 +143,8 @@ public class PaymentsController : ControllerBase
     }
 
     [Authorize]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    [Consumes("multipart/form-data")]
     [HttpPost("upload-qr")]
     public async Task<IActionResult> UploadQrImage([FromForm] IFormFile file, CancellationToken ct)
     {

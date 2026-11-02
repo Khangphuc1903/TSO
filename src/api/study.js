@@ -51,6 +51,14 @@ export async function sendMessage(conversationId, content) {
   return res.data;
 }
 
+export async function sendMessageAttachment(conversationId, { content, file }) {
+  const data = new FormData();
+  if (content) data.append("content", content);
+  data.append("file", file);
+  const res = await axiosClient.post(`/conversations/${conversationId}/messages/attachment`, data);
+  return res.data;
+}
+
 export async function getMyBookings() {
   const res = await axiosClient.get("/bookings/mine");
   return res.data;

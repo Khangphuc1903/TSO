@@ -36,28 +36,55 @@ public class TutorTestService
         var latestAttempts = await LoadLatestAttemptsAsync(tutorId, cancellationToken);
         var result = new List<TutorTestLevelDto>();
 
-        foreach (var subject in subjects)
+        var groups = subjects
+            .Select(s => new
+            {
+                s.SubjectId,
+                s.SubjectName,
+                Level = VietnameseText.CanonicalEducationLevel(s.EducationLevel)
+            })
+            .Where(s => s.Level is "THCS" or "THPT")
+            .GroupBy(s => (s.Level, Key: VietnameseText.Fold(s.SubjectName)));
+
+        foreach (var group in groups)
         {
-            var levelDto = result.FirstOrDefault(level => level.EducationLevel == subject.EducationLevel);
+            var levelKey = group.Key.Level;
+            var ids = group.Select(s => s.SubjectId).ToHashSet();
+            var displayName = VietnameseText.PreferDisplayName(group.Select(s => s.SubjectName));
+            var entries = questionCounts
+                .Where(item => ids.Contains(item.SubjectId) && item.GradeLevel != null)
+                .GroupBy(item => item.GradeLevel!)
+                .Select(g => new { GradeLevel = g.Key, Count = g.Sum(x => x.Count) })
+                .ToList();
+            if (entries.Count == 0)
+                continue;
+
+            var canonicalId = group
+                .OrderByDescending(s => questionCounts.Where(q => q.SubjectId == s.SubjectId).Sum(q => q.Count))
+                .ThenByDescending(s => VietnameseText.Fold(s.SubjectName) != s.SubjectName)
+                .Select(s => s.SubjectId)
+                .First();
+
+            var levelDto = result.FirstOrDefault(level => level.EducationLevel == levelKey);
             if (levelDto == null)
             {
-                levelDto = new TutorTestLevelDto { EducationLevel = subject.EducationLevel };
+                levelDto = new TutorTestLevelDto { EducationLevel = levelKey };
                 result.Add(levelDto);
             }
 
             var subjectDto = new TutorTestSubjectDto
             {
-                SubjectId = subject.SubjectId,
-                SubjectName = subject.SubjectName,
+                SubjectId = canonicalId,
+                SubjectName = displayName,
                 QuestionCount = 0,
                 Grades = new List<TutorTestGradeDto>()
             };
-            foreach (var entry in questionCounts.Where(item => item.SubjectId == subject.SubjectId && item.GradeLevel != null))
+            foreach (var entry in entries)
             {
-                var latest = LatestFor(latestAttempts, subject.SubjectId, entry.GradeLevel);
+                var latest = LatestForAny(latestAttempts, ids, entry.GradeLevel);
                 subjectDto.Grades.Add(new TutorTestGradeDto
                 {
-                    GradeLevel = entry.GradeLevel!,
+                    GradeLevel = entry.GradeLevel,
                     QuestionCount = entry.Count,
                     Status = StatusOf(latest),
                     LatestScorePercent = latest?.ScorePercent,
@@ -71,6 +98,9 @@ public class TutorTestService
             levelDto.Subjects.Add(subjectDto);
         }
 
+        foreach (var level in result)
+            level.Subjects.Sort((a, b) => string.Compare(a.SubjectName, b.SubjectName, StringComparison.CurrentCulture));
+        result.Sort((a, b) => string.Compare(a.EducationLevel, b.EducationLevel, StringComparison.Ordinal));
         return result;
     }
 
@@ -961,6 +991,20 @@ public class TutorTestService
 
     private static LatestAttempt? LatestFor(Dictionary<string, LatestAttempt> map, int subjectId, string? gradeLevel)
         => map.TryGetValue(KeyOf(subjectId, gradeLevel), out var latest) ? latest : null;
+
+    private static LatestAttempt? LatestForAny(
+        Dictionary<string, LatestAttempt> map, HashSet<int> subjectIds, string? gradeLevel)
+    {
+        LatestAttempt? best = null;
+        foreach (var id in subjectIds)
+        {
+            var latest = LatestFor(map, id, gradeLevel);
+            if (latest == null) continue;
+            if (best == null || latest.SubmittedAt > best.SubmittedAt)
+                best = latest;
+        }
+        return best;
+    }
 
     private class GradeQuestionCount
     {

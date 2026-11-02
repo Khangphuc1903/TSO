@@ -103,6 +103,7 @@ export default function Navbar() {
           { label: "Trang chủ", to: "/" },
           { label: "Tìm gia sư", to: "/tutors" },
           { label: "Nhóm học", to: "/study-groups" },
+          { label: "SOS", to: "/sos" },
           { label: "Hỏi đáp", to: "/faq" },
 
         { label: isTutor ? "Lịch dạy" : "Lịch học", to: "/bookings" },

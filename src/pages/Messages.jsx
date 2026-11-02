@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { MessageCircle, Search, Send, Sparkles, Users } from "lucide-react";
+import { MessageCircle, Search, Sparkles, Users } from "lucide-react";
+import { ChatComposer, ChatMessageBody } from "../components/ChatMedia";
 import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
 import { createAppHub } from "../api/hub";
-import { getConversations, getMessages, sendMessage } from "../api/study";
+import { getConversations, getMessages, sendMessage, sendMessageAttachment } from "../api/study";
 import { getMyStudyGroupChats } from "../api/studyGroups";
 
 export default function Messages() {
@@ -20,7 +21,6 @@ export default function Messages() {
   const [convos, setConvos] = useState([]);
   const [groups, setGroups] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [text, setText] = useState("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [sendError, setSendError] = useState("");
@@ -121,17 +121,18 @@ export default function Messages() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!text.trim() || !activeId) return;
+  const handleSend = async ({ content, file }) => {
+    if (!activeId) return;
     setSendError("");
     try {
-      const msg = await sendMessage(activeId, text.trim());
+      const msg = file
+        ? await sendMessageAttachment(activeId, { content, file })
+        : await sendMessage(activeId, content);
       appendMessage(msg);
-      setText("");
       loadConvos();
     } catch (err) {
       setSendError(err.response?.data?.message || "Không gửi được tin nhắn. Thử đăng xuất rồi đăng nhập lại.");
+      throw err;
     }
   };
 
@@ -359,7 +360,7 @@ export default function Messages() {
                                   {m.senderEmail ? ` · ${m.senderEmail}` : ""}
                                 </p>
                               )}
-                              <p>{m.content}</p>
+                              <ChatMessageBody m={m} mine={mine} />
                               {m.sentAt && (
                                 <p className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-slate-400"}`}>
                                   {new Date(m.sentAt).toLocaleTimeString("vi-VN", {
@@ -374,28 +375,14 @@ export default function Messages() {
                       })}
                       <div ref={bottomRef} />
                     </div>
-                    <form onSubmit={handleSend} className="p-3 border-t border-slate-100 space-y-2">
+                    <div>
                       {sendError && (
-                        <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                        <div className="mx-3 mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                           {sendError}
                         </div>
                       )}
-                      <div className="flex gap-2">
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Nhắn tin..."
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-                      />
-                      <button
-                        type="submit"
-                        className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg px-4 text-sm transition-colors"
-                      >
-                        Gửi
-                        <Send size={15} />
-                      </button>
-                      </div>
-                    </form>
+                      <ChatComposer onSend={handleSend} placeholder="Nhắn tin, gửi ảnh hoặc file..." />
+                    </div>
                   </>
                 )}
               </section>

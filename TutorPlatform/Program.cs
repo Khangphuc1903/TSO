@@ -108,22 +108,32 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 });
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.CustomSchemaIds(type => (type.FullName ?? type.Name).Replace("+", "."));
+    options.MapType<IFormFile>(() => new Microsoft.OpenApi.Models.OpenApiSchema
+    {
+        Type = "string",
+        Format = "binary"
+    });
+});
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TutorPlatformDbContext>();
-    await db.Database.ExecuteSqlRawAsync(@"
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("""
 IF NOT EXISTS (SELECT 1 FROM Roles WHERE RoleName = N'Pending')
     INSERT INTO Roles (RoleName) VALUES (N'Pending');
 
 IF COL_LENGTH('Users','EmailConfirmExpiry') IS NULL
-    ALTER TABLE Users ADD EmailConfirmExpiry DATETIME NULL;
+    EXEC(N'ALTER TABLE Users ADD EmailConfirmExpiry DATETIME NULL');
 
 IF COL_LENGTH('StudyGroupMembers','JoinMessage') IS NULL
-    ALTER TABLE StudyGroupMembers ADD JoinMessage NVARCHAR(500) NULL;
+    EXEC(N'ALTER TABLE StudyGroupMembers ADD JoinMessage NVARCHAR(500) NULL');
 
 IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NULL
 BEGIN
@@ -139,37 +149,45 @@ BEGIN
     CREATE INDEX IX_StudyGroupMessages_Group_SentAt ON dbo.StudyGroupMessages(GroupId, SentAt);
 END
 
--- ==== Tutor subject knowledge test: Level + Subject + Grade (Lớp) support ====
--- Backward-compatible: only adds NULLABLE columns; never drops/modifies existing data.
 IF OBJECT_ID(N'dbo.Questions', N'U') IS NOT NULL AND COL_LENGTH('Questions','GradeLevel') IS NULL
-    ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL;
-IF OBJECT_ID(N'dbo.Question', N'U') IS NOT NULL AND COL_LENGTH('Question','GradeLevel') IS NULL
-    ALTER TABLE Question ADD GradeLevel NVARCHAR(50) NULL;
-
+    EXEC(N'ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL');
 IF OBJECT_ID(N'dbo.TutorTestAttempts', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempts','GradeLevel') IS NULL
-    ALTER TABLE TutorTestAttempts ADD GradeLevel NVARCHAR(50) NULL;
-IF OBJECT_ID(N'dbo.TutorTestAttempt', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempt','GradeLevel') IS NULL
-    ALTER TABLE TutorTestAttempt ADD GradeLevel NVARCHAR(50) NULL;
-
+    EXEC(N'ALTER TABLE TutorTestAttempts ADD GradeLevel NVARCHAR(50) NULL');
 IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL AND COL_LENGTH('TutorSubjects','GradeLevel') IS NULL
-    ALTER TABLE TutorSubjects ADD GradeLevel NVARCHAR(50) NULL;
-IF OBJECT_ID(N'dbo.TutorSubject', N'U') IS NOT NULL AND COL_LENGTH('TutorSubject','GradeLevel') IS NULL
-    ALTER TABLE TutorSubject ADD GradeLevel NVARCHAR(50) NULL;
+    EXEC(N'ALTER TABLE TutorSubjects ADD GradeLevel NVARCHAR(50) NULL');
 
--- One tutor may register the same subject for several grades, so the old
--- (TutorId, SubjectId) unique index is replaced by grade-aware unique indexes.
+IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMessages','AttachmentUrl') IS NULL
+    EXEC(N'ALTER TABLE StudyGroupMessages ADD AttachmentUrl NVARCHAR(500) NULL');
+IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMessages','AttachmentType') IS NULL
+    EXEC(N'ALTER TABLE StudyGroupMessages ADD AttachmentType NVARCHAR(50) NULL');
+
+IF OBJECT_ID(N'dbo.PlatformSettings', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosFeeAmount')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosFeeAmount', N'25000', N'Phí SOS cứu viện 15 phút (VNĐ)', GETDATE());
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosDurationMinutes')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosDurationMinutes', N'15', N'Thời lượng phiên SOS (phút)', GETDATE());
+END
+
 IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL
 BEGIN
     IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_TutorSubject' AND parent_object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         ALTER TABLE TutorSubjects DROP CONSTRAINT UQ_TutorSubject;
-    ELSE IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         DROP INDEX UQ_TutorSubject ON TutorSubjects;
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_Combo' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_Combo ON TutorSubjects (TutorId, SubjectId, GradeLevel) WHERE GradeLevel IS NOT NULL;');
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_NoGrade' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;');
 END
-");
+""");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Bo qua SQL khoi tao schema (cot/bang da co).");
+    }
 }
 
 if (args.Contains("--seed-demo"))

@@ -61,6 +61,31 @@ public class TutorTestServiceTests
     }
 
     [Fact]
+    public async Task Catalog_MergesAccentedAndUnaccentedDuplicateSubjects()
+    {
+        await using var db = CreateDbContext();
+        db.Subjects.AddRange(
+            new Subject { SubjectId = 1, SubjectName = "Toan", EducationLevel = "Secondary", IsActive = true },
+            new Subject { SubjectId = 2, SubjectName = "Toán", EducationLevel = "THCS", IsActive = true },
+            new Subject { SubjectId = 3, SubjectName = "Vat Ly", EducationLevel = "HighSchool", IsActive = true },
+            new Subject { SubjectId = 4, SubjectName = "Vật Lý", EducationLevel = "THPT", IsActive = true });
+        db.Questions.AddRange(
+            Question(1, 1, "THCS", "A"),
+            Question(2, 1, "THCS", "B"),
+            Question(3, 3, "THPT", "A"));
+        await db.SaveChangesAsync();
+
+        var catalog = await new TutorTestService(db).ListCatalogAsync(1, CancellationToken.None);
+        Assert.Equal(new[] { "THCS", "THPT" }, catalog.Select(l => l.EducationLevel).ToArray());
+        Assert.Single(catalog[0].Subjects);
+        Assert.Equal("Toán", catalog[0].Subjects[0].SubjectName);
+        Assert.Equal(1, catalog[0].Subjects[0].SubjectId);
+        Assert.Equal(2, catalog[0].Subjects[0].QuestionCount);
+        Assert.Single(catalog[1].Subjects);
+        Assert.Equal("Vật Lý", catalog[1].Subjects[0].SubjectName);
+    }
+
+    [Fact]
     public async Task LevelSubjectGradeFlow_CombosAreTrackedIndependently()
     {
         await using var db = CreateDbContext();

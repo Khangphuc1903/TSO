@@ -14,6 +14,8 @@ public partial class TutorPlatformDbContext
             entity.HasKey(e => e.MessageId);
             entity.ToTable("StudyGroupMessages");
             entity.Property(e => e.Content).HasMaxLength(2000);
+            entity.Property(e => e.AttachmentUrl).HasMaxLength(500);
+            entity.Property(e => e.AttachmentType).HasMaxLength(50);
             entity.Property(e => e.SentAt).HasColumnType("datetime");
             entity.HasIndex(e => new { e.GroupId, e.SentAt });
 

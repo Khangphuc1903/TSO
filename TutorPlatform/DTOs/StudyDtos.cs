@@ -30,12 +30,14 @@ public class ChatMessageDto
     public int SenderId { get; set; }
     public string SenderName { get; set; } = null!;
     public string Content { get; set; } = null!;
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentType { get; set; }
     public DateTime SentAt { get; set; }
 }
 
 public class SendMessageDto
 {
-    public string Content { get; set; } = null!;
+    public string? Content { get; set; }
 }
 
 public class OpenConversationDto
@@ -131,7 +133,7 @@ public class RespondJoinRequestDto
 
 public class SendGroupMessageDto
 {
-    public string Content { get; set; } = null!;
+    public string? Content { get; set; }
 }
 
 public class GroupChatMessageDto
@@ -142,6 +144,8 @@ public class GroupChatMessageDto
     public string SenderName { get; set; } = null!;
     public string? SenderAvatarUrl { get; set; }
     public string Content { get; set; } = null!;
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentType { get; set; }
     public DateTime SentAt { get; set; }
 }
 

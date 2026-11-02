@@ -47,6 +47,35 @@ function bandOfLevel(educationLevel) {
   return educationLevel || "THCS";
 }
 
+function foldVi(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mergeSubjects(list) {
+  const map = new Map();
+  for (const subj of list || []) {
+    const key = foldVi(subj.subjectName);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...subj, grades: [...(subj.grades || [])] });
+      continue;
+    }
+    const accent = (s) => [...String(s || "")].filter((c) => c.charCodeAt(0) > 127).length;
+    if (accent(subj.subjectName) > accent(prev.subjectName)) prev.subjectName = subj.subjectName;
+    if ((subj.questionCount || 0) > (prev.questionCount || 0)) {
+      prev.subjectId = subj.subjectId;
+      prev.questionCount = subj.questionCount;
+    }
+  }
+  return [...map.values()];
+}
+
 function formatClock(totalSeconds) {
   const s = Math.max(0, totalSeconds);
   const m = Math.floor(s / 60);
@@ -129,17 +158,23 @@ export default function TutorTests() {
       .finally(() => setLoading(false));
   }, [navigate, isTutor]);
 
-  const levels = useMemo(
-    () =>
-      catalog.filter((l) => {
-        const v = (l.educationLevel || "").toLowerCase();
-        return v.includes("secondary") || v.includes("high") || v.includes("thcs") || v.includes("thpt");
-      }),
-    [catalog]
-  );
+  const levels = useMemo(() => {
+    const map = new Map();
+    for (const l of catalog) {
+      const band = bandOfLevel(l.educationLevel);
+      if (band !== "THCS" && band !== "THPT") continue;
+      const prev = map.get(band);
+      if (!prev) {
+        map.set(band, { educationLevel: band, subjects: mergeSubjects(l.subjects) });
+      } else {
+        prev.subjects = mergeSubjects([...(prev.subjects || []), ...(l.subjects || [])]);
+      }
+    }
+    return ["THCS", "THPT"].filter((k) => map.has(k)).map((k) => map.get(k));
+  }, [catalog]);
   const levelSubjects = useMemo(() => {
     const lv = levels.find((l) => l.educationLevel === level);
-    return lv ? lv.subjects : [];
+    return lv ? mergeSubjects(lv.subjects) : [];
   }, [levels, level]);
 
   const startExam = async ({ testType, subjectId: sid, gradeLevel, educationLevel }) => {

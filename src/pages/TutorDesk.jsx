@@ -232,6 +232,12 @@ export default function TutorDesk() {
                 Làm bài test
               </Link>
               <Link
+                to="/sos"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium"
+              >
+                Cứu viện SOS
+              </Link>
+              <Link
                 to="/bookings"
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
               >

@@ -11,11 +11,13 @@ public class GroupChatService
 {
     private readonly TutorPlatformDbContext _db;
     private readonly IHubContext<AppHub> _hub;
+    private readonly IWebHostEnvironment _environment;
 
-    public GroupChatService(TutorPlatformDbContext db, IHubContext<AppHub> hub)
+    public GroupChatService(TutorPlatformDbContext db, IHubContext<AppHub> hub, IWebHostEnvironment environment)
     {
         _db = db;
         _hub = hub;
+        _environment = environment;
     }
 
     public async Task<bool> CanAccessAsync(int userId, int groupId, CancellationToken cancellationToken)
@@ -74,7 +76,7 @@ public class GroupChatService
                 Title = g.Title,
                 SubjectName = g.Subject.SubjectName,
                 MemberCount = g.StudyGroupMembers.Count(m => m.Status == "Accepted"),
-                LastMessage = last?.Content,
+                LastMessage = ChatAttachmentStore.PreviewText(last?.Content, last?.AttachmentType),
                 LastMessageAt = last?.SentAt
             };
         }).OrderByDescending(g => g.LastMessageAt ?? DateTime.MinValue).ToList();
@@ -95,12 +97,26 @@ public class GroupChatService
         return items.Select(Map).ToList();
     }
 
-    public async Task<GroupChatMessageDto> SendAsync(int userId, int groupId, string content, CancellationToken cancellationToken)
+    public async Task<GroupChatMessageDto> SendAsync(
+        int userId,
+        int groupId,
+        string? content,
+        IFormFile? file,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(content))
-            throw new InvalidOperationException("Nội dung trống.");
-        if (content.Trim().Length > 2000)
+        if (content is { Length: > 2000 })
             throw new InvalidOperationException("Tin nhắn tối đa 2000 ký tự.");
+
+        string? attachmentUrl = null;
+        string? attachmentType = null;
+        if (file is not null)
+        {
+            (attachmentUrl, attachmentType) = await ChatAttachmentStore.SaveAsync(
+                _environment, file, "group-chat", cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(content) && attachmentUrl is null)
+            throw new InvalidOperationException("Nhập tin nhắn hoặc đính kèm ảnh/tệp.");
         if (!await CanAccessAsync(userId, groupId, cancellationToken))
             throw new UnauthorizedAccessException();
 
@@ -111,7 +127,9 @@ public class GroupChatService
         {
             GroupId = groupId,
             SenderId = userId,
-            Content = content.Trim(),
+            Content = ChatAttachmentStore.FallbackContent(content, attachmentType),
+            AttachmentUrl = attachmentUrl,
+            AttachmentType = attachmentType,
             SentAt = DateTime.Now
         };
         _db.StudyGroupMessages.Add(msg);
@@ -125,6 +143,8 @@ public class GroupChatService
             SenderName = sender.FullName,
             SenderAvatarUrl = sender.AvatarUrl,
             Content = msg.Content,
+            AttachmentUrl = msg.AttachmentUrl,
+            AttachmentType = msg.AttachmentType,
             SentAt = msg.SentAt
         };
 
@@ -140,6 +160,8 @@ public class GroupChatService
         SenderName = m.Sender.FullName,
         SenderAvatarUrl = m.Sender.AvatarUrl,
         Content = m.Content,
+        AttachmentUrl = m.AttachmentUrl,
+        AttachmentType = m.AttachmentType,
         SentAt = m.SentAt
     };
 }

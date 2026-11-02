@@ -74,7 +74,34 @@ public class StudyGroupsController : ControllerBase
         if (UserId is not int userId) return Unauthorized();
         try
         {
-            var msg = await _groupChat.SendAsync(userId, id, dto.Content, cancellationToken);
+            var msg = await _groupChat.SendAsync(userId, id, dto.Content, null, cancellationToken);
+            return Ok(msg);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/messages/attachment")]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(10_000_000)]
+    public async Task<IActionResult> SendAttachment(
+        int id,
+        [FromForm] string? content,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        try
+        {
+            var msg = await _groupChat.SendAsync(userId, id, content, file, cancellationToken);
             return Ok(msg);
         }
         catch (UnauthorizedAccessException)

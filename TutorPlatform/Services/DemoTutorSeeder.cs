@@ -117,11 +117,18 @@ public static class DemoTutorSeeder
             ("Toán", "Secondary"), ("Ngữ Văn", "Secondary"), ("Tiếng Anh", "Secondary"),
             ("Vật Lý", "HighSchool"), ("Hóa Học", "HighSchool"), ("Sinh Học", "HighSchool")
         };
+        var existing = await db.Subjects.AsNoTracking().Select(s => s.SubjectName).ToListAsync();
         foreach (var (name, level) in needed)
         {
-            var exists = await db.Subjects.AnyAsync(s => s.SubjectName == name);
+            var folded = VietnameseText.Fold(name);
+            var exists = existing.Any(n =>
+                string.Equals(n, name, StringComparison.OrdinalIgnoreCase) ||
+                VietnameseText.Fold(n) == folded);
             if (!exists)
+            {
                 db.Subjects.Add(new Subject { SubjectName = name, EducationLevel = level, IsActive = true });
+                existing.Add(name);
+            }
         }
         await db.SaveChangesAsync();
     }

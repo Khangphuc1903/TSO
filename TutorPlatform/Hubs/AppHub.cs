@@ -54,4 +54,21 @@ public class AppHub : Hub
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, $"group-{groupId}");
     }
+
+    public async Task SosCallSignal(int sessionId, string type, string payload)
+    {
+        if (!int.TryParse(Context.UserIdentifier, out var userId))
+            throw new HubException("Không xác định được người dùng.");
+        var allowed = await _db.SosSessions.AsNoTracking()
+            .AnyAsync(s => s.SessionId == sessionId && (s.StudentId == userId || s.TutorId == userId));
+        if (!allowed)
+            throw new HubException("Bạn không có quyền gọi SOS này.");
+        await Clients.OthersInGroup($"sos-session-{sessionId}").SendAsync("SosCallSignal", new
+        {
+            sessionId,
+            type,
+            payload,
+            fromUserId = userId
+        });
+    }
 }

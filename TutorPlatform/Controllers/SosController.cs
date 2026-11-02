@@ -22,6 +22,7 @@ public sealed class SosController : ControllerBase
 
     [HttpPost("requests")]
     [Authorize(Roles = "Student")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10_000_000)]
     public async Task<IActionResult> Create(
@@ -43,6 +44,11 @@ public sealed class SosController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpGet("config")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Config(CancellationToken cancellationToken)
+        => Ok(await _sos.GetConfigAsync(cancellationToken));
 
     [HttpGet("requests/open")]
     [Authorize(Roles = "Tutor")]

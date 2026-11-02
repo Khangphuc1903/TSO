@@ -34,6 +34,8 @@ const PaymentResult = lazy(() => import("./pages/PaymentResult"));
 const Cart = lazy(() => import("./pages/Cart"));
 const Wishlist = lazy(() => import("./pages/Wishlist"));
 const PaymentHistory = lazy(() => import("./pages/PaymentHistory"));
+const SosRescue = lazy(() => import("./pages/SosRescue"));
+const SosSession = lazy(() => import("./pages/SosSession"));
 
 function OnboardingGate({ children }) {
   const loc = useLocation();
@@ -93,6 +95,8 @@ function App() {
             <Route path="/payments" element={<PaymentHistory />} />
             <Route path="/checkout/:bookingId" element={<Checkout />} />
             <Route path="/payment/result" element={<PaymentResult />} />
+            <Route path="/sos" element={<SosRescue />} />
+            <Route path="/sos/session/:sessionId" element={<SosSession />} />
 
             <Route path="/tutor-tests" element={<TutorTests />} />
             <Route path="/tutor-identity" element={<TutorIdentity />} />

@@ -45,6 +45,14 @@ export async function sendStudyGroupMessage(id, content) {
   return res.data;
 }
 
+export async function sendStudyGroupAttachment(id, { content, file }) {
+  const data = new FormData();
+  if (content) data.append("content", content);
+  data.append("file", file);
+  const res = await axiosClient.post(`/study-groups/${id}/messages/attachment`, data);
+  return res.data;
+}
+
 export async function removeStudyGroupMember(groupId, userId) {
   const res = await axiosClient.post(`/study-groups/${groupId}/members/${userId}/remove`);
   return res.data;

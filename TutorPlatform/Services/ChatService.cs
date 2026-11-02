@@ -11,11 +11,13 @@ public class ChatService
 {
     private readonly TutorPlatformDbContext _db;
     private readonly IHubContext<AppHub> _hub;
+    private readonly IWebHostEnvironment _environment;
 
-    public ChatService(TutorPlatformDbContext db, IHubContext<AppHub> hub)
+    public ChatService(TutorPlatformDbContext db, IHubContext<AppHub> hub, IWebHostEnvironment environment)
     {
         _db = db;
         _hub = hub;
+        _environment = environment;
     }
 
     public async Task<Conversation> GetOrCreateAsync(int userId, int otherUserId, int? bookingId, CancellationToken cancellationToken)
@@ -64,7 +66,7 @@ public class ChatService
                 OtherUserId = other.UserId,
                 OtherUserName = other.FullName,
                 OtherAvatarUrl = other.AvatarUrl,
-                LastMessage = last?.Content,
+                LastMessage = ChatAttachmentStore.PreviewText(last?.Content, last?.AttachmentType),
                 LastMessageAt = c.LastMessageAt,
                 UnreadCount = c.Messages.Count(m => m.SenderId != userId && !m.IsRead)
             };
@@ -90,10 +92,23 @@ public class ChatService
         return items.Select(Map).ToList();
     }
 
-    public async Task<ChatMessageDto> SendAsync(int userId, int conversationId, string content, CancellationToken cancellationToken)
+    public async Task<ChatMessageDto> SendAsync(
+        int userId,
+        int conversationId,
+        string? content,
+        IFormFile? file,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(content))
-            throw new InvalidOperationException("Nội dung trống.");
+        string? attachmentUrl = null;
+        string? attachmentType = null;
+        if (file is not null)
+        {
+            (attachmentUrl, attachmentType) = await ChatAttachmentStore.SaveAsync(
+                _environment, file, "chat", cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(content) && attachmentUrl is null)
+            throw new InvalidOperationException("Nhập tin nhắn hoặc đính kèm ảnh/tệp.");
 
         var conv = await RequireMember(userId, conversationId, cancellationToken);
         var sender = await _db.Users.FindAsync(new object[] { userId }, cancellationToken);
@@ -101,7 +116,9 @@ public class ChatService
         {
             ConversationId = conversationId,
             SenderId = userId,
-            Content = content.Trim(),
+            Content = ChatAttachmentStore.FallbackContent(content, attachmentType),
+            AttachmentUrl = attachmentUrl,
+            AttachmentType = attachmentType,
             IsRead = false,
             SentAt = DateTime.Now
         };
@@ -109,15 +126,7 @@ public class ChatService
         conv.LastMessageAt = msg.SentAt;
         await _db.SaveChangesAsync(cancellationToken);
 
-        var dto = new ChatMessageDto
-        {
-            MessageId = msg.MessageId,
-            ConversationId = conversationId,
-            SenderId = userId,
-            SenderName = sender?.FullName ?? "User",
-            Content = msg.Content,
-            SentAt = msg.SentAt
-        };
+        var dto = Map(msg, sender?.FullName ?? "User");
 
         await _hub.Clients.Group($"conv-{conversationId}").SendAsync("ReceiveMessage", dto, cancellationToken);
         var otherId = conv.User1Id == userId ? conv.User2Id : conv.User1Id;
@@ -134,13 +143,17 @@ public class ChatService
         return conv;
     }
 
-    private static ChatMessageDto Map(Message m) => new()
+    private static ChatMessageDto Map(Message m) => Map(m, m.Sender.FullName);
+
+    private static ChatMessageDto Map(Message m, string senderName) => new()
     {
         MessageId = m.MessageId,
         ConversationId = m.ConversationId,
         SenderId = m.SenderId,
-        SenderName = m.Sender.FullName,
+        SenderName = senderName,
         Content = m.Content,
+        AttachmentUrl = m.AttachmentUrl,
+        AttachmentType = m.AttachmentType,
         SentAt = m.SentAt
     };
 }

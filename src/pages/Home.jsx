@@ -18,7 +18,8 @@ import {
   Heart,
   CheckCircle2,
   Play,
-  Lock
+  Lock,
+  Siren
 } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
@@ -200,6 +201,24 @@ export default function Home() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 mt-6">
+        <Link
+          to="/sos"
+          className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-4 hover:bg-rose-100/70 transition"
+        >
+          <span className="h-11 w-11 rounded-xl bg-rose-600 text-white grid place-items-center shrink-0">
+            <Siren size={20} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900">Cứu viện bài tập 15 phút</p>
+            <p className="text-sm text-slate-600">
+              Chụp đề, gọi SOS. Gia sư online nhận đơn, chat + gọi audio 15 phút. Chat nhóm vẫn gửi ảnh/file, không gọi.
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-rose-700 whitespace-nowrap">Mở SOS →</span>
+        </Link>
       </div>
 
       {/* ═══════════════════ HOW IT WORKS ═══════════════════ */}
