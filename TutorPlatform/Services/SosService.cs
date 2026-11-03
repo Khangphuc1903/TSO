@@ -17,17 +17,20 @@ public sealed class SosService
 
     private readonly TutorPlatformDbContext _db;
     private readonly IHubContext<AppHub> _hub;
+    private readonly NotificationService _notifications;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SosService> _logger;
 
     public SosService(
         TutorPlatformDbContext db,
         IHubContext<AppHub> hub,
+        NotificationService notifications,
         IWebHostEnvironment environment,
         ILogger<SosService> logger)
     {
         _db = db;
         _hub = hub;
+        _notifications = notifications;
         _environment = environment;
         _logger = logger;
     }
@@ -121,6 +124,17 @@ public sealed class SosService
             }
         }
 
+        foreach (var tutorId in tutorIds)
+        {
+            await NotifyTutorAsync(
+                tutorId,
+                "SosRequest",
+                "Có yêu cầu SOS mới",
+                $"Có yêu cầu trợ giúp môn {subjectName}.",
+                request.RequestId,
+                cancellationToken);
+        }
+
         return MapRequest(request, subjectName);
     }
 
@@ -191,7 +205,7 @@ public sealed class SosService
     public async Task<SosRequestDto> ClaimAsync(int tutorId, int requestId, CancellationToken cancellationToken)
     {
         await RequireReadyTutorAsync(tutorId, cancellationToken);
-        var request = await _db.SosRequests.Include(r => r.Subject)
+        var request = await _db.SosRequests.AsNoTracking().Include(r => r.Subject)
             .FirstOrDefaultAsync(r => r.RequestId == requestId, cancellationToken)
             ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu SOS.");
         if (!await _db.TutorSubjects.AnyAsync(ts =>
@@ -209,7 +223,7 @@ public sealed class SosService
         if (changed != 1)
             throw new InvalidOperationException("Yêu cầu đã được gia sư khác nhận hoặc đã hết hạn.");
 
-        var claimed = await _db.SosRequests.Include(r => r.Subject)
+        var claimed = await _db.SosRequests.AsNoTracking().Include(r => r.Subject)
             .SingleAsync(r => r.RequestId == requestId, cancellationToken);
         var conversation = new Conversation
         {
@@ -221,6 +235,14 @@ public sealed class SosService
         await _db.SaveChangesAsync(cancellationToken);
 
         var duration = await GetSettingIntAsync("SosDurationMinutes", 15, cancellationToken);
+        var conversationUpdated = await _db.SosRequests
+            .Where(r => r.RequestId == requestId &&
+                        r.Status == "Claimed" &&
+                        r.ClaimedByTutorId == tutorId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                r => r.ConversationId, conversation.ConversationId), cancellationToken);
+        if (conversationUpdated != 1)
+            throw new InvalidOperationException("Không thể cập nhật yêu cầu SOS đã nhận.");
         claimed.ConversationId = conversation.ConversationId;
         var session = new SosSession
         {
@@ -229,6 +251,7 @@ public sealed class SosService
             TutorId = tutorId,
             ConversationId = conversation.ConversationId,
             StartedAt = now,
+            EndsAt = now.AddMinutes(duration),
             DurationMinutes = duration,
             FeeAmount = claimed.FeeAmount,
             PayoutStatus = "Held"
@@ -241,6 +264,31 @@ public sealed class SosService
             new { requestId, tutorId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
         await _hub.Clients.User(tutorId.ToString()).SendAsync("SosSessionStarted",
             new { requestId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
+
+        var otherTutorIds = await _db.TutorProfiles
+            .Where(t => t.TutorId != tutorId &&
+                        t.IsSosReady &&
+                        t.VerificationStatus == "Verified" &&
+                        t.IsPublished &&
+                        t.Tutor.Status == "Active" &&
+                        t.TutorSubjects.Any(ts => ts.SubjectId == claimed.SubjectId && ts.IsVerified))
+            .Select(t => t.TutorId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var otherTutorId in otherTutorIds)
+        {
+            await NotifyTutorAsync(
+                otherTutorId,
+                "SosRequestClaimed",
+                "Yêu cầu SOS đã được nhận",
+                "Yêu cầu SOS này đã được một gia sư khác nhận.",
+                requestId,
+                cancellationToken);
+        }
+
+        await _hub.Clients.Users(otherTutorIds.Select(id => id.ToString()).ToList())
+            .SendAsync("SosRequestClaimedByOther",
+                new { requestId, tutorId, sessionId = session.SessionId }, cancellationToken);
         return MapRequest(claimed, claimed.Subject.SubjectName, session.SessionId);
     }
 
@@ -377,6 +425,35 @@ public sealed class SosService
             t.VerificationStatus == "Verified" && t.Tutor.Status == "Active", cancellationToken);
         if (!ready || !SosPresence.IsOnline(tutorId))
             throw new UnauthorizedAccessException("Gia sư chưa ở trạng thái SOS Ready hoặc đang offline.");
+    }
+
+    private async Task NotifyTutorAsync(
+        int tutorId,
+        string type,
+        string title,
+        string content,
+        int requestId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _notifications.NotifyAsync(
+                tutorId,
+                type,
+                title,
+                content,
+                "SosRequest",
+                requestId,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Unable to persist SOS notification for tutor {TutorId}, request {RequestId}",
+                tutorId,
+                requestId);
+        }
     }
 
     private async Task<decimal> GetSettingDecimalAsync(string key, CancellationToken ct)

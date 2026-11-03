@@ -12,7 +12,7 @@ public partial class SosSession
     public string? VideoRoomId { get; set; }
     public DateTime StartedAt { get; set; }
     public int DurationMinutes { get; set; }
-    public DateTime? EndsAt { get; private set; }
+    public DateTime? EndsAt { get; internal set; }
     public DateTime? EndedAt { get; set; }
     public decimal FeeAmount { get; set; }
     public string PayoutStatus { get; set; } = null!;
