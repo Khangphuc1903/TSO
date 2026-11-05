@@ -35,6 +35,7 @@ const Cart = lazy(() => import("./pages/Cart"));
 const Wishlist = lazy(() => import("./pages/Wishlist"));
 const PaymentHistory = lazy(() => import("./pages/PaymentHistory"));
 const SosRescue = lazy(() => import("./pages/SosRescue"));
+const AiDiagnosis = lazy(() => import("./pages/AiDiagnosis"));
 const SosSession = lazy(() => import("./pages/SosSession"));
 
 function OnboardingGate({ children }) {
@@ -96,6 +97,7 @@ function App() {
             <Route path="/checkout/:bookingId" element={<Checkout />} />
             <Route path="/payment/result" element={<PaymentResult />} />
             <Route path="/sos" element={<SosRescue />} />
+            <Route path="/ai-diagnosis" element={<AiDiagnosis />} />
             <Route path="/sos/session/:sessionId" element={<SosSession />} />
 
             <Route path="/tutor-tests" element={<TutorTests />} />

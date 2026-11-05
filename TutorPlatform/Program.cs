@@ -11,6 +11,7 @@ using TutorPlatform.Hubs;
 using TutorPlatform.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 builder.Services.AddDbContext<TutorPlatformDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -92,6 +93,8 @@ builder.Services.AddScoped<TutorWorkspaceService>();
 builder.Services.AddScoped<TutorTestService>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<SosService>();
+builder.Services.AddScoped<AiGeminiService>();
+builder.Services.AddScoped<AiMatchmakerService>();
 
 var payOsSection = builder.Configuration.GetSection("PayOS");
 builder.Services.AddSingleton(new PayOS.PayOSClient(
@@ -182,6 +185,36 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_TutorSubject_NoGrade' AND object_id = OBJECT_ID(N'dbo.TutorSubjects'))
         EXEC(N'CREATE UNIQUE INDEX UQ_TutorSubject_NoGrade ON TutorSubjects (TutorId, SubjectId) WHERE GradeLevel IS NULL;');
 END
+
+IF OBJECT_ID(N'dbo.UserBankAccounts', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.UserBankAccounts (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        UserId INT NOT NULL,
+        BankCode NVARCHAR(50) NOT NULL,
+        BankName NVARCHAR(255) NOT NULL,
+        AccountNumber NVARCHAR(50) NOT NULL,
+        AccountHolderName NVARCHAR(255) NOT NULL,
+        QrCodeUrl NVARCHAR(500) NULL,
+        IsDefault BIT NOT NULL DEFAULT 1,
+        CreatedAt DATETIME NOT NULL DEFAULT GETDATE(),
+        UpdatedAt DATETIME NULL,
+        CONSTRAINT FK_UserBankAccounts_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
+    );
+    CREATE UNIQUE INDEX IX_UserBankAccounts_User ON dbo.UserBankAccounts(UserId);
+END
+
+IF OBJECT_ID(N'dbo.Payments', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.Payments','PaymentUrl') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD PaymentUrl NVARCHAR(1000) NULL');
+    IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayTransactionId NVARCHAR(100) NULL');
+    IF COL_LENGTH('dbo.Payments','GatewayResponseCode') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayResponseCode NVARCHAR(50) NULL');
+    IF COL_LENGTH('dbo.Payments','CallbackReceivedAt') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD CallbackReceivedAt DATETIME NULL');
+END
 """);
     }
     catch (Exception ex)
@@ -206,6 +239,7 @@ if (app.Environment.IsDevelopment())
         {
             await DemoTutorSeeder.SeedAsync(app.Services);
         }
+        await KnowledgeTopicSeeder.SeedTopicsAsync(db);
     }
     catch (Exception ex)
     {

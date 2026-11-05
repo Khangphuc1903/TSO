@@ -97,6 +97,29 @@ public static class DemoTutorSeeder
         }
 
         await EnsureDemoReviewsAsync(db, student.UserId, createdTutors, subjects);
+
+        // Đảm bảo student.demo@tsg.com có sẵn đơn đặt lịch Pending để test ngay mã VietQR PayOS
+        if (!await db.Bookings.AnyAsync(b => b.StudentId == student.UserId && b.Status == "Pending"))
+        {
+            var firstTutor = createdTutors[0].UserId;
+            var firstSub = await db.TutorSubjects.Where(ts => ts.TutorId == firstTutor).Select(ts => ts.SubjectId).FirstAsync();
+            db.Bookings.Add(new Booking
+            {
+                StudentId = student.UserId,
+                TutorId = firstTutor,
+                SubjectId = firstSub,
+                ScheduledDate = DateOnly.FromDateTime(DateTime.Today.AddDays(2)),
+                StartTime = new TimeOnly(19, 0),
+                EndTime = new TimeOnly(21, 0),
+                TeachingMode = "Online",
+                Location = "Online",
+                Price = 250000,
+                Status = "Pending",
+                CreatedAt = DateTime.Now
+            });
+            await db.SaveChangesAsync();
+        }
+
         Console.WriteLine("Seed demo tutors xong. Login student: student.demo@tsg.com / Password123!");
     }
 

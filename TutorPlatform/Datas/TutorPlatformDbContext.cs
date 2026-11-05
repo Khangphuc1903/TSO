@@ -88,6 +88,11 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<SosSession> SosSessions { get; set; }
 
+    public virtual DbSet<KnowledgeTopic> KnowledgeTopics { get; set; }
+    public virtual DbSet<KnowledgeGapDiagnosis> KnowledgeGapDiagnoses { get; set; }
+    public virtual DbSet<TutorMatchSuggestion> TutorMatchSuggestions { get; set; }
+    public virtual DbSet<NaturalSearchQuery> NaturalSearchQueries { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -884,6 +889,89 @@ public partial class TutorPlatformDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull);
             entity.HasOne(e => e.Conversation).WithMany().HasForeignKey(e => e.ConversationId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<KnowledgeTopic>(entity =>
+        {
+            entity.ToTable("KnowledgeTopics");
+            entity.HasKey(e => e.TopicId);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
+            entity.Property(e => e.TopicName).HasMaxLength(200);
+            entity.Property(e => e.TopicCode).HasMaxLength(80);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<KnowledgeGapDiagnosis>(entity =>
+        {
+            entity.ToTable("KnowledgeGapDiagnoses");
+            entity.HasKey(e => e.DiagnosisId);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.AiSummary).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.Student)
+                .WithMany()
+                .HasForeignKey(e => e.StudentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId);
+
+            entity.HasOne(e => e.Topic)
+                .WithMany(t => t.KnowledgeGapDiagnoses)
+                .HasForeignKey(e => e.TopicId);
+        });
+
+        modelBuilder.Entity<TutorMatchSuggestion>(entity =>
+        {
+            entity.ToTable("TutorMatchSuggestions");
+            entity.HasKey(e => e.SuggestionId);
+            entity.HasIndex(e => new { e.DiagnosisId, e.TutorId }, "UQ_TMS").IsUnique();
+            entity.Property(e => e.MatchScore).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.Diagnosis)
+                .WithMany(d => d.TutorMatchSuggestions)
+                .HasForeignKey(e => e.DiagnosisId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Tutor)
+                .WithMany()
+                .HasForeignKey(e => e.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<NaturalSearchQuery>(entity =>
+        {
+            entity.ToTable("NaturalSearchQueries");
+            entity.HasKey(e => e.QueryId);
+            entity.Property(e => e.PromptText).HasMaxLength(1000);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
+            entity.Property(e => e.Gender).HasMaxLength(10);
+            entity.Property(e => e.TeachingMode).HasMaxLength(20);
+            entity.Property(e => e.PreferredDays).HasMaxLength(50);
+            entity.Property(e => e.PreferredTime).HasMaxLength(50);
+            entity.Property(e => e.MinPrice).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.MaxPrice).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId);
+
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId);
         });
 
         OnModelCreatingPartial(modelBuilder);

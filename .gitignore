@@ -31,3 +31,9 @@ lerna-debug.log*
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Uploaded test and user files
+TutorPlatform/wwwroot/uploads/diagnoses/*
+!TutorPlatform/wwwroot/uploads/diagnoses/.gitkeep
+test_homework.png
+*appsettings.Local.json

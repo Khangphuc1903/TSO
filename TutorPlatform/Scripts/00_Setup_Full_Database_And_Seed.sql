@@ -308,6 +308,24 @@ CREATE TABLE BookingReschedules (
    6. PAYMENT & REFUND
    ====================================================================== */
 
+IF OBJECT_ID(N'dbo.UserBankAccounts', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.UserBankAccounts (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        UserId INT NOT NULL,
+        BankCode NVARCHAR(50) NOT NULL,
+        BankName NVARCHAR(255) NOT NULL,
+        AccountNumber NVARCHAR(50) NOT NULL,
+        AccountHolderName NVARCHAR(255) NOT NULL,
+        QrCodeUrl NVARCHAR(500) NULL,
+        IsDefault BIT NOT NULL DEFAULT 1,
+        CreatedAt DATETIME NOT NULL DEFAULT GETDATE(),
+        UpdatedAt DATETIME NULL,
+        CONSTRAINT FK_UserBankAccounts_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
+    );
+    CREATE UNIQUE INDEX IX_UserBankAccounts_User ON dbo.UserBankAccounts(UserId);
+END;
+
 CREATE TABLE Payments (
     PaymentId       INT             IDENTITY(1,1) PRIMARY KEY,
     BookingId       INT             NOT NULL,

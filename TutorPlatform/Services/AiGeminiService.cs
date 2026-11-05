@@ -1,0 +1,305 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace TutorPlatform.Services;
+
+public class AiGeminiService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _config;
+    private readonly ILogger<AiGeminiService> _logger;
+
+    public AiGeminiService(HttpClient httpClient, IConfiguration config, ILogger<AiGeminiService> logger)
+    {
+        _httpClient = httpClient;
+        _config = config;
+        _logger = logger;
+    }
+
+    private string ApiKey => _config["Gemini:ApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "";
+    private string ModelName => _config["Gemini:Model"] ?? "gemini-2.5-flash";
+
+    /// <summary>
+    /// Chẩn đoán lỗ hổng kiến thức từ ảnh bài tập/đề thi qua Gemini Multimodal Vision
+    /// </summary>
+    public async Task<GeminiDiagnosisOutput?> DiagnoseHomeworkImageAsync(
+        byte[] imageBytes,
+        string mimeType,
+        string? studentNote,
+        CancellationToken ct = default)
+    {
+        var base64Image = Convert.ToBase64String(imageBytes);
+
+        var promptBuilder = new StringBuilder();
+        promptBuilder.AppendLine("=== HUẤN LUYỆN SƯ PHẠM CHUYÊN SÂU (CHƯƠNG TRÌNH GDPT 2018 BỘ GD&ĐT VIỆT NAM) ===");
+        promptBuilder.AppendLine("BẠN LÀ CHUYÊN GIA SƯ PHẠM CAO CẤP & CỐ VẤN KHẢO THÍ HÀNG ĐẦU.");
+        promptBuilder.AppendLine("NHIỆM VỤ: Phân tích ảnh chụp bài tập/đề thi/bài kiểm tra của học sinh và CHẨN ĐOÁN CHÍNH XÁC LỖ HỔNG KIẾN THỨC CỐT LÕI.");
+        if (!string.IsNullOrWhiteSpace(studentNote))
+        {
+            promptBuilder.AppendLine($"Ghi chú bổ sung của học sinh: \"{studentNote.Trim()}\"");
+        }
+        promptBuilder.AppendLine(@"
+QUY TRÌNH CHẨN ĐOÁN 4 BƯỚC (DIAGNOSTIC PROTOCOL):
+1. [OCR & Nhận diện]: Đọc chính xác nội dung đề bài, các công thức toán/lý/hóa/ngoại ngữ và từng bước làm bài viết tay của học sinh.
+2. [Phát hiện vị trí sai lệch (Error Localization)]: Xác định chính xác bước/dòng/câu mà học sinh bắt đầu làm sai hoặc ngộ nhận.
+3. [Phân loại bản chất sai lầm (Root Cause Analysis)]:
+   - Phân biệt rõ giữa:
+     + Sơ suất số học / tính toán cẩu thả (Calculation Slip) -> Severity: 'Minor'
+     + Nắm công thức nhưng thiếu kỹ năng biến đổi / phương pháp giải (Methodological Gap) -> Severity: 'Moderate'
+     + Hổng định nghĩa, ngộ nhận bản chất định lý, mất gốc lý thuyết (Conceptual Misconception) -> Severity: 'Critical'
+4. [Định vị Chuyên đề GDPT 2018]: Ánh xạ chính xác vào cây chuyên đề chuẩn (Toán, Vật Lý, Hóa Học, Tiếng Anh, Ngữ Văn, Sinh Học) từ Lớp 6 đến Lớp 12.
+5. [Phác đồ can thiệp 3-4 buổi]: Đưa ra kế hoạch gia sư kèm cặp đúng trọng tâm để lấy lại gốc và nâng cao điểm số.
+
+VÍ DỤ HUẤN LUYỆN MẪU (FEW-SHOT DEMONSTRATION):
+Ví dụ 1: Bài toán Hình học 11 - Tính khoảng cách từ điểm A đến mặt phẳng (SBC) trong hình chóp S.ABC:
+- Học sinh kẻ trực tiếp AH vuông góc với SB rồi kết luận AH là khoảng cách từ A đến (SBC).
+- Phân tích sai lầm: Học sinh ngộ nhận quan hệ vuông góc, quên mất điều kiện tiên quyết là mặt phẳng (SAB) phải vuông góc với (SBC) hoặc BC phải vuông góc với (SAB).
+- Định vị: Chuyên đề 'Hình học không gian - Khoảng cách', Lớp 11, Severity: 'Critical'.
+- Phác đồ: Buổi 1: Ôn lại Định lý 3 đường vuông góc & phương pháp xác định chân đường cao; Buổi 2: Kỹ thuật đổi điểm và tỷ số khoảng cách; Buổi 3: Luyện tập 5 dạng bài khoảng cách trọng tâm trong đề thi tốt nghiệp THPT.
+
+BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM BẤT KỲ VĂN BẢN NGOÀI KHỐI JSON):
+{
+  ""subjectName"": ""Toán"",
+  ""gradeLevel"": ""Lớp 11"",
+  ""topicName"": ""Hình học không gian - Khoảng cách"",
+  ""topicCode"": ""TOAN_11_HHKG_KHOANG_CACH"",
+  ""severity"": ""Critical"",
+  ""ocrText"": ""Cho hình chóp S.ABC có đáy ABC vuông tại B... Học sinh giải: Kẻ AH vuông góc SB => d(A,(SBC)) = AH"",
+  ""studentMistake"": ""Học sinh ngộ nhận đoạn vuông góc kẻ từ điểm A đến đường thẳng SB là khoảng cách tới mặt phẳng (SBC) khi chưa chứng minh mặt phẳng (SAB) vuông góc với (SBC)."",
+  ""aiSummary"": ""Mất gốc bản chất dựng khoảng cách từ điểm đến mặt phẳng trong Hình học không gian lớp 11"",
+  ""gapDetail"": ""Học sinh chưa nắm vững định lý ba đường vuông góc và phương pháp dựng hình chiếu vuông góc thông qua chân đường cao của hình chóp."",
+  ""studyPlan"": ""Lộ trình 3 buổi: Buổi 1: Nắm vững điều kiện đường vuông góc với mặt; Buổi 2: Phương pháp kẻ phụ qua chân đường cao; Buổi 3: Phương pháp đổi điểm tỷ số thể tích."",
+  ""recommendedKeywords"": [""Hình học không gian"", ""Khoảng cách"", ""Toán 11""]
+}");
+
+        var payload = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new
+                        {
+                            inlineData = new
+                            {
+                                mimeType = string.IsNullOrWhiteSpace(mimeType) ? "image/jpeg" : mimeType,
+                                data = base64Image
+                            }
+                        },
+                        new
+                        {
+                            text = promptBuilder.ToString()
+                        }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                temperature = 0.2,
+                topP = 0.8,
+                maxOutputTokens = 2048,
+                responseMimeType = "application/json"
+            }
+        };
+
+        var responseJson = await CallGeminiApiAsync(payload, ct);
+        if (string.IsNullOrWhiteSpace(responseJson)) return null;
+
+        return CleanAndParseJson<GeminiDiagnosisOutput>(responseJson);
+    }
+
+    /// <summary>
+    /// Chuyển đổi câu tìm kiếm tự nhiên của phụ huynh thành bộ lọc JSON
+    /// </summary>
+    public async Task<GeminiNaturalSearchOutput?> ParseNaturalSearchQueryAsync(
+        string userPrompt,
+        CancellationToken ct = default)
+    {
+        var prompt = $@"BẠN LÀ CHUYÊN GIA TƯ VẤN HỌC TẬP & PHÂN TÍCH NHU CẦU TÌM GIA SƯ TẠI VIỆT NAM.
+Nhiệm vụ: Phân tích ngữ nghĩa tự nhiên từ câu yêu cầu của phụ huynh/học sinh và trích xuất BỘ LỌC CẤU TRÚC JSON CHUẨN XÁC để hệ thống đối chiếu với hồ sơ gia sư.
+
+CÂU YÊU CẦU CỦA NGƯỜI DÙNG:
+""{userPrompt}""
+
+QUY TẮC BÓC TÁCH THỰC THỂ (ENTITY EXTRACTION):
+1. subjectName: Tên môn học chuẩn tiếng Việt có dấu (Toán, Vật Lý, Hóa Học, Tiếng Anh, Ngữ Văn, Sinh Học, Lịch Sử, Địa Lý, Tin Học). Nếu không nhắc đến môn cụ thể thì để null.
+2. gradeLevel: Khối lớp tương ứng (VD: 'Lớp 12', 'Lớp 11', 'Lớp 10', 'Lớp 9', 'Lớp 8', 'Lớp 7', 'Lớp 6', 'Lớp 5', 'Đại học').
+3. gender: 'Female' nếu yêu cầu nữ/cô giáo/chị gia sư; 'Male' nếu yêu cầu nam/thầy giáo/anh gia sư; null nếu không phân biệt.
+4. teachingMode: 'Online' nếu ghi học online/qua mạng/Google Meet; 'Offline' nếu ghi học trực tiếp/tại nhà/offline; null nếu không chỉ định rõ.
+5. preferredDays: Mảng các thứ trong tuần được nhắc tới, ví dụ [""2"", ""4"", ""6""] hoặc [""3"", ""5"", ""7""], [""CN""]. Nếu không nói thì để mảng rỗng [].
+6. preferredTime: 'Morning' (sáng), 'Afternoon' (chiều), 'Evening' (tối), hoặc null.
+7. minPrice / maxPrice: Giá tiền số nguyên (VNĐ). Ví dụ 'khoảng 180k/buổi' -> maxPrice: 180000; 'tầm 150k đến 250k' -> minPrice: 150000, maxPrice: 250000; 'dưới 200 nghìn' -> maxPrice: 200000.
+8. keywords: Các từ khóa quan trọng về tính cách, mục tiêu (VD: [""ôn thi ĐH"", ""khối A1"", ""kiên nhẫn"", ""nhiệt tình"", ""lấy lại gốc"", ""IELTS""]).
+9. explanation: Tóm tắt 1 câu ngắn gọn tiêu chí tìm kiếm vừa nhận diện.
+
+VÍ DỤ HUẤN LUYỆN (FEW-SHOT EXAMPLES):
+- Đầu vào: ""Cần tìm thầy giáo dạy Vật Lý 10 tại nhà khu vực Bình Thạnh tối 3 5 7 khoảng 200k/buổi""
+- Trả về JSON:
+  {{
+    ""subjectName"": ""Vật Lý"",
+    ""gradeLevel"": ""Lớp 10"",
+    ""gender"": ""Male"",
+    ""teachingMode"": ""Offline"",
+    ""preferredDays"": [""3"", ""5"", ""7""],
+    ""preferredTime"": ""Evening"",
+    ""minPrice"": null,
+    ""maxPrice"": 200000,
+    ""keywords"": [""Vật Lý 10"", ""Bình Thạnh""],
+    ""explanation"": ""Tìm gia sư nam dạy kèm Vật Lý lớp 10 tại nhà vào tối thứ 3, 5, 7 với học phí khoảng 200.000 VNĐ/buổi.""
+  }}
+
+BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM BẤT KỲ VĂN BẢN NGOÀI KHỐI JSON):
+{{
+  ""subjectName"": ""Toán"",
+  ""gradeLevel"": ""Lớp 12"",
+  ""gender"": ""Female"",
+  ""teachingMode"": ""Online"",
+  ""preferredDays"": [""2"", ""4"", ""6""],
+  ""preferredTime"": ""Evening"",
+  ""minPrice"": null,
+  ""maxPrice"": 180000,
+  ""keywords"": [""ôn thi ĐH"", ""khối A1"", ""kiên nhẫn""],
+  ""explanation"": ""Tìm kiếm gia sư nữ dạy môn Toán lớp 12, hình thức Online vào tối thứ 2, 4, 6 với học phí tối đa 180.000 VNĐ.""
+}}";
+
+        var payload = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new { text = prompt }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                temperature = 0.1,
+                maxOutputTokens = 2048,
+                responseMimeType = "application/json"
+            }
+        };
+
+        var responseJson = await CallGeminiApiAsync(payload, ct);
+        if (string.IsNullOrWhiteSpace(responseJson)) return null;
+
+        return CleanAndParseJson<GeminiNaturalSearchOutput>(responseJson);
+    }
+
+    private async Task<string?> CallGeminiApiAsync(object payload, CancellationToken ct)
+    {
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent?key={ApiKey}";
+        var jsonContent = JsonSerializer.Serialize(payload);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+        try
+        {
+            var response = await _httpClient.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Gemini API Error {StatusCode}: {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("candidates", out var candidates) &&
+                candidates.GetArrayLength() > 0 &&
+                candidates[0].TryGetProperty("content", out var content) &&
+                content.TryGetProperty("parts", out var parts))
+            {
+                var sb = new StringBuilder();
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var textEl))
+                    {
+                        sb.Append(textEl.GetString());
+                    }
+                }
+                return sb.ToString();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi gọi Gemini API");
+            return null;
+        }
+    }
+
+    private T? CleanAndParseJson<T>(string rawText) where T : class
+    {
+        try
+        {
+            var text = rawText.Trim();
+            // Xóa markdown code block ```json ... ``` nếu có
+            if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+            {
+                text = text.Substring(7);
+            }
+            else if (text.StartsWith("```"))
+            {
+                text = text.Substring(3);
+            }
+
+            if (text.EndsWith("```"))
+            {
+                text = text.Substring(0, text.Length - 3);
+            }
+
+            text = text.Trim();
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            return JsonSerializer.Deserialize<T>(text, options);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Không thể parse JSON từ Gemini output: {RawText}", rawText);
+            return null;
+        }
+    }
+}
+
+public class GeminiDiagnosisOutput
+{
+    public string? SubjectName { get; set; }
+    public string? GradeLevel { get; set; }
+    public string? TopicName { get; set; }
+    public string? TopicCode { get; set; }
+    public string? Severity { get; set; }
+    public string? OcrText { get; set; }
+    public string? StudentMistake { get; set; }
+    public string? AiSummary { get; set; }
+    public string? GapDetail { get; set; }
+    public string? StudyPlan { get; set; }
+    public List<string>? RecommendedKeywords { get; set; }
+}
+
+public class GeminiNaturalSearchOutput
+{
+    public string? SubjectName { get; set; }
+    public string? GradeLevel { get; set; }
+    public string? Gender { get; set; }
+    public string? TeachingMode { get; set; }
+    public List<string>? PreferredDays { get; set; }
+    public string? PreferredTime { get; set; }
+    public decimal? MinPrice { get; set; }
+    public decimal? MaxPrice { get; set; }
+    public List<string>? Keywords { get; set; }
+    public string? Explanation { get; set; }
+}

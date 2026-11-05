@@ -102,6 +102,7 @@ export default function Navbar() {
       : [
           { label: "Trang chủ", to: "/" },
           { label: "Tìm gia sư", to: "/tutors" },
+          { label: "Chẩn đoán AI ✨", to: "/ai-diagnosis" },
           { label: "Nhóm học", to: "/study-groups" },
           { label: "SOS", to: "/sos" },
           { label: "Hỏi đáp", to: "/faq" },
