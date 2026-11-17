@@ -276,78 +276,111 @@ export default function SosSession() {
           )}
           {session?.questionNote && <p className="text-sm text-slate-600">{session.questionNote}</p>}
           <audio ref={remoteAudioRef} autoPlay />
-          {ended ? (
-            <p className="text-sm text-verified-700 bg-verified-50 rounded-lg px-3 py-2">Phiên đã kết thúc.</p>
-            {session?.canReview && (
-              <form onSubmit={onReview} className="space-y-2">
-                <p className="text-sm font-semibold text-slate-800">Đánh giá gia sư</p>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setStars(n)}
-                      className={`text-2xl leading-none ${n <= stars ? "text-amber-500" : "text-slate-300"}`}
-                      aria-label={`${n} sao`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-                <textarea
-                  rows={3}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Buổi cứu viện này giúp gì cho bạn?"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-                <button
-                  type="submit"
-                  disabled={reviewing}
-                  className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
-                >
-                  {reviewing ? "Đang gửi..." : "Gửi đánh giá"}
-                </button>
-              </form>
-            )}
-            {session?.myRating && (
-              <p className="text-sm text-slate-600">Bạn đã đánh giá {session.myRating} sao.</p>
-            )}
-          ) : (
-            <div className="space-y-2">
-              {callState === "incoming" && (
-                <button
-                  type="button"
-                  onClick={() => answerCall(incoming)}
-                  className="w-full h-10 rounded-lg bg-verified-600 text-white text-sm font-medium"
-                >
-                  Trả lời gọi audio
-                </button>
-              )}
-              {callState === "idle" && (
-                <button
-                  type="button"
-                  onClick={startCall}
-                  className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium"
-                >
-                  Gọi audio SOS
-                </button>
-              )}
-              {(callState === "live" || callState === "calling") && (
-                <div className="flex gap-2">
-                  <button type="button" onClick={toggleMute} className="flex-1 h-10 rounded-lg border border-slate-200 text-sm inline-flex items-center justify-center gap-1">
-                    {muted ? <MicOff size={16} /> : <Mic size={16} />} {muted ? "Bật mic" : "Tắt mic"}
-                  </button>
-                  <button type="button" onClick={() => hangup(true)} className="h-10 px-3 rounded-lg bg-rose-600 text-white">
-                    <PhoneOff size={16} />
-                  </button>
-                </div>
-              )}
-              <button type="button" onClick={onEnd} className="w-full h-10 rounded-lg border border-slate-200 text-sm">
-                Kết thúc phiên
-              </button>
-            </div>
-          )}
+          
+{ended ? (
+  <>
+    <p className="text-sm text-verified-700 bg-verified-50 rounded-lg px-3 py-2">
+      Phiên đã kết thúc.
+    </p>
+
+    {session?.canReview && (
+      <form onSubmit={onReview} className="space-y-2">
+        <p className="text-sm font-semibold text-slate-800">
+          Đánh giá gia sư
+        </p>
+
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setStars(n)}
+              className={`text-2xl leading-none ${
+                n <= stars ? "text-amber-500" : "text-slate-300"
+              }`}
+              aria-label={`${n} sao`}
+            >
+              ★
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          rows={3}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Buổi cứu viện này giúp gì cho bạn?"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
+
+        <button
+          type="submit"
+          disabled={reviewing}
+          className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
+        >
+          {reviewing ? "Đang gửi..." : "Gửi đánh giá"}
+        </button>
+      </form>
+    )}
+
+    {session?.myRating && (
+      <p className="text-sm text-slate-600">
+        Bạn đã đánh giá {session.myRating} sao.
+      </p>
+    )}
+  </>
+) : (
+  <div className="space-y-2">
+    {callState === "incoming" && (
+      <button
+        type="button"
+        onClick={() => answerCall(incoming)}
+        className="w-full h-10 rounded-lg bg-verified-600 text-white text-sm font-medium"
+      >
+        Trả lời gọi audio
+      </button>
+    )}
+
+    {callState === "idle" && (
+      <button
+        type="button"
+        onClick={startCall}
+        className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium"
+      >
+        Gọi audio SOS
+      </button>
+    )}
+
+    {(callState === "live" || callState === "calling") && (
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={toggleMute}
+          className="flex-1 h-10 rounded-lg border border-slate-200 text-sm inline-flex items-center justify-center gap-1"
+        >
+          {muted ? <MicOff size={16} /> : <Mic size={16} />}
+          {muted ? "Bật mic" : "Tắt mic"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => hangup(true)}
+          className="h-10 px-3 rounded-lg bg-rose-600 text-white"
+        >
+          <PhoneOff size={16} />
+        </button>
+      </div>
+    )}
+
+    <button
+      type="button"
+      onClick={onEnd}
+      className="w-full h-10 rounded-lg border border-slate-200 text-sm"
+    >
+      Kết thúc phiên
+    </button>
+  </div>
+)}
           <Link to="/sos" className="block text-center text-sm text-brand-600">
             Về SOS
           </Link>
