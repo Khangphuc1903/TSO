@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Wallet,
   Menu,
+  Siren,
   X,
 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import axiosClient, { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
 import { useCart } from "../context/CartContext";
 import { getInboxBadges } from "../api/study";
+import { getOpenSosRequests } from "../api/sos";
 import { createAppHub } from "../api/hub";
 import { invalidateTutorGate, loadTutorGate } from "../tutorGate";
 
@@ -44,16 +46,22 @@ export default function Navbar() {
   const [chatUnreadPeople, setChatUnreadPeople] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [tutorReady, setTutorReady] = useState(false);
+  const [tutorGateLoaded, setTutorGateLoaded] = useState(false);
+  const [sosAlerts, setSosAlerts] = useState([]);
 
   useEffect(() => {
     if (!loggedIn || !isTutor) {
       setTutorReady(false);
+      setTutorGateLoaded(false);
       return;
     }
     let cancelled = false;
     const pull = () =>
       loadTutorGate(true).then((gate) => {
-        if (!cancelled) setTutorReady(Boolean(gate?.ready));
+        if (!cancelled) {
+          setTutorReady(Boolean(gate?.ready));
+          setTutorGateLoaded(true);
+        }
       });
     pull();
     window.addEventListener("tutor-gate", pull);
@@ -61,7 +69,31 @@ export default function Navbar() {
       cancelled = true;
       window.removeEventListener("tutor-gate", pull);
     };
-  }, [loggedIn, isTutor, location.pathname]);
+  }, [loggedIn, isTutor]);
+
+  useEffect(() => {
+    if (!loggedIn || !isTutor) {
+      setSosAlerts([]);
+      return;
+    }
+    let cancelled = false;
+    const loadSos = async () => {
+      try {
+        const list = await getOpenSosRequests();
+        if (!cancelled) setSosAlerts(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setSosAlerts([]);
+      }
+    };
+    loadSos();
+    const timer = setInterval(loadSos, 10000);
+    window.addEventListener("sos-updated", loadSos);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener("sos-updated", loadSos);
+    };
+  }, [loggedIn, isTutor]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -91,9 +123,13 @@ export default function Navbar() {
     const timer = setInterval(loadBadges, 15000);
     const hub = createAppHub();
 
+    const pingSos = () => window.dispatchEvent(new Event("sos-updated"));
     hub.on("ReceiveNotification", loadBadges);
     hub.on("ReceiveMessage", loadBadges);
     hub.on("ReceiveGroupMessage", loadBadges);
+    hub.on("SosRequestCreated", pingSos);
+    hub.on("SosRequestClaimedByOther", pingSos);
+    hub.on("SosRequestExpired", pingSos);
     hub.start().catch(() => {});
 
     return () => {
@@ -103,9 +139,12 @@ export default function Navbar() {
       hub.off("ReceiveNotification", loadBadges);
       hub.off("ReceiveMessage", loadBadges);
       hub.off("ReceiveGroupMessage", loadBadges);
+      hub.off("SosRequestCreated", pingSos);
+      hub.off("SosRequestClaimedByOther", pingSos);
+      hub.off("SosRequestExpired", pingSos);
       hub.stop();
     };
-  }, [loggedIn, location.pathname]);
+  }, [loggedIn]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -123,13 +162,17 @@ export default function Navbar() {
         ? [
             { label: "Hồ sơ", to: "/profile" },
             { label: "Bảng dạy", to: "/tutor" },
-            { label: "CCCD", to: "/tutor-identity" },
-            { label: "Bài test", to: "/tutor-tests" },
+            { label: "SOS", to: "/sos" },
+            ...(tutorGateLoaded && !tutorReady
+              ? [
+                  { label: "CCCD", to: "/tutor-identity" },
+                  { label: "Bài test", to: "/tutor-tests" },
+                ]
+              : []),
             ...(tutorReady
               ? [
                   { label: "Lịch dạy", to: "/bookings" },
                   { label: "Chào thầu", to: "/study-groups/bids" },
-                  { label: "SOS", to: "/sos" },
                 ]
               : []),
           ]
@@ -382,6 +425,16 @@ export default function Navbar() {
           </nav>
         )}
       </div>
+      {sosAlerts.length > 0 && (
+        <Link to="/sos" className="sos-alert-bar flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white">
+          <Siren size={16} className="shrink-0" />
+          <span>
+            SOS khẩn cấp · {sosAlerts.length} yêu cầu đang chờ
+            {sosAlerts[0]?.subjectName ? ` · ${sosAlerts.map((r) => r.subjectName).filter(Boolean).slice(0, 2).join(", ")}` : ""}
+            {" "}· Nhấp để nhận
+          </span>
+        </Link>
+      )}
     </header>
   );
 }

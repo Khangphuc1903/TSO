@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MessageCircle, Search, Sparkles, Users } from "lucide-react";
 import { ChatComposer, ChatMessageBody } from "../components/ChatMedia";
-import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
 import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { createAppHub } from "../api/hub";
@@ -152,7 +151,6 @@ export default function Messages() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-8 pb-4 px-6">
         <div
           className="absolute inset-0 -z-10"

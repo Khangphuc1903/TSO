@@ -14,7 +14,6 @@ import {
   User,
   Sparkles,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { useCart } from "../context/CartContext";
 import { avatarUrl } from "../auth";
 
@@ -84,7 +83,6 @@ export default function Cart() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
-      <Navbar />
 
       <main className="max-w-6xl mx-auto pt-8 px-4 sm:px-6">
         {/* Breadcrumb & Header */}

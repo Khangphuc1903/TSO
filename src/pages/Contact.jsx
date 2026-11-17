@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Mail, Phone } from "lucide-react";
-import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { sendContact } from "../api/admin";
 
@@ -27,7 +26,6 @@ export default function Contact() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-4xl mx-auto px-6 py-14 grid md:grid-cols-2 gap-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Liên hệ hỗ trợ</h1>

@@ -490,7 +490,8 @@ public partial class TutorPlatformDbContext : DbContext
         {
             entity.HasKey(e => e.ReviewId).HasName("PK__Reviews__74BC79CE92506F30");
 
-            entity.HasIndex(e => e.BookingId, "UQ__Reviews__73951AEC275C67DB").IsUnique();
+            entity.HasIndex(e => e.BookingId, "UQ_Reviews_Booking").IsUnique().HasFilter("[BookingId] IS NOT NULL");
+            entity.HasIndex(e => e.SosSessionId, "UQ_Reviews_SosSession").IsUnique().HasFilter("[SosSessionId] IS NOT NULL");
 
             entity.Property(e => e.Comment).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt)
@@ -503,6 +504,11 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey<Review>(d => d.BookingId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Review_Booking");
+
+            entity.HasOne(d => d.SosSession).WithMany()
+                .HasForeignKey(d => d.SosSessionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Review_SosSession");
 
             entity.HasOne(d => d.Student).WithMany(p => p.Reviews)
                 .HasForeignKey(d => d.StudentId)
@@ -913,7 +919,7 @@ public partial class TutorPlatformDbContext : DbContext
             entity.HasKey(e => e.SessionId);
             entity.Property(e => e.VideoRoomId).HasMaxLength(200);
             entity.Property(e => e.StartedAt).HasColumnType("datetime");
-            entity.Property(e => e.EndsAt).HasColumnType("datetime").ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.EndsAt).HasColumnType("datetime").ValueGeneratedNever();
             entity.Property(e => e.EndedAt).HasColumnType("datetime");
             entity.Property(e => e.FeeAmount).HasColumnType("decimal(10, 0)");
             entity.Property(e => e.PayoutStatus).HasMaxLength(20);

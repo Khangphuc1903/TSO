@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import { getDefaultTutors } from "../api/tutorSearch";
 
@@ -16,7 +15,6 @@ export default function Reviews() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-4xl mx-auto px-6 py-10">
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Reviews & Ratings</h1>
         <p className="text-slate-500 mb-6">Xem điểm trung bình và đánh giá của gia sư đã xác thực.</p>

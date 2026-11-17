@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2, IdCard, Loader2, Sparkles, X } from "lucide-react";
-import Navbar from "../components/Navbar";
 import TutorSetupSteps from "../components/TutorSetupSteps";
 import { getUser, isLoggedIn } from "../auth";
 import { applyEkycResult, getEkycConfig, getTutorIdentity, getTutorWorkspace } from "../api/study";
@@ -135,7 +134,6 @@ export default function TutorIdentity() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-12 pb-8 px-6">
         <div className="absolute inset-0 -z-10" style={{ background: "radial-gradient(60% 50% at 50% 0%, rgba(59,91,219,0.12), transparent)" }} />
         <div className="max-w-5xl mx-auto">

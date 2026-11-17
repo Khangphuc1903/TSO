@@ -1,12 +1,10 @@
 import { GraduationCap, HeartHandshake, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
-import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 export default function About() {
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-4xl mx-auto px-6 py-14">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 bg-brand-50 px-3 py-1.5 rounded-full mb-4">
           <Sparkles size={14} /> Về TSG

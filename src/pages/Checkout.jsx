@@ -27,7 +27,6 @@ import {
   CheckCheck
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import Navbar from "../components/Navbar";
 import CancelRefundModal from "../components/CancelRefundModal";
 import { getMyBookings } from "../api/study";
 import { createPaymentIntent, getPaymentByBooking, getRefundPreview } from "../api/payment";
@@ -302,7 +301,6 @@ export default function Checkout() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
-        <Navbar />
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div className="relative mb-5">
             <div className="w-16 h-16 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin" />
@@ -322,7 +320,6 @@ export default function Checkout() {
   if (error && !booking) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
-        <Navbar />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm text-center">
             <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-100">
@@ -354,7 +351,6 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC] pb-24 text-slate-800">
-      <Navbar />
 
       <main className="max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8">
         {/* BREADCRUMB & BACK LINK */}

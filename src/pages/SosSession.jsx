@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Siren } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { ChatComposer, ChatMessageBody } from "../components/ChatMedia";
 import { getUser, isLoggedIn } from "../auth";
 import { createAppHub } from "../api/hub";
 import { getMessages, sendMessage, sendMessageAttachment } from "../api/study";
-import { endSosSession, getSosSession } from "../api/sos";
+import { endSosSession, getSosSession, reviewSosSession } from "../api/sos";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref, formatVnd } from "../utils/format";
 
+function parseServerTime(value) {
+  if (!value) return null;
+  const text = String(value);
+  const hasZone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(text);
+  const date = new Date(hasZone ? text : `${text}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function remainLabel(endsAt) {
-  const ms = new Date(endsAt).getTime() - Date.now();
-  if (ms <= 0) return "00:00";
+  const end = parseServerTime(endsAt);
+  const ms = (end?.getTime() || 0) - Date.now();
+  if (!end || ms <= 0) return "00:00";
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
   const r = s % 60;
@@ -31,6 +39,9 @@ export default function SosSession() {
   const [callState, setCallState] = useState("idle");
   const [muted, setMuted] = useState(false);
   const [incoming, setIncoming] = useState(null);
+  const [stars, setStars] = useState(5);
+  const [comment, setComment] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const bottomRef = useRef(null);
   const hubRef = useRef(null);
   const convRef = useRef(0);
@@ -38,7 +49,8 @@ export default function SosSession() {
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
 
-  const ended = Boolean(session?.endedAt) || (session?.endsAt && new Date(session.endsAt).getTime() <= now);
+  const endsAtMs = parseServerTime(session?.endsAt)?.getTime() || 0;
+  const ended = Boolean(session?.endedAt) || (endsAtMs > 0 && endsAtMs <= now);
   const conversationId = session?.conversationId;
 
   const load = async () => {
@@ -46,8 +58,12 @@ export default function SosSession() {
     setSession(data);
     convRef.current = data?.conversationId || 0;
     if (data?.conversationId) {
-      const msgs = await getMessages(data.conversationId);
-      setMessages(Array.isArray(msgs) ? msgs : []);
+      try {
+        const msgs = await getMessages(data.conversationId);
+        setMessages(Array.isArray(msgs) ? msgs : []);
+      } catch {
+        setError("Không tải được tin nhắn của phiên SOS.");
+      }
     }
   };
 
@@ -177,7 +193,8 @@ export default function SosSession() {
 
   useEffect(() => {
     if (!session?.endsAt || session.endedAt) return;
-    if (new Date(session.endsAt).getTime() <= Date.now()) {
+    const end = parseServerTime(session.endsAt);
+    if (end && end.getTime() <= Date.now()) {
       endSosSession(sessionId).then(setSession).catch(() => {});
     }
   }, [now, session?.endsAt, session?.endedAt, sessionId]);
@@ -193,6 +210,29 @@ export default function SosSession() {
       );
     } catch (err) {
       setError(err.response?.data?.message || "Không gửi được tin.");
+    }
+  };
+
+  const onReview = async (e) => {
+    e.preventDefault();
+    setReviewing(true);
+    setError("");
+    try {
+      const data = await reviewSosSession(sessionId, { rating: stars, comment });
+      setSession((current) => ({
+        ...(current || {}),
+        ...data,
+        canReview: false,
+        myRating: data?.myRating || stars,
+        studentName: data?.studentName || current?.studentName,
+        tutorName: data?.tutorName || current?.tutorName,
+        subjectName: data?.subjectName || current?.subjectName,
+        imageUrl: data?.imageUrl || current?.imageUrl,
+      }));
+    } catch (err) {
+      setError(err.response?.data?.message || "Không gửi được đánh giá.");
+    } finally {
+      setReviewing(false);
     }
   };
 
@@ -218,7 +258,6 @@ export default function SosSession() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 grid lg:grid-cols-[280px_1fr] gap-4">
         <aside className="bg-white rounded-2xl border border-slate-100 shadow-lg p-4 space-y-3 h-fit">
           <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full">
@@ -238,7 +277,42 @@ export default function SosSession() {
           {session?.questionNote && <p className="text-sm text-slate-600">{session.questionNote}</p>}
           <audio ref={remoteAudioRef} autoPlay />
           {ended ? (
-            <p className="text-sm text-verified-700 bg-verified-50 rounded-lg px-3 py-2">Phiên đã kết thúc. Tiền chuyển cho gia sư theo cấu hình.</p>
+            <p className="text-sm text-verified-700 bg-verified-50 rounded-lg px-3 py-2">Phiên đã kết thúc.</p>
+            {session?.canReview && (
+              <form onSubmit={onReview} className="space-y-2">
+                <p className="text-sm font-semibold text-slate-800">Đánh giá gia sư</p>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setStars(n)}
+                      className={`text-2xl leading-none ${n <= stars ? "text-amber-500" : "text-slate-300"}`}
+                      aria-label={`${n} sao`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  rows={3}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Buổi cứu viện này giúp gì cho bạn?"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={reviewing}
+                  className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
+                >
+                  {reviewing ? "Đang gửi..." : "Gửi đánh giá"}
+                </button>
+              </form>
+            )}
+            {session?.myRating && (
+              <p className="text-sm text-slate-600">Bạn đã đánh giá {session.myRating} sao.</p>
+            )}
           ) : (
             <div className="space-y-2">
               {callState === "incoming" && (

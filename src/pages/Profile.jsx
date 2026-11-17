@@ -18,7 +18,6 @@ import {
   User,
   UserRound,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
 import { avatarUrl, getUser, isLoggedIn, saveSession, updateStoredUser } from "../auth";
 import { API_ORIGIN } from "../api/axiosClient";
@@ -60,6 +59,7 @@ export default function Profile() {
 
   const [tab, setTab] = useState("info");
   const [tutorReady, setTutorReady] = useState(false);
+  const [tutorGateLoaded, setTutorGateLoaded] = useState(false);
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -107,7 +107,12 @@ export default function Profile() {
       return;
     }
     load().catch(() => setError("Không tải được hồ sơ. Hãy đăng nhập lại."));
-    if (isTutor) loadTutorGate(true).then((gate) => setTutorReady(Boolean(gate?.ready)));
+    if (isTutor) {
+      loadTutorGate(true).then((gate) => {
+        setTutorReady(Boolean(gate?.ready));
+        setTutorGateLoaded(true);
+      });
+    }
   }, [navigate, isTutor]);
 
   const today = useMemo(
@@ -281,7 +286,6 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
 
       <section className="relative overflow-hidden pt-12 pb-8 px-6">
         <div
@@ -318,18 +322,22 @@ export default function Profile() {
           )}
           {isTutor && (
             <>
+            {tutorGateLoaded && !tutorReady && (
             <Link
               to="/tutor-identity"
               className="inline-flex mt-4 mr-3 h-10 items-center px-4 rounded-lg border border-brand-200 text-brand-700 text-sm font-medium hover:bg-brand-50"
             >
               Xác thực CCCD
             </Link>
+            )}
+            {tutorGateLoaded && !tutorReady && (
             <Link
               to="/tutor-tests"
               className="inline-flex mt-4 mr-3 h-10 items-center px-4 rounded-lg border border-brand-200 text-brand-700 text-sm font-medium hover:bg-brand-50"
             >
               Làm bài kiểm tra
             </Link>
+            )}
             <Link
               to="/tutor"
               className="inline-flex mt-4 h-10 items-center px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"

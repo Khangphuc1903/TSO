@@ -9,7 +9,6 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import TutorSetupSteps from "../components/TutorSetupSteps";
 import { getUser, isLoggedIn } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
@@ -58,6 +57,7 @@ export default function TutorDesk() {
 
   const [tab, setTab] = useState("profile");
   const [tutorReady, setTutorReady] = useState(false);
+  const [gateKnown, setGateKnown] = useState(false);
   const [ws, setWs] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -114,7 +114,10 @@ export default function TutorDesk() {
       return;
     }
     getSubjects().then(setSubjects).catch(() => setSubjects([]));
-    loadTutorGate(true).then((gate) => setTutorReady(Boolean(gate?.ready)));
+    loadTutorGate(true).then((gate) => {
+      setTutorReady(Boolean(gate?.ready));
+      setGateKnown(true);
+    });
     load().catch(() => setError("Không tải được bảng gia sư. Kiểm tra backend đang chạy."));
   }, [navigate, isTutor]);
 
@@ -123,6 +126,7 @@ export default function TutorDesk() {
     [invites]
   );
   const canOpenSchedule = Boolean(ws?.canOpenSchedule) || tutorReady;
+  const showSetup = gateKnown && !canOpenSchedule;
   const visibleTabs = canOpenSchedule ? TABS : TABS.filter((t) => t.id === "profile" || t.id === "certs");
   const passedTestCount = ws?.passedTestCount || 0;
   const identityCompleted = Boolean(ws?.identityCompleted);
@@ -199,7 +203,6 @@ export default function TutorDesk() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-12 pb-8 px-6">
         <div
           className="absolute inset-0 -z-10"
@@ -216,12 +219,17 @@ export default function TutorDesk() {
             Bảng <span className="text-brand-600">làm việc</span>
           </h1>
           <p className="text-slate-500 mt-2 max-w-xl">
-            Cập nhật hồ sơ dạy học. Lịch trống mở sau khi xác thực CCCD và đạt bài kiểm tra chuyên môn.
+            {canOpenSchedule
+              ? "Hồ sơ đã xác thực. Quản lý lịch dạy, chào thầu và SOS."
+              : "Cập nhật hồ sơ dạy học. Lịch trống mở sau khi xác thực CCCD và đạt bài kiểm tra chuyên môn."}
           </p>
+          {showSetup && (
           <div className="mt-6">
             <TutorSetupSteps passedTestCount={passedTestCount} identityCompleted={identityCompleted} current={setupCurrent} />
           </div>
+          )}
           <div className="flex flex-wrap gap-3 mt-5">
+              {showSetup && (
               <Link
                 to="/tutor-identity"
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
@@ -229,12 +237,15 @@ export default function TutorDesk() {
                 <Sparkles size={16} />
                 Xác thực CCCD
               </Link>
+              )}
+              {showSetup && (
               <Link
                 to="/tutor-tests"
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
               >
                 Làm bài test
               </Link>
+              )}
               {canOpenSchedule && (
               <Link
                 to="/sos"

@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Zap
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { isLoggedIn } from "../auth";
 import { createStudyGroup } from "../api/studyGroups";
 import { getDefaultTutors, getSubjects } from "../api/tutorSearch";
@@ -125,7 +124,6 @@ export default function CreateStudyGroup() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC]">
-      <Navbar />
 
       {/* HERO SECTION */}
       <section className="relative overflow-hidden">

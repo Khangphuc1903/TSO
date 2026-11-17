@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Ban, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
 import { getUser, isLoggedIn } from "../auth";
 import { adminApi } from "../api/admin";
 import { getSubjects } from "../api/tutorSearch";
@@ -140,7 +139,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center gap-2 mb-6">
           <Shield className="text-brand-600" />

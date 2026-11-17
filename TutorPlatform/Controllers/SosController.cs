@@ -124,6 +124,23 @@ public sealed class SosController : ControllerBase
         catch (UnauthorizedAccessException) { return Forbid(); }
     }
 
+    [HttpPost("sessions/{sessionId:int}/review")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> ReviewSession(
+        int sessionId,
+        [FromBody] SosReviewDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (CurrentUserId is not int userId) return Unauthorized();
+        try
+        {
+            return Ok(await _sos.ReviewSessionAsync(userId, sessionId, dto.Rating, dto.Comment, cancellationToken));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     [HttpPost("sessions/{sessionId:int}/end")]
     [Authorize(Roles = "Student,Tutor")]
     public async Task<IActionResult> EndSession(int sessionId, CancellationToken cancellationToken)

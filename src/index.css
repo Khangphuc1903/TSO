@@ -133,6 +133,14 @@ body {
   0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
   50% { transform: translate3d(28px, -22px, 0) scale(1.08); }
 }
+@keyframes sos-blink {
+  0%, 45% { background-color: #e11d48; }
+  50%, 100% { background-color: #881337; }
+}
+.sos-alert-bar {
+  animation: sos-blink 0.7s steps(1, end) infinite;
+}
+
 @keyframes phrase-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }

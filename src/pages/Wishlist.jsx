@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Heart, Loader2 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import TutorResultCard from "../components/TutorResultCard";
 import { getUser, isLoggedIn } from "../auth";
 import { mapTutor } from "../api/tutorSearch";
@@ -32,7 +31,6 @@ export default function Wishlist() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center gap-2 mb-2">
           <Heart size={20} className="text-rose-600 fill-rose-600" />

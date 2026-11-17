@@ -15,7 +15,6 @@ import {
   ShoppingCart,
   CheckCircle2,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { getSubjects, getTutorDetail } from "../api/tutorSearch";
@@ -363,7 +362,6 @@ export default function TutorProfile() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-6xl mx-auto px-6 py-8">
         <Link to="/tutors" className="inline-flex items-center gap-1 text-sm text-brand-600 mb-6">
           <ArrowLeft size={16} />

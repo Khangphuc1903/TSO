@@ -86,14 +86,7 @@ public sealed class SosService
             throw;
         }
 
-        var tutorIds = await _db.TutorProfiles
-            .Where(t => t.IsSosReady &&
-                        t.VerificationStatus == "Verified" &&
-                        t.IsPublished &&
-                        t.Tutor.Status == "Active" &&
-                        t.TutorSubjects.Any(ts => ts.SubjectId == dto.SubjectId && ts.IsVerified))
-            .Select(t => t.TutorId)
-            .ToListAsync(cancellationToken);
+        var tutorIds = await SubjectTutorIdsAsync(dto.SubjectId, cancellationToken);
 
         var subjectName = await _db.Subjects
             .Where(s => s.SubjectId == dto.SubjectId)
@@ -110,17 +103,16 @@ public sealed class SosService
             expiresAt = request.ExpiresAt
         };
 
-        foreach (var tutorId in tutorIds.Where(SosPresence.IsOnline))
+        if (tutorIds.Count > 0)
         {
             try
             {
-                await _hub.Clients.User(tutorId.ToString()).SendAsync(
-                    "SosRequestCreated", notification, cancellationToken);
+                await _hub.Clients.Users(tutorIds.Select(id => id.ToString()).ToList())
+                    .SendAsync("SosRequestCreated", notification, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Unable to notify tutor {TutorId} about SOS request {RequestId}",
-                    tutorId, request.RequestId);
+                _logger.LogWarning(ex, "Unable to broadcast SOS request {RequestId}", request.RequestId);
             }
         }
 
@@ -149,7 +141,7 @@ public sealed class SosService
 
     public async Task<List<SosRequestDto>> OpenRequestsAsync(int tutorId, CancellationToken cancellationToken)
     {
-        await RequireReadyTutorAsync(tutorId, cancellationToken);
+        await RequireEligibleTutorAsync(tutorId, cancellationToken);
         var now = DateTime.UtcNow;
         var requests = await _db.SosRequests.AsNoTracking()
             .Include(r => r.Subject)
@@ -184,12 +176,9 @@ public sealed class SosService
         var allowed = request.StudentId == userId;
         if (isTutor)
         {
-            allowed = await _db.TutorSubjects.AnyAsync(ts =>
-                ts.TutorId == userId &&
-                ts.SubjectId == request.SubjectId &&
-                ts.IsVerified &&
-                (request.Status == "Open" || request.ClaimedByTutorId == userId),
-                cancellationToken);
+            var teaches = await TeachesSubjectAsync(userId, request.SubjectId, cancellationToken);
+            allowed = await IsEligibleTutorAsync(userId, cancellationToken) &&
+                      ((request.Status == "Open" && teaches) || request.ClaimedByTutorId == userId);
         }
 
         if (!allowed)
@@ -204,16 +193,20 @@ public sealed class SosService
 
     public async Task<SosRequestDto> ClaimAsync(int tutorId, int requestId, CancellationToken cancellationToken)
     {
-        await RequireReadyTutorAsync(tutorId, cancellationToken);
+        await RequireEligibleTutorAsync(tutorId, cancellationToken);
         var request = await _db.SosRequests.AsNoTracking().Include(r => r.Subject)
             .FirstOrDefaultAsync(r => r.RequestId == requestId, cancellationToken)
             ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu SOS.");
-        if (!await _db.TutorSubjects.AnyAsync(ts =>
-                ts.TutorId == tutorId && ts.SubjectId == request.SubjectId && ts.IsVerified, cancellationToken))
-            throw new UnauthorizedAccessException();
+        if (!await TeachesSubjectAsync(tutorId, request.SubjectId, cancellationToken))
+            throw new UnauthorizedAccessException("Bạn không dạy môn của yêu cầu SOS này.");
 
         var now = DateTime.UtcNow;
+        SosRequest claimed;
+        Conversation conversation;
+        SosSession session;
         await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
         var changed = await _db.SosRequests
             .Where(r => r.RequestId == requestId && r.Status == "Open" && r.ExpiresAt > now)
             .ExecuteUpdateAsync(setters => setters
@@ -223,16 +216,24 @@ public sealed class SosService
         if (changed != 1)
             throw new InvalidOperationException("Yêu cầu đã được gia sư khác nhận hoặc đã hết hạn.");
 
-        var claimed = await _db.SosRequests.AsNoTracking().Include(r => r.Subject)
+        claimed = await _db.SosRequests.AsNoTracking().Include(r => r.Subject)
             .SingleAsync(r => r.RequestId == requestId, cancellationToken);
-        var conversation = new Conversation
+        var user1 = Math.Min(claimed.StudentId, tutorId);
+        var user2 = Math.Max(claimed.StudentId, tutorId);
+        var found = await _db.Conversations
+            .FirstOrDefaultAsync(c => c.User1Id == user1 && c.User2Id == user2 && c.GroupId == null, cancellationToken);
+        if (found is null)
         {
-            User1Id = Math.Min(claimed.StudentId, tutorId),
-            User2Id = Math.Max(claimed.StudentId, tutorId),
-            CreatedAt = now
-        };
-        _db.Conversations.Add(conversation);
-        await _db.SaveChangesAsync(cancellationToken);
+            found = new Conversation
+            {
+                User1Id = user1,
+                User2Id = user2,
+                CreatedAt = now
+            };
+            _db.Conversations.Add(found);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        conversation = found;
 
         var duration = await GetSettingIntAsync("SosDurationMinutes", 15, cancellationToken);
         var conversationUpdated = await _db.SosRequests
@@ -244,7 +245,7 @@ public sealed class SosService
         if (conversationUpdated != 1)
             throw new InvalidOperationException("Không thể cập nhật yêu cầu SOS đã nhận.");
         claimed.ConversationId = conversation.ConversationId;
-        var session = new SosSession
+        session = new SosSession
         {
             RequestId = claimed.RequestId,
             StudentId = claimed.StudentId,
@@ -259,21 +260,25 @@ public sealed class SosService
         _db.SosSessions.Add(session);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unable to claim SOS request {RequestId} for tutor {TutorId}", requestId, tutorId);
+            throw new InvalidOperationException("Không nhận được đơn SOS. Hãy thử lại.");
+        }
 
         await _hub.Clients.User(claimed.StudentId.ToString()).SendAsync("SosRequestClaimed",
             new { requestId, tutorId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
         await _hub.Clients.User(tutorId.ToString()).SendAsync("SosSessionStarted",
             new { requestId, conversationId = conversation.ConversationId, sessionId = session.SessionId }, cancellationToken);
 
-        var otherTutorIds = await _db.TutorProfiles
-            .Where(t => t.TutorId != tutorId &&
-                        t.IsSosReady &&
-                        t.VerificationStatus == "Verified" &&
-                        t.IsPublished &&
-                        t.Tutor.Status == "Active" &&
-                        t.TutorSubjects.Any(ts => ts.SubjectId == claimed.SubjectId && ts.IsVerified))
-            .Select(t => t.TutorId)
-            .ToListAsync(cancellationToken);
+        var otherTutorIds = (await SubjectTutorIdsAsync(claimed.SubjectId, cancellationToken))
+            .Where(id => id != tutorId)
+            .ToList();
 
         foreach (var otherTutorId in otherTutorIds)
         {
@@ -294,16 +299,14 @@ public sealed class SosService
 
     public async Task SetReadyAsync(int tutorId, bool isReady, CancellationToken cancellationToken)
     {
-        var profile = await _db.TutorProfiles.FirstOrDefaultAsync(t => t.TutorId == tutorId, cancellationToken)
-            ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ gia sư.");
-        if (profile.VerificationStatus != "Verified" || !profile.IsPublished)
-            throw new UnauthorizedAccessException("Hồ sơ gia sư chưa đủ điều kiện SOS.");
-        profile.IsSosReady = isReady;
-        profile.SosReadyAt = isReady ? DateTime.UtcNow : null;
-        profile.LastSosHeartbeat = isReady ? DateTime.UtcNow : null;
+        await RequireEligibleTutorAsync(tutorId, cancellationToken);
+        var profile = await _db.TutorProfiles.FirstAsync(t => t.TutorId == tutorId, cancellationToken);
+        profile.IsSosReady = true;
+        profile.SosReadyAt ??= DateTime.UtcNow;
+        profile.LastSosHeartbeat = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         await _hub.Clients.User(tutorId.ToString()).SendAsync("SosTutorPresenceChanged",
-            new { tutorId, isSosReady = isReady, online = SosPresence.IsOnline(tutorId) }, cancellationToken);
+            new { tutorId, isSosReady = true, online = SosPresence.IsOnline(tutorId) }, cancellationToken);
     }
 
     public async Task<object> GetReadyAsync(int tutorId, CancellationToken cancellationToken)
@@ -314,7 +317,7 @@ public sealed class SosService
         return new
         {
             tutorId,
-            isSosReady = profile.IsSosReady,
+            isSosReady = true,
             online = SosPresence.IsOnline(tutorId),
             lastSosHeartbeat = profile.LastSosHeartbeat
         };
@@ -330,7 +333,7 @@ public sealed class SosService
             ?? throw new KeyNotFoundException("Không tìm thấy phiên SOS.");
         if (session.StudentId != userId && session.TutorId != userId)
             throw new UnauthorizedAccessException();
-        return MapSession(session);
+        return await WithReviewAsync(session, userId, cancellationToken);
     }
 
     public async Task<SosSessionDto> EndSessionAsync(
@@ -350,21 +353,63 @@ public sealed class SosService
             .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.EndedAt, endedAt), cancellationToken);
 
         var updated = await _db.SosSessions.AsNoTracking()
+            .Include(s => s.Request).ThenInclude(r => r.Subject)
+            .Include(s => s.Student)
+            .Include(s => s.Tutor).ThenInclude(t => t.Tutor)
             .SingleAsync(s => s.SessionId == sessionId, cancellationToken);
         if (changed == 1)
             await PublishSessionEndedAsync(updated, cancellationToken);
 
-        return MapSession(updated);
+        return await WithReviewAsync(updated, userId, cancellationToken);
+    }
+
+    public async Task<SosSessionDto> ReviewSessionAsync(
+        int studentId,
+        int sessionId,
+        byte rating,
+        string? comment,
+        CancellationToken cancellationToken)
+    {
+        if (rating is < 1 or > 5)
+            throw new InvalidOperationException("Số sao phải từ 1 đến 5.");
+
+        var session = await _db.SosSessions
+            .SingleOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên SOS.");
+        if (session.StudentId != studentId)
+            throw new UnauthorizedAccessException();
+        if (session.EndedAt == null && (session.EndsAt == null || session.EndsAt > DateTime.UtcNow))
+            throw new InvalidOperationException("Hãy đợi phiên kết thúc rồi mới đánh giá.");
+        if (await _db.Reviews.AnyAsync(r => r.SosSessionId == sessionId, cancellationToken))
+            throw new InvalidOperationException("Bạn đã đánh giá phiên này.");
+
+        _db.Reviews.Add(new Review
+        {
+            SosSessionId = sessionId,
+            StudentId = studentId,
+            TutorId = session.TutorId,
+            Rating = rating,
+            Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
+            IsHidden = false,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        await RefreshTutorRatingAsync(session.TutorId, cancellationToken);
+        var full = await _db.SosSessions.AsNoTracking()
+            .Include(s => s.Request).ThenInclude(r => r.Subject)
+            .Include(s => s.Student)
+            .Include(s => s.Tutor).ThenInclude(t => t.Tutor)
+            .SingleAsync(s => s.SessionId == sessionId, cancellationToken);
+        return await WithReviewAsync(full, studentId, cancellationToken);
     }
 
     public async Task HeartbeatAsync(int tutorId, CancellationToken cancellationToken)
     {
-        var changed = await _db.TutorProfiles
-            .Where(t => t.TutorId == tutorId && t.IsSosReady)
+        await RequireEligibleTutorAsync(tutorId, cancellationToken);
+        await _db.TutorProfiles
+            .Where(t => t.TutorId == tutorId)
             .ExecuteUpdateAsync(setters => setters.SetProperty(
                 t => t.LastSosHeartbeat, DateTime.UtcNow), cancellationToken);
-        if (changed != 1)
-            throw new InvalidOperationException("Gia sư chưa bật SOS Ready.");
     }
 
     public async Task EndExpiredAsync(CancellationToken cancellationToken)
@@ -381,12 +426,18 @@ public sealed class SosService
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, "Expired"), cancellationToken);
             if (changed == 1)
             {
-                var studentId = await _db.SosRequests
+                var row = await _db.SosRequests
                     .Where(r => r.RequestId == requestId)
-                    .Select(r => r.StudentId)
+                    .Select(r => new { r.StudentId, r.SubjectId })
                     .SingleAsync(cancellationToken);
-                await _hub.Clients.User(studentId.ToString()).SendAsync(
+                await _hub.Clients.User(row.StudentId.ToString()).SendAsync(
                     "SosRequestExpired", new { requestId }, cancellationToken);
+                var tutorIds = await SubjectTutorIdsAsync(row.SubjectId, cancellationToken);
+                if (tutorIds.Count > 0)
+                {
+                    await _hub.Clients.Users(tutorIds.Select(id => id.ToString()).ToList())
+                        .SendAsync("SosRequestExpired", new { requestId }, cancellationToken);
+                }
             }
         }
 
@@ -418,13 +469,28 @@ public sealed class SosService
             .SendAsync("SosSessionEnded", payload, cancellationToken);
     }
 
-    private async Task RequireReadyTutorAsync(int tutorId, CancellationToken cancellationToken)
+    private IQueryable<TutorProfile> EligibleTutors() =>
+        _db.TutorProfiles.Where(t =>
+            t.IsPublished &&
+            t.VerificationStatus == "Verified" &&
+            t.Tutor.Status == "Active");
+
+    private IQueryable<TutorProfile> SubjectTutors(int subjectId) =>
+        EligibleTutors().Where(t => t.TutorSubjects.Any(ts => ts.SubjectId == subjectId && ts.IsVerified));
+
+    private Task<List<int>> SubjectTutorIdsAsync(int subjectId, CancellationToken cancellationToken) =>
+        SubjectTutors(subjectId).Select(t => t.TutorId).ToListAsync(cancellationToken);
+
+    private Task<bool> TeachesSubjectAsync(int tutorId, int subjectId, CancellationToken cancellationToken) =>
+        SubjectTutors(subjectId).AnyAsync(t => t.TutorId == tutorId, cancellationToken);
+
+    private Task<bool> IsEligibleTutorAsync(int tutorId, CancellationToken cancellationToken) =>
+        EligibleTutors().AnyAsync(t => t.TutorId == tutorId, cancellationToken);
+
+    private async Task RequireEligibleTutorAsync(int tutorId, CancellationToken cancellationToken)
     {
-        var ready = await _db.TutorProfiles.AnyAsync(t =>
-            t.TutorId == tutorId && t.IsSosReady && t.IsPublished &&
-            t.VerificationStatus == "Verified" && t.Tutor.Status == "Active", cancellationToken);
-        if (!ready || !SosPresence.IsOnline(tutorId))
-            throw new UnauthorizedAccessException("Gia sư chưa ở trạng thái SOS Ready hoặc đang offline.");
+        if (!await IsEligibleTutorAsync(tutorId, cancellationToken))
+            throw new UnauthorizedAccessException("Hồ sơ gia sư chưa đủ điều kiện SOS.");
     }
 
     private async Task NotifyTutorAsync(
@@ -544,6 +610,42 @@ public sealed class SosService
         ClaimedAt = request.ClaimedAt
     };
 
+    private async Task<SosSessionDto> WithReviewAsync(SosSession session, int viewerId, CancellationToken cancellationToken)
+    {
+        var dto = MapSession(session);
+        var rating = await _db.Reviews.AsNoTracking()
+            .Where(r => r.SosSessionId == session.SessionId)
+            .Select(r => (byte?)r.Rating)
+            .FirstOrDefaultAsync(cancellationToken);
+        var ended = session.EndedAt != null || (session.EndsAt != null && session.EndsAt <= DateTime.UtcNow);
+        dto.MyRating = rating;
+        dto.CanReview = ended && viewerId == session.StudentId && rating == null;
+        return dto;
+    }
+
+    private async Task RefreshTutorRatingAsync(int tutorId, CancellationToken cancellationToken)
+    {
+        var summary = await _db.Reviews
+            .Where(review => review.TutorId == tutorId && !review.IsHidden)
+            .GroupBy(review => review.TutorId)
+            .Select(group => new
+            {
+                Average = group.Average(review => (decimal)review.Rating),
+                Count = group.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        var tutor = await _db.TutorProfiles.SingleAsync(profile => profile.TutorId == tutorId, cancellationToken);
+        tutor.AverageRating = summary == null ? 0 : Math.Round(summary.Average, 2);
+        tutor.TotalReviews = summary?.Count ?? 0;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static DateTime? AsUtc(DateTime? value) =>
+        value.HasValue ? AsUtc(value.Value) : null;
+
     private static SosSessionDto MapSession(SosSession session) => new()
     {
         SessionId = session.SessionId, RequestId = session.RequestId, StudentId = session.StudentId,
@@ -553,9 +655,9 @@ public sealed class SosService
         SubjectName = session.Request?.Subject?.SubjectName,
         ImageUrl = session.Request?.ImageUrl,
         QuestionNote = session.Request?.QuestionNote,
-        StartedAt = session.StartedAt,
-        EndsAt = session.EndsAt ?? session.StartedAt.AddMinutes(session.DurationMinutes),
-        EndedAt = session.EndedAt, DurationMinutes = session.DurationMinutes, FeeAmount = session.FeeAmount,
+        StartedAt = AsUtc(session.StartedAt),
+        EndsAt = AsUtc(session.EndsAt ?? session.StartedAt.AddMinutes(session.DurationMinutes)),
+        EndedAt = AsUtc(session.EndedAt), DurationMinutes = session.DurationMinutes, FeeAmount = session.FeeAmount,
         PayoutStatus = session.PayoutStatus
     };
 }

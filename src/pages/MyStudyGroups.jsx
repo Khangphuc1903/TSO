@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, GraduationCap, Plus, Users, X } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { avatarUrl, isLoggedIn, loginPath } from "../auth";
 import {
   getMyStudyDesk,
@@ -68,7 +67,6 @@ export default function MyStudyGroups() {
 
   return (
     <div className="min-h-screen bg-[#F4F7FB]">
-      <Navbar />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -144,7 +142,9 @@ function Stat({ label, value }) {
 function GroupCard({ group, busyKey, onRespond, onChoose }) {
   const joins = group.isOwner ? group.joinRequests || [] : [];
   const bids = group.isOwner && group.hiringMode === "ReverseBid" ? group.bids || [] : [];
-  const pendingBids = bids.filter((bid) => bid.status === "Pending");
+  const winner = bids.find((bid) => bid.status === "Won");
+  const shownBids = winner ? [winner] : bids.filter((bid) => bid.status === "Pending");
+  const pendingBids = shownBids.filter((bid) => bid.status === "Pending");
 
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
@@ -216,16 +216,16 @@ function GroupCard({ group, busyKey, onRespond, onChoose }) {
 
           <section className="rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
             <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900">
-              <GraduationCap size={15} className="text-amber-700" /> Gia sư ứng tuyển
+              <GraduationCap size={15} className="text-amber-700" /> {winner ? "Gia sư đã chọn" : "Gia sư ứng tuyển"}
               {pendingBids.length > 0 && <Count n={pendingBids.length} />}
             </h3>
             {group.hiringMode !== "ReverseBid" ? (
               <p className="mt-3 text-sm text-slate-500">Nhóm này học cùng bạn, không nhận hồ sơ gia sư.</p>
-            ) : bids.length === 0 ? (
+            ) : shownBids.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">Chưa có gia sư nào gửi hồ sơ.</p>
             ) : (
               <ul className="mt-3 space-y-3">
-                {bids.map((bid) => (
+                {shownBids.map((bid) => (
                   <li key={bid.bidId} className="rounded-xl border border-amber-100 bg-white p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>

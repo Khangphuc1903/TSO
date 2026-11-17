@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 const ITEMS = [
@@ -15,7 +14,6 @@ export default function Faq() {
   const [open, setOpen] = useState(0);
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-3xl mx-auto px-6 py-14">
         <h1 className="text-3xl font-bold text-slate-900">FAQ / Trung tâm trợ giúp</h1>
         <p className="text-slate-500 mt-2 text-sm">Câu hỏi thường gặp về xác thực, thanh toán và an toàn.</p>

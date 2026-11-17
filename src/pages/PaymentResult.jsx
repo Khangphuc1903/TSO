@@ -17,7 +17,6 @@ import {
   ExternalLink,
   ChevronRight
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { getPaymentByBooking } from "../api/payment";
 import { getMyBookings, openConversation } from "../api/study";
 import { avatarUrl } from "../auth";
@@ -79,7 +78,6 @@ export default function PaymentResult() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col">
-        <Navbar />
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mb-4" />
           <h2 className="text-base font-bold text-slate-800">Đang đối soát kết quả giao dịch...</h2>
@@ -91,7 +89,6 @@ export default function PaymentResult() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC] pb-20">
-      <Navbar />
 
       <main className="max-w-3xl mx-auto pt-8 px-4 sm:px-6">
         {/* STEPPER TIẾN TRÌNH */}

@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Loader2,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import TutorResultCard from "../components/TutorResultCard";
 import { getSubjects, searchTutors } from "../api/tutorSearch";
 import { naturalSearchTutors } from "../api/ai";
@@ -173,7 +172,6 @@ export default function FindTutors() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid lg:grid-cols-[280px_1fr] gap-8">
         {/* ASIDE BỘ LỌC CỔ ĐIỂN */}

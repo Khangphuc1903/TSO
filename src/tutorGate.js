@@ -50,11 +50,14 @@ export function loadTutorGate(force = false) {
   return inflight;
 }
 
-const BASIC_PATHS = ["/profile", "/tutor", "/tutor-identity", "/tutor-tests", "/notifications", "/messages"];
+const BASIC_PATHS = ["/profile", "/tutor", "/notifications", "/messages"];
+const SETUP_PATHS = ["/tutor-identity", "/tutor-tests"];
 
 export function tutorPathAllowed(pathname, ready) {
   const path = (pathname || "/").split("?")[0];
+  if (!ready && SETUP_PATHS.includes(path)) return true;
   if (BASIC_PATHS.includes(path)) return true;
+  if (path === "/sos" || path.startsWith("/sos/")) return true;
   if (!ready) return false;
   if (["/bookings", "/study-groups/bids", "/sos", "/payments", "/faq", "/about", "/contact", "/help"].includes(path)) {
     return true;

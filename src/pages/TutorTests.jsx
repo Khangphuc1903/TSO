@@ -13,7 +13,6 @@ import {
   Sparkles,
   XCircle,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import TutorSetupSteps from "../components/TutorSetupSteps";
 import { getUser, isLoggedIn } from "../auth";
 import {
@@ -229,7 +228,6 @@ export default function TutorTests() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-12 pb-8 px-6">
         <div
           className="absolute inset-0 -z-10"

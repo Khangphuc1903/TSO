@@ -22,7 +22,6 @@ import {
   Heart,
   Zap
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
 import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, placeStudyGroupBid, removeStudyGroupMember, respondJoinRequest, selectStudyGroupBid, voteStudyGroupBid, withdrawStudyGroupBid } from "../api/studyGroups";
@@ -164,7 +163,6 @@ export default function StudyGroupDetail() {
   if (!group) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC] flex flex-col">
-        <Navbar />
         <div className="flex-1 flex flex-col items-center justify-center p-6">
           {error ? (
             <div className="text-center">
@@ -193,7 +191,6 @@ export default function StudyGroupDetail() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC]">
-      <Navbar />
 
       {/* HERO SECTION */}
       <section className="relative overflow-hidden">
@@ -529,11 +526,13 @@ export default function StudyGroupDetail() {
           {group.hiringMode === "ReverseBid" && !group.restricted && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-5">
               <div>
-                <h2 className="font-bold text-slate-900 text-base">Đấu thầu ngược — tìm gia sư cho nhóm</h2>
+                <h2 className="font-bold text-slate-900 text-base">
+                  {(group.bids || []).some((b) => b.status === "Won") ? "Đã chốt gia sư cho nhóm" : "Đấu thầu ngược — tìm gia sư cho nhóm"}
+                </h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Ngân sách nhóm đưa ra {formatVnd(group.budgetPerSession)}/buổi.
-                  {group.bidDeadline ? ` Hạn ứng tuyển ${new Date(group.bidDeadline).toLocaleString("vi-VN")}.` : ""}
-                  {" "}Đã có {group.bidCount || 0} hồ sơ.
+                  {(group.bids || []).some((b) => b.status === "Won")
+                    ? "Các hồ sơ khác đã được từ chối và không còn hiện ở đây."
+                    : `Ngân sách nhóm đưa ra ${formatVnd(group.budgetPerSession)}/buổi.${group.bidDeadline ? ` Hạn ứng tuyển ${new Date(group.bidDeadline).toLocaleString("vi-VN")}.` : ""} Đã có ${group.bidCount || 0} hồ sơ.`}
                 </p>
               </div>
               {group.tutorRequirements && (
@@ -590,7 +589,10 @@ export default function StudyGroupDetail() {
                 </div>
               )}
 
-              {(group.bids || []).map((bid) => (
+              {((group.bids || []).some((b) => b.status === "Won")
+                ? (group.bids || []).filter((b) => b.status === "Won")
+                : (group.bids || []).filter((b) => b.status !== "Lost")
+              ).map((bid) => (
                 <article key={bid.bidId} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>

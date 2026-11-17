@@ -1,45 +1,45 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
-import { Spinner } from "./components/ui/Spinner";
+import Navbar from "./components/Navbar";
+import Profile from "./pages/Profile";
+import TutorDesk from "./pages/TutorDesk";
+import MyBookings from "./pages/MyBookings";
+import TutorBidBoard from "./pages/TutorBidBoard";
+import SosRescue from "./pages/SosRescue";
+import Notifications from "./pages/Notifications";
+import Messages from "./pages/Messages";
 import { CartProvider } from "./context/CartContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { getUser, isLoggedIn } from "./auth";
 import { loadTutorGate, tutorPathAllowed } from "./tutorGate";
 
-const Login = lazy(() => import("./pages/Login"));
-const Register = lazy(() => import("./pages/Register"));
-const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const Profile = lazy(() => import("./pages/Profile"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const Messages = lazy(() => import("./pages/Messages"));
-const FindTutors = lazy(() => import("./pages/FindTutors"));
-const TutorProfile = lazy(() => import("./pages/TutorProfile"));
-const TutorDesk = lazy(() => import("./pages/TutorDesk"));
-const TutorTests = lazy(() => import("./pages/TutorTests"));
-const TutorIdentity = lazy(() => import("./pages/TutorIdentity"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const About = lazy(() => import("./pages/About"));
-const Contact = lazy(() => import("./pages/Contact"));
-const Faq = lazy(() => import("./pages/Faq"));
-const Reviews = lazy(() => import("./pages/Reviews"));
-const StudyGroups = lazy(() => import("./pages/StudyGroups"));
-const CreateStudyGroup = lazy(() => import("./pages/CreateStudyGroup"));
-const StudyGroupDetail = lazy(() => import("./pages/StudyGroupDetail"));
-const TutorBidBoard = lazy(() => import("./pages/TutorBidBoard"));
-const MyStudyGroups = lazy(() => import("./pages/MyStudyGroups"));
-const MyBookings = lazy(() => import("./pages/MyBookings"));
-const Onboarding = lazy(() => import("./pages/Onboarding"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-const PaymentResult = lazy(() => import("./pages/PaymentResult"));
-const Cart = lazy(() => import("./pages/Cart"));
-const Wishlist = lazy(() => import("./pages/Wishlist"));
-const PaymentHistory = lazy(() => import("./pages/PaymentHistory"));
-const SosRescue = lazy(() => import("./pages/SosRescue"));
-const AiDiagnosis = lazy(() => import("./pages/AiDiagnosis"));
-const SosSession = lazy(() => import("./pages/SosSession"));
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import FindTutors from "./pages/FindTutors";
+import TutorProfile from "./pages/TutorProfile";
+import TutorTests from "./pages/TutorTests";
+import TutorIdentity from "./pages/TutorIdentity";
+import AdminDashboard from "./pages/AdminDashboard";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Faq from "./pages/Faq";
+import Reviews from "./pages/Reviews";
+import StudyGroups from "./pages/StudyGroups";
+import CreateStudyGroup from "./pages/CreateStudyGroup";
+import StudyGroupDetail from "./pages/StudyGroupDetail";
+import MyStudyGroups from "./pages/MyStudyGroups";
+import Onboarding from "./pages/Onboarding";
+import Checkout from "./pages/Checkout";
+import PaymentResult from "./pages/PaymentResult";
+import Cart from "./pages/Cart";
+import Wishlist from "./pages/Wishlist";
+import PaymentHistory from "./pages/PaymentHistory";
+import AiDiagnosis from "./pages/AiDiagnosis";
+import SosSession from "./pages/SosSession";
 
 function OnboardingGate({ children }) {
   const loc = useLocation();
@@ -76,21 +76,28 @@ function TutorAreaGate({ children }) {
       stop = true;
       window.removeEventListener("tutor-gate", pull);
     };
-  }, [isTutor, loc.pathname]);
+  }, [isTutor]);
 
   if (!isTutor) return children;
   if (!gate) {
-    if (tutorPathAllowed(loc.pathname, false)) return children;
-    return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-surface">
-        <Spinner size="lg" className="text-brand-500" />
-      </div>
-    );
+    return children;
   }
   if (!tutorPathAllowed(loc.pathname, gate.ready)) {
     return <Navigate to="/tutor" replace />;
   }
   return children;
+}
+
+function AppShell({ children }) {
+  const loc = useLocation();
+  const bare = ["/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/onboarding"]
+    .includes(loc.pathname);
+  return (
+    <>
+      {!bare && <Navbar />}
+      {children}
+    </>
+  );
 }
 
 function App() {
@@ -100,13 +107,7 @@ function App() {
         <ToastProvider>
           <OnboardingGate>
             <TutorAreaGate>
-            <Suspense
-              fallback={
-                <div className="flex min-h-[70vh] items-center justify-center bg-surface">
-                  <Spinner size="lg" className="text-brand-500" />
-                </div>
-              }
-            >
+            <AppShell>
               <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
@@ -154,7 +155,7 @@ function App() {
             <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/payments" element={<PaymentHistory />} />
               </Routes>
-            </Suspense>
+            </AppShell>
             </TutorAreaGate>
           </OnboardingGate>
         </ToastProvider>

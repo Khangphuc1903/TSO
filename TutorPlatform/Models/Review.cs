@@ -7,7 +7,9 @@ public partial class Review
 {
     public int ReviewId { get; set; }
 
-    public int BookingId { get; set; }
+    public int? BookingId { get; set; }
+
+    public int? SosSessionId { get; set; }
 
     public int StudentId { get; set; }
 
@@ -25,7 +27,9 @@ public partial class Review
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual Booking Booking { get; set; } = null!;
+    public virtual Booking? Booking { get; set; }
+
+    public virtual SosSession? SosSession { get; set; }
 
     public virtual User Student { get; set; } = null!;
 

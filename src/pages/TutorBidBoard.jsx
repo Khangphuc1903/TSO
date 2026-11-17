@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Clock, GraduationCap, Users } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { getUser, isLoggedIn, loginPath } from "../auth";
 import { getBidBoard, getMyBids } from "../api/studyGroups";
 import { levelLabel } from "../data/studyLevels";
@@ -33,7 +32,6 @@ export default function TutorBidBoard() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="bg-gradient-to-br from-[#0F294A] via-[#143763] to-[#0D5C63] px-6 py-10 text-white">
         <div className="mx-auto max-w-5xl">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-200">Chỉ giáo viên thấy</p>

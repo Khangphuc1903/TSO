@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Clock, Radio, Siren, Sparkles, Zap } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { getUser, isLoggedIn, loginPath } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
 import { createAppHub } from "../api/hub";
@@ -13,9 +12,6 @@ import {
   getMySosRequests,
   getOpenSosRequests,
   getSosConfig,
-  getSosReady,
-  setSosReady,
-  sosHeartbeat,
 } from "../api/sos";
 
 function statusLabel(status) {
@@ -35,10 +31,10 @@ export default function SosRescue() {
   const [subjects, setSubjects] = useState([]);
   const [mine, setMine] = useState([]);
   const [open, setOpen] = useState([]);
-  const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [claimingId, setClaimingId] = useState(null);
   const [form, setForm] = useState({ subjectId: "", questionNote: "", image: null });
   const preview = form.image ? URL.createObjectURL(form.image) : "";
   const hubRef = useRef(null);
@@ -49,9 +45,9 @@ export default function SosRescue() {
     setMine(Array.isArray(data) ? data : []);
   };
   const loadTutor = async () => {
-    const [r, list] = await Promise.all([getSosReady(), getOpenSosRequests().catch(() => [])]);
-    setReady(Boolean(r?.isSosReady));
+    const list = await getOpenSosRequests();
     setOpen(Array.isArray(list) ? list : []);
+    window.dispatchEvent(new Event("sos-updated"));
   };
 
   useEffect(() => {
@@ -62,13 +58,16 @@ export default function SosRescue() {
     getSosConfig().then(setConfig).catch(() => {});
     getSubjects().then(setSubjects).catch(() => setSubjects([]));
     if (isStudent) loadStudent().catch(() => setError("Không tải được yêu cầu SOS."));
-    if (isTutor) loadTutor().catch(() => setError("Bật SOS Ready sau khi hồ sơ đã xác thực và đăng công khai."));
+    if (isTutor) loadTutor().catch(() => setError("Chỉ gia sư đã xác thực và đang hoạt động mới nhận được SOS."));
 
     const hub = createAppHub();
     hubRef.current = hub;
-    hub.on("SosRequestCreated", () => {
+    const refreshTutor = () => {
       if (isTutor) loadTutor().catch(() => {});
-    });
+    };
+    hub.on("SosRequestCreated", refreshTutor);
+    hub.on("SosRequestClaimedByOther", refreshTutor);
+    hub.on("SosRequestExpired", refreshTutor);
     hub.on("SosRequestClaimed", (payload) => {
       if (payload?.sessionId) navigate(`/sos/session/${payload.sessionId}`);
     });
@@ -83,13 +82,6 @@ export default function SosRescue() {
       hub.stop();
     };
   }, [navigate, isStudent, isTutor]);
-
-  useEffect(() => {
-    if (!isTutor || !ready) return;
-    sosHeartbeat().catch(() => {});
-    const t = setInterval(() => sosHeartbeat().catch(() => {}), 25000);
-    return () => clearInterval(t);
-  }, [isTutor, ready]);
 
   const onCreate = async (e) => {
     e.preventDefault();
@@ -106,7 +98,7 @@ export default function SosRescue() {
         questionNote: form.questionNote,
         image: form.image,
       });
-      setInfo("Đã phát SOS. Gia sư online sẽ nhận tín hiệu ngay.");
+      setInfo("Đã phát SOS tới gia sư đúng môn này. Gia sư môn khác không nhận tín hiệu.");
       setForm({ subjectId: form.subjectId, questionNote: "", image: null });
       await loadStudent();
     } catch (err) {
@@ -116,33 +108,24 @@ export default function SosRescue() {
     }
   };
 
-  const onToggleReady = async () => {
-    setError("");
-    try {
-      const res = await setSosReady(!ready);
-      setReady(Boolean(res?.isSosReady));
-      if (res?.isSosReady) await loadTutor();
-      else setOpen([]);
-    } catch (err) {
-      setError(err.response?.data?.message || "Không đổi trạng thái SOS. Hồ sơ cần verified + đăng công khai.");
-    }
-  };
-
   const onClaim = async (requestId) => {
+    if (claimingId) return;
+    setClaimingId(requestId);
     setError("");
     try {
       const res = await claimSosRequest(requestId);
       if (res?.sessionId) navigate(`/sos/session/${res.sessionId}`);
       else await loadTutor();
     } catch (err) {
-      setError(err.response?.data?.message || "Đơn đã được người khác nhận.");
+      setError(err.response?.data?.message || err.response?.data?.title || "Không nhận được đơn. Hãy thử lại.");
       loadTutor().catch(() => {});
+    } finally {
+      setClaimingId(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden bg-gradient-to-br from-[#4C0519] via-[#0F294A] to-[#0D5C63] px-6 pb-14 pt-10 text-white">
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-rose-400/20 blur-3xl" />
         <div className="relative z-10 mx-auto max-w-5xl">
@@ -152,9 +135,8 @@ export default function SosRescue() {
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold">Cứu viện bài tập 15 phút</h1>
           <p className="text-white/75 mt-3 max-w-2xl text-sm leading-relaxed">
-            11 giờ đêm kẹt một câu? Chụp ảnh bài, bấm SOS. Gia sư đang bật chế độ sẵn sàng nhận tín hiệu
-            qua SignalR, vào phòng chat + gọi audio 15 phút. Nhóm học chỉ chat (ảnh/tệp), không gọi —
-            gọi chỉ có trong phiên SOS.
+            11 giờ đêm kẹt một câu? Chụp ảnh bài, bấm SOS. Chỉ gia sư đang dạy đúng môn đó nhận thanh báo.
+            Hết 15 phút, học sinh đánh giá gia sư.
           </p>
           <div className="flex flex-wrap gap-4 mt-6 text-sm">
             <span className="inline-flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5">
@@ -273,26 +255,20 @@ export default function SosRescue() {
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="font-semibold text-slate-900">Chế độ sẵn sàng cứu viện</h2>
+                <h2 className="font-semibold text-slate-900">Luôn sẵn sàng cứu viện</h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Bật khi bạn online. Đơn SOS đúng môn đã xác thực sẽ hiện ngay.
+                  Không cần bật thêm. Chỉ SOS đúng môn bạn đang dạy mới hiện ở đây.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onToggleReady}
-                className={`h-11 px-5 rounded-xl font-semibold text-sm ${
-                  ready ? "bg-verified-600 text-white" : "bg-slate-100 text-slate-700"
-                }`}
-              >
-                {ready ? "Đang sẵn sàng" : "Bật SOS Ready"}
-              </button>
+              <span className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white">
+                <span className="h-2 w-2 rounded-full bg-white" />
+                Đang nhận SOS
+              </span>
             </div>
 
             <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
               <h2 className="font-semibold text-slate-900 mb-4">Đơn đang chờ</h2>
-              {!ready && <p className="text-sm text-slate-500">Bật SOS Ready để nhận đơn.</p>}
-              {ready && open.length === 0 && <p className="text-sm text-slate-500">Chưa có đơn SOS cho môn của bạn.</p>}
+              {open.length === 0 && <p className="text-sm text-slate-500">Chưa có đơn SOS nào đang mở.</p>}
               <div className="grid sm:grid-cols-2 gap-4">
                 {open.map((r) => (
                   <article key={r.requestId} className="rounded-xl border border-slate-100 overflow-hidden">
@@ -304,9 +280,10 @@ export default function SosRescue() {
                       <button
                         type="button"
                         onClick={() => onClaim(r.requestId)}
-                        className="mt-3 w-full h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
+                        disabled={claimingId === r.requestId}
+                        className="mt-3 w-full h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium disabled:opacity-60"
                       >
-                        Nhận đơn đầu tiên
+                        {claimingId === r.requestId ? "Đang nhận..." : "Nhận đơn đầu tiên"}
                       </button>
                     </div>
                   </article>

@@ -19,7 +19,6 @@ import {
   MessageCircle,
   Clock
 } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { Skeleton } from "../components/ui/Skeleton";
 import { searchStudyGroups } from "../api/studyGroups";
 import { getSubjects } from "../api/tutorSearch";
@@ -95,7 +94,6 @@ export default function StudyGroups() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC]">
-      <Navbar />
 
       {/* HERO BANNER */}
       <section className="relative overflow-hidden">

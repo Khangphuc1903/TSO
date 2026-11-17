@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Loader2, Wallet, CreditCard } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { isLoggedIn } from "../auth";
 import { getMyPayments } from "../api/payment";
 
@@ -32,7 +31,6 @@ export default function PaymentHistory() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <main className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">

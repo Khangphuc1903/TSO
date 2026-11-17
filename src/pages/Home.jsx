@@ -21,7 +21,6 @@ import {
   Siren
 } from "lucide-react";
 import Footer from "../components/Footer";
-import Navbar from "../components/Navbar";
 import Button from "../components/ui/Button";
 import { SkeletonTutorCard } from "../components/ui/Skeleton";
 import { getDefaultTutors } from "../api/tutorSearch";
@@ -73,7 +72,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-white to-[#F8FAFC]">
-      <Navbar />
 
       {/* ═══════════════════ HERO ═══════════════════ */}
       <section className="relative overflow-hidden">

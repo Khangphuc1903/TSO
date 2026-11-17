@@ -58,3 +58,8 @@ export async function endSosSession(sessionId) {
   const res = await axiosClient.post(`/sos/sessions/${sessionId}/end`);
   return res.data;
 }
+
+export async function reviewSosSession(sessionId, { rating, comment }) {
+  const res = await axiosClient.post(`/sos/sessions/${sessionId}/review`, { rating, comment });
+  return res.data;
+}

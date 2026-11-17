@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, Sparkles } from "lucide-react";
-import Navbar from "../components/Navbar";
 import BookingLessonCard from "../components/BookingLessonCard";
 import CancelRefundModal from "../components/CancelRefundModal";
 import { getUser, isLoggedIn } from "../auth";
@@ -56,7 +55,6 @@ export default function MyBookings() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-12 pb-8 px-6">
         <div
           className="absolute inset-0 -z-10"

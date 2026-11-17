@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Bell, Sparkles } from "lucide-react";
-import Navbar from "../components/Navbar";
 import { isLoggedIn } from "../auth";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../api/study";
 import { useToast } from "../components/ui/ToastContext";
@@ -34,7 +33,6 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
       <section className="relative overflow-hidden pt-12 pb-6 px-6">
         <div
           className="absolute inset-0 -z-10"

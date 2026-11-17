@@ -54,4 +54,12 @@ public sealed class SosSessionDto
     public int DurationMinutes { get; set; }
     public decimal FeeAmount { get; set; }
     public string PayoutStatus { get; set; } = null!;
+    public bool CanReview { get; set; }
+    public byte? MyRating { get; set; }
+}
+
+public sealed class SosReviewDto
+{
+    public byte Rating { get; set; }
+    public string? Comment { get; set; }
 }

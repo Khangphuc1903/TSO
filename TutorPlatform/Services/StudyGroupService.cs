@@ -162,7 +162,7 @@ public class StudyGroupService
         }
 
         var visibleBids = g.StudyGroupBids
-            .Where(b => b.Status != "Withdrawn")
+            .Where(b => b.Status != "Withdrawn" && (!chosen || b.Status == "Won"))
             .OrderByDescending(b => b.Status == "Won")
             .ThenByDescending(b => b.Votes.Count)
             .ThenBy(b => b.ProposedPrice)
@@ -711,7 +711,18 @@ public class StudyGroupService
             "StudyGroup",
             group.GroupId,
             cancellationToken);
-        return (true, 200, "Đã chốt gia sư cho nhóm.");
+        foreach (var loser in bids.Where(b => b.Status == "Lost"))
+        {
+            await _notifications.NotifyAsync(
+                loser.TutorId,
+                "StudyGroupBidLost",
+                "Nhóm đã chọn gia sư khác",
+                $"Nhóm \"{group.Title}\" đã chốt gia sư khác. Hồ sơ của bạn không được chọn.",
+                "StudyGroup",
+                group.GroupId,
+                cancellationToken);
+        }
+        return (true, 200, "Đã chốt gia sư cho nhóm. Các gia sư còn lại đã được báo từ chối.");
     }
 
     private async Task<bool> IsTutorAsync(int userId, CancellationToken cancellationToken)
