@@ -12,6 +12,7 @@ import {
   openConversation,
   rejectBooking,
 } from "../api/study";
+import { useCart } from "../context/CartContext";
 import EmptyState from "../components/ui/EmptyState";
 import { Spinner } from "../components/ui/Spinner";
 
@@ -25,6 +26,7 @@ const FILTERS = [
 
 export default function MyBookings() {
   const navigate = useNavigate();
+  const { refreshCart } = useCart();
   const user = getUser();
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
   const [items, setItems] = useState([]);
@@ -254,6 +256,7 @@ export default function MyBookings() {
             onSuccess={(msg) => {
               setInfo(msg);
               load();
+              refreshCart();
             }}
           />
         )}

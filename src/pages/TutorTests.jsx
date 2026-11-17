@@ -25,6 +25,7 @@ import {
   registerTutorTest,
   submitTutorTest,
 } from "../api/study";
+import { invalidateTutorGate } from "../tutorGate";
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
@@ -217,6 +218,7 @@ export default function TutorTests() {
       setResult({ ...data, autoSubmitted: auto });
       setSession(null);
       await load();
+      invalidateTutorGate();
     } catch (err) {
       submittedRef.current = false;
       setError(err.response?.data?.message || "Không thể nộp bài kiểm tra.");
@@ -500,9 +502,7 @@ function WizardView({ levels, level, setLevel, levelSubjects, submitting, startE
         <h2 className="text-sm font-bold text-slate-800 mb-1">1. Chọn cấp học</h2>
         <p className="text-xs text-slate-500 mb-3">Chỉ THCS hoặc THPT. Không chọn từng lớp.</p>
         {levels.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            Chưa có bộ câu hỏi. Chạy script `seed-tutor-test-questions.sql` trên database rồi tải lại trang.
-          </p>
+          <p className="text-sm text-slate-500">Chưa có đề chuyên môn. Hãy làm bài kỹ năng sư phạm bên dưới trước.</p>
         ) : (
           <div className="flex flex-wrap gap-3">
             {levels.map((lv) => (
@@ -578,10 +578,7 @@ function WizardView({ levels, level, setLevel, levelSubjects, submitting, startE
           </div>
         </div>
         <div className="divide-y divide-slate-100">
-          {(common.length ? common : [
-            { testType: "Safety", title: "An toàn", questionCount: 0, status: "Chưa làm" },
-            { testType: "Pedagogy", title: "Kỹ năng sư phạm", questionCount: 0, status: "Chưa làm" },
-          ]).map((item) => {
+          {(common.length ? common : []).map((item) => {
             const wait = retryLeft(item.retryAvailableAt);
             const blocked = item.status === "Không đạt" && wait > 0;
             return (
@@ -594,7 +591,7 @@ function WizardView({ levels, level, setLevel, levelSubjects, submitting, startE
                   <StatusBadge status={item.status} />
                   <button
                     type="button"
-                    disabled={submitting || blocked}
+                    disabled={submitting || blocked || !item.questionCount}
                     onClick={() => startExam({ testType: item.testType, subjectId: 0, gradeLevel: item.testType })}
                     className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
                   >

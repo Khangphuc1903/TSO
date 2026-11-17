@@ -71,15 +71,14 @@ export function CartProvider({ children }) {
   const removeItem = async (bookingId, reason = "Học viên xóa khỏi giỏ hàng") => {
     try {
       await cancelAndRefundBooking(bookingId, reason);
-      setCartItems((prev) => prev.filter((item) => item.bookingId !== bookingId));
-      setSelectedIds((prev) => prev.filter((id) => id !== bookingId));
-      return { success: true };
     } catch (err) {
-      return {
-        success: false,
-        message: err.response?.data?.message || "Không thể xóa buổi học.",
-      };
+      const message = err.response?.data?.message || "Không thể xóa buổi học.";
+      const alreadyGone = /đã được hủy|đã hủy/i.test(message);
+      if (!alreadyGone) return { success: false, message };
     }
+    setCartItems((prev) => prev.filter((item) => item.bookingId !== bookingId));
+    setSelectedIds((prev) => prev.filter((id) => id !== bookingId));
+    return { success: true };
   };
 
   const cartCount = cartItems.length;

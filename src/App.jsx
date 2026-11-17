@@ -1,10 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import { Spinner } from "./components/ui/Spinner";
 import { CartProvider } from "./context/CartContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { getUser, isLoggedIn } from "./auth";
+import { loadTutorGate, tutorPathAllowed } from "./tutorGate";
 
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
@@ -27,6 +28,8 @@ const Reviews = lazy(() => import("./pages/Reviews"));
 const StudyGroups = lazy(() => import("./pages/StudyGroups"));
 const CreateStudyGroup = lazy(() => import("./pages/CreateStudyGroup"));
 const StudyGroupDetail = lazy(() => import("./pages/StudyGroupDetail"));
+const TutorBidBoard = lazy(() => import("./pages/TutorBidBoard"));
+const MyStudyGroups = lazy(() => import("./pages/MyStudyGroups"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -52,12 +55,51 @@ function OnboardingGate({ children }) {
   return children;
 }
 
+function TutorAreaGate({ children }) {
+  const loc = useLocation();
+  const isTutor = isLoggedIn() && (getUser()?.role || "").toLowerCase() === "tutor";
+  const [gate, setGate] = useState(null);
+
+  useEffect(() => {
+    if (!isTutor) {
+      setGate(null);
+      return;
+    }
+    let stop = false;
+    const pull = () =>
+      loadTutorGate(true).then((next) => {
+        if (!stop) setGate(next);
+      });
+    pull();
+    window.addEventListener("tutor-gate", pull);
+    return () => {
+      stop = true;
+      window.removeEventListener("tutor-gate", pull);
+    };
+  }, [isTutor, loc.pathname]);
+
+  if (!isTutor) return children;
+  if (!gate) {
+    if (tutorPathAllowed(loc.pathname, false)) return children;
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center bg-surface">
+        <Spinner size="lg" className="text-brand-500" />
+      </div>
+    );
+  }
+  if (!tutorPathAllowed(loc.pathname, gate.ready)) {
+    return <Navigate to="/tutor" replace />;
+  }
+  return children;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <CartProvider>
         <ToastProvider>
           <OnboardingGate>
+            <TutorAreaGate>
             <Suspense
               fallback={
                 <div className="flex min-h-[70vh] items-center justify-center bg-surface">
@@ -89,6 +131,8 @@ function App() {
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/study-groups" element={<StudyGroups />} />
             <Route path="/study-groups/new" element={<CreateStudyGroup />} />
+            <Route path="/study-groups/bids" element={<TutorBidBoard />} />
+            <Route path="/study-groups/mine" element={<MyStudyGroups />} />
             <Route path="/study-groups/:groupId" element={<StudyGroupDetail />} />
             <Route path="/bookings" element={<MyBookings />} />
             <Route path="/cart" element={<Cart />} />
@@ -111,6 +155,7 @@ function App() {
             <Route path="/payments" element={<PaymentHistory />} />
               </Routes>
             </Suspense>
+            </TutorAreaGate>
           </OnboardingGate>
         </ToastProvider>
       </CartProvider>

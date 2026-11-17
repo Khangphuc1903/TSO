@@ -9,6 +9,37 @@
       #ekyc_sdk_intergrated { min-height: 100%; width: 100%; }
       .boot { padding: 24px; color: #475569; font-size: 14px; }
     </style>
+    <script>
+      (function () {
+        var orig = window.fetch;
+        window.fetch = function (input, init) {
+          var url = typeof input === "string" ? input : (input && input.url) || "";
+          if (url.indexOf("vnpt.vn") === -1) return orig.apply(this, arguments);
+          var ctrl = new AbortController();
+          var timer = setTimeout(function () { ctrl.abort(); }, 40000);
+          var next = Object.assign({}, init || {}, { signal: ctrl.signal });
+          return orig.call(window, input, next).then(function (res) {
+            clearTimeout(timer);
+            if (res.status === 401 || res.status === 403) {
+              res.clone().json().then(function (data) {
+                var reason = String((data && (data.error || data.message)) || "");
+                var message = reason.toLowerCase().indexOf("deactive") >= 0 || reason.toLowerCase().indexOf("token id") >= 0
+                  ? "Token ID của VNPT đã bị khóa. Hãy copy lại Token ID, Token Key và Access Token mới cùng lúc, rồi chạy lại API."
+                  : "VNPT từ chối bộ token. Hãy lấy Token ID, Token Key và Access Token mới cùng lúc.";
+                parent.postMessage({ type: "VNPT_ERROR", message: message }, "*");
+              }).catch(function () {
+                parent.postMessage({ type: "VNPT_ERROR", message: "VNPT từ chối bộ token. Hãy lấy Token ID, Token Key và Access Token mới cùng lúc." }, "*");
+              });
+            }
+            return res;
+          }, function (err) {
+            clearTimeout(timer);
+            parent.postMessage({ type: "VNPT_ERROR", message: "VNPT không phản hồi sau khi nhận ảnh. Đóng máy quét và thử lại." }, "*");
+            return Promise.reject(err);
+          });
+        };
+      })();
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.7.4/lottie.min.js"></script>
     <script src="./lib/VNPTBrowserSDKAppV4.1.0.js"></script>
     <script src="./web-sdk-version-3.0.js"></script>
@@ -32,7 +63,10 @@
           parent.postMessage({ type: "VNPT_ERROR", message: "Không tải được SDK VNPT." }, "*");
           return;
         }
-        var cfg = Object.assign({}, data.config || {}, {
+        var raw = data.config || {};
+        var token = String(raw.AUTHORIZION || "").trim();
+        if (token.toLowerCase().indexOf("bearer ") === 0) token = token.slice(7).trim();
+        var cfg = Object.assign({}, raw, { AUTHORIZION: token }, {
           HAS_QR_SCAN: false,
           SHOW_TAB_RESULT_QRCODE: false,
           LIST_TYPE_DOCUMENT: [-1],

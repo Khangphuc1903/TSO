@@ -25,20 +25,25 @@ import {
 import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
 import { avatarUrl, getUser, isLoggedIn } from "../auth";
-import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, removeStudyGroupMember, respondJoinRequest } from "../api/studyGroups";
+import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, placeStudyGroupBid, removeStudyGroupMember, respondJoinRequest, selectStudyGroupBid, voteStudyGroupBid, withdrawStudyGroupBid } from "../api/studyGroups";
+import { formatVnd } from "../utils/format";
 import { getDefaultTutors } from "../api/tutorSearch";
 import { openConversation } from "../api/study";
+import { levelLabel, splitStudyCopy } from "../data/studyLevels";
 
 export default function StudyGroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const user = getUser();
+  const isTutor = (user?.role || "").toLowerCase() === "tutor";
   const [group, setGroup] = useState(null);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [tutors, setTutors] = useState([]);
   const [tutorId, setTutorId] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
+  const [bidForm, setBidForm] = useState({ proposedPrice: "", curriculumNote: "", certificateNote: "" });
+  const [bidError, setBidError] = useState("");
 
   const load = () => getStudyGroup(groupId).then(setGroup);
 
@@ -81,6 +86,71 @@ export default function StudyGroupDetail() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || "Không mời được gia sư.");
+    }
+  };
+
+  const submitBid = async () => {
+    if (!isLoggedIn()) return navigate("/login");
+    const curriculum = bidForm.curriculumNote.trim();
+    const certificate = bidForm.certificateNote.trim();
+    const price = Number(bidForm.proposedPrice);
+    if (!Number.isFinite(price) || price < 50000) {
+      setBidError("Giá đề nghị tối thiểu 50.000đ mỗi buổi.");
+      return;
+    }
+    if (curriculum.length < 10) {
+      setBidError("Mô tả giáo trình ít nhất 10 ký tự. Ví dụ: Ôn ngữ pháp và luyện đề trong 3 buổi.");
+      return;
+    }
+    if (certificate.length < 5) {
+      setBidError("Ghi bằng cấp hoặc chứng chỉ, ít nhất 5 ký tự.");
+      return;
+    }
+    try {
+      const res = await placeStudyGroupBid(groupId, {
+        proposedPrice: price,
+        curriculumNote: curriculum,
+        certificateNote: certificate,
+      });
+      setInfo(res.message);
+      setError("");
+      setBidError("");
+      load();
+    } catch (err) {
+      setBidError(err.response?.data?.message || "Không gửi được hồ sơ.");
+    }
+  };
+
+  const vote = async (bidId) => {
+    try {
+      const res = await voteStudyGroupBid(groupId, bidId);
+      setInfo(res.message);
+      setError("");
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không bình chọn được.");
+    }
+  };
+
+  const chooseTutor = async (bidId) => {
+    try {
+      const res = await selectStudyGroupBid(groupId, bidId);
+      setInfo(res.message);
+      setError("");
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không chốt được gia sư.");
+    }
+  };
+
+  const withdrawBid = async () => {
+    try {
+      const res = await withdrawStudyGroupBid(groupId);
+      setInfo(res.message);
+      setError("");
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không rút được hồ sơ.");
     }
   };
 
@@ -127,7 +197,7 @@ export default function StudyGroupDetail() {
 
       {/* HERO SECTION */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE]" />
+        <div className="absolute inset-0 bg-hero" />
         <div className="absolute -right-32 -top-32 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 sm:py-10">
@@ -175,6 +245,12 @@ export default function StudyGroupDetail() {
 
               {/* Meta info bar */}
               <div className="flex flex-wrap items-center gap-3 mt-4 text-xs sm:text-sm text-white/80">
+                {group.educationLevel && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
+                    <GraduationCap size={14} className="text-amber-200" />
+                    {levelLabel(group.educationLevel)} · {group.educationLevel}
+                  </span>
+                )}
                 {group.subjectName && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
                     <BookOpen size={14} className="text-blue-200" />
@@ -213,9 +289,20 @@ export default function StudyGroupDetail() {
               </div>
             </div>
 
-            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {group.description || "Nhóm học tập chia sẻ bài tập, thảo luận kiến thức và cùng nhau tiến bộ."}
-            </p>
+            {(() => {
+              const copy = splitStudyCopy(group.description);
+              return (
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Mục tiêu môn học</p>
+                  <p className="mt-2 text-base font-bold italic leading-relaxed text-slate-800">
+                    {copy.goal || "Cùng nhau học đúng trình độ, để mỗi buổi đều chạm đúng chỗ mình đang hổng."}
+                  </p>
+                  {copy.note && (
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">{copy.note}</p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Creator & Mentor info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
@@ -274,7 +361,7 @@ export default function StudyGroupDetail() {
             {/* ACTION AREA */}
             <div className="mt-6 pt-4 border-t border-slate-100 space-y-4">
               {/* Join request form */}
-              {!isMember && group.myJoinStatus !== "Pending" && group.myJoinStatus !== "Accepted" && (
+              {!isTutor && !isMember && group.myJoinStatus !== "Pending" && group.myJoinStatus !== "Accepted" && (
                 <div className="bg-brand-50/50 border border-brand-100 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center gap-2 text-sm font-bold text-brand-800">
                     <Heart size={16} className="text-brand-600" />
@@ -301,7 +388,13 @@ export default function StudyGroupDetail() {
                 </div>
               )}
 
-              {group.myJoinStatus === "Pending" && !isMember && (
+              {isTutor && !isMember && group.hiringMode !== "ReverseBid" && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 font-medium">
+                  Gia sư không xin vào nhóm học. Chỉ nhóm đang tìm gia sư mới nhận bài ứng tuyển.
+                </div>
+              )}
+
+              {group.myJoinStatus === "Pending" && !isMember && !isTutor && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 font-medium flex items-center gap-2">
                   <Clock size={16} className="text-amber-600 shrink-0" />
                   <span>Bạn đã gửi lời xin vào nhóm. Đang chờ chủ nhóm xét duyệt...</span>
@@ -392,7 +485,7 @@ export default function StudyGroupDetail() {
                   )}
                 </div>
 
-                {/* Mời gia sư */}
+                {group.hiringMode !== "ReverseBid" && (
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mb-3">
                     <GraduationCap size={15} className="text-brand-600" />
@@ -419,9 +512,121 @@ export default function StudyGroupDetail() {
                     </button>
                   </div>
                 </div>
+                )}
               </div>
             )}
           </div>
+
+          {group.hiringMode === "ReverseBid" && group.restricted && (
+            <div className="bg-white rounded-3xl border border-amber-200 p-6">
+              <h2 className="font-bold text-slate-900">Bài tìm gia sư chỉ giáo viên thấy</h2>
+              <p className="text-sm text-slate-600 mt-2">
+                Yêu cầu, ngân sách và hồ sơ ứng tuyển không hiện với học sinh ngoài nhóm. Nếu chủ nhóm gửi link này cho bạn, hãy xin vào nhóm để cùng xem và chọn gia sư.
+              </p>
+            </div>
+          )}
+
+          {group.hiringMode === "ReverseBid" && !group.restricted && (
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-5">
+              <div>
+                <h2 className="font-bold text-slate-900 text-base">Đấu thầu ngược — tìm gia sư cho nhóm</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Ngân sách nhóm đưa ra {formatVnd(group.budgetPerSession)}/buổi.
+                  {group.bidDeadline ? ` Hạn ứng tuyển ${new Date(group.bidDeadline).toLocaleString("vi-VN")}.` : ""}
+                  {" "}Đã có {group.bidCount || 0} hồ sơ.
+                </p>
+              </div>
+              {group.tutorRequirements && (
+                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Yêu cầu dành cho gia sư</p>
+                  <p className="text-sm text-slate-800 mt-2 whitespace-pre-wrap">{group.tutorRequirements}</p>
+                </div>
+              )}
+
+              {group.canBid && (
+                <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                  <p className="text-sm font-bold text-slate-900">{group.myBid ? "Cập nhật hồ sơ ứng tuyển" : "Ứng tuyển dạy nhóm này"}</p>
+                  <input
+                    type="number"
+                    min="50000"
+                    value={bidForm.proposedPrice}
+                    onChange={(e) => setBidForm((p) => ({ ...p, proposedPrice: e.target.value }))}
+                    placeholder="Giá đề nghị / buổi cho cả nhóm"
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <textarea
+                    rows={3}
+                    value={bidForm.curriculumNote}
+                    onChange={(e) => setBidForm((p) => ({ ...p, curriculumNote: e.target.value }))}
+                    placeholder="Giáo trình dự kiến: buổi 1 ôn gì, buổi 2 luyện dạng nào..."
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <textarea
+                    rows={2}
+                    value={bidForm.certificateNote}
+                    onChange={(e) => setBidForm((p) => ({ ...p, certificateNote: e.target.value }))}
+                    placeholder="Bằng cấp, chứng chỉ, kinh nghiệm luyện thi"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  {bidError && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{bidError}</p>
+                  )}
+                  <button type="button" onClick={submitBid} className="h-11 rounded-xl bg-brand-600 px-4 text-sm font-bold text-white">
+                    Gửi hồ sơ
+                  </button>
+                </div>
+              )}
+
+              {group.myBid && !group.isMember && (
+                <div className="rounded-2xl border border-slate-200 p-4 text-sm">
+                  <p className="font-bold text-slate-900">Hồ sơ của bạn · {group.myBid.status === "Won" ? "Được chọn" : group.myBid.status === "Lost" ? "Không được chọn" : "Đang chờ"}</p>
+                  <p className="mt-1 text-slate-600">{formatVnd(group.myBid.proposedPrice)}/buổi</p>
+                  <p className="mt-2 whitespace-pre-wrap text-slate-700">{group.myBid.curriculumNote}</p>
+                  {group.myBid.status === "Pending" && (
+                    <button type="button" onClick={withdrawBid} className="mt-3 text-sm font-semibold text-red-600">
+                      Rút hồ sơ
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {(group.bids || []).map((bid) => (
+                <article key={bid.bidId} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-900">{bid.tutorName}</p>
+                      <p className="text-xs text-slate-500">
+                        {[bid.university, bid.major, bid.yearsOfExperience ? `${bid.yearsOfExperience} năm kinh nghiệm` : ""]
+                          .filter(Boolean)
+                          .join(" · ") || "Hồ sơ gia sư"}
+                        {bid.averageRating ? ` · ${Number(bid.averageRating).toFixed(1)}★` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-brand-700">{formatVnd(bid.proposedPrice)}/buổi</p>
+                      <p className="text-xs text-slate-500">{bid.voteCount} phiếu · {bid.status === "Won" ? "Đã chọn" : bid.status === "Lost" ? "Không chọn" : "Đang chờ"}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold italic text-slate-800">Giáo trình</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{bid.curriculumNote}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">Bằng cấp / chứng chỉ</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{bid.certificateNote}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.canVote && bid.status === "Pending" && (
+                      <button type="button" onClick={() => vote(bid.bidId)} className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700">
+                        {bid.votedByMe ? "Đã bình chọn" : "Bình chọn"}
+                      </button>
+                    )}
+                    {group.canSelect && bid.status === "Pending" && (
+                      <button type="button" onClick={() => chooseTutor(bid.bidId)} className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white">
+                        Chọn gia sư này
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
 
           {/* CARD: CHAT NHÓM REALTIME */}
           {isMember ? (
@@ -438,7 +643,7 @@ export default function StudyGroupDetail() {
               </div>
               <h3 className="font-extrabold text-slate-900 text-lg mb-1">Chat nhóm realtime</h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                Khi trở thành thành viên, bạn có thể nhắn tin realtime với mọi người trong nhóm. Gửi lời xin vào nhóm để tham gia ngay!
+                Khi trở thành thành viên, bạn có thể nhắn tin realtime với mọi người trong nhóm. {isTutor ? "Gia sư gửi hồ sơ ứng tuyển, không xin vào nhóm." : "Gửi lời xin vào nhóm để tham gia."}
               </p>
             </div>
           )}

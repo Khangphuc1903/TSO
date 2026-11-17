@@ -15,6 +15,7 @@ import { getUser, isLoggedIn } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
+import { loadTutorGate } from "../tutorGate";
 import {
   createTutorSlot,
   deleteTutorCertificate,
@@ -56,6 +57,7 @@ export default function TutorDesk() {
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
 
   const [tab, setTab] = useState("profile");
+  const [tutorReady, setTutorReady] = useState(false);
   const [ws, setWs] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -112,6 +114,7 @@ export default function TutorDesk() {
       return;
     }
     getSubjects().then(setSubjects).catch(() => setSubjects([]));
+    loadTutorGate(true).then((gate) => setTutorReady(Boolean(gate?.ready)));
     load().catch(() => setError("Không tải được bảng gia sư. Kiểm tra backend đang chạy."));
   }, [navigate, isTutor]);
 
@@ -119,7 +122,8 @@ export default function TutorDesk() {
     () => invites.filter((i) => i.status === "Pending"),
     [invites]
   );
-  const canOpenSchedule = Boolean(ws?.canOpenSchedule);
+  const canOpenSchedule = Boolean(ws?.canOpenSchedule) || tutorReady;
+  const visibleTabs = canOpenSchedule ? TABS : TABS.filter((t) => t.id === "profile" || t.id === "certs");
   const passedTestCount = ws?.passedTestCount || 0;
   const identityCompleted = Boolean(ws?.identityCompleted);
   const setupCurrent = !identityCompleted ? "identity" : canOpenSchedule ? "schedule" : "tests";
@@ -231,20 +235,24 @@ export default function TutorDesk() {
               >
                 Làm bài test
               </Link>
+              {canOpenSchedule && (
               <Link
                 to="/sos"
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium"
               >
                 Cứu viện SOS
               </Link>
+              )}
+              {canOpenSchedule && (
               <Link
                 to="/bookings"
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
               >
               <CalendarClock size={16} />
-              Xác nhận booking
+              Lịch dạy
             </Link>
-            {user?.userId && (
+              )}
+            {canOpenSchedule && user?.userId && (
               <Link
                 to={`/tutors/${user.userId}`}
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-lg border border-slate-200 text-slate-700 text-sm font-medium hover:bg-white"
@@ -259,7 +267,7 @@ export default function TutorDesk() {
       <main className="max-w-5xl mx-auto px-6 pb-16">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-3 mb-6">
           <div className="flex overflow-x-auto">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <button
                 key={t.id}
                 type="button"

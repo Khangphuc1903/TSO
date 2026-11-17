@@ -4,6 +4,7 @@ export const adminApi = {
   metrics: () => axiosClient.get("/admin/metrics").then((r) => r.data),
   identity: (filter) => axiosClient.get("/admin/identity", { params: { filter } }).then((r) => r.data),
   reviewIdentity: (documentId, body) => axiosClient.post(`/admin/identity/${documentId}/review`, body).then((r) => r.data),
+  identityImage: (documentId, side) => axiosClient.get(`/admin/identity/${documentId}/image`, { params: { side }, responseType: "blob" }).then((r) => r.data),
   users: (q) => axiosClient.get("/admin/users", { params: { q } }).then((r) => r.data),
   ban: (userId, ban, reason) => axiosClient.post(`/admin/users/${userId}/ban`, { ban, reason }).then((r) => r.data),
   reports: (status) => axiosClient.get("/admin/reports", { params: { status } }).then((r) => r.data),
@@ -12,6 +13,7 @@ export const adminApi = {
   createQuestion: (body) => axiosClient.post("/admin/questions", body).then((r) => r.data),
   updateQuestion: (id, body) => axiosClient.put(`/admin/questions/${id}`, body).then((r) => r.data),
   toggleQuestion: (id) => axiosClient.post(`/admin/questions/${id}/toggle`).then((r) => r.data),
+  payouts: () => axiosClient.get("/admin/payouts").then((r) => r.data),
   settings: () => axiosClient.get("/admin/settings").then((r) => r.data),
   saveSettings: (settings) => axiosClient.put("/admin/settings", { settings }).then((r) => r.data),
 };

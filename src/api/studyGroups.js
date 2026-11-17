@@ -25,8 +25,43 @@ export async function respondJoinRequest(groupId, applicantId, accept) {
   return res.data;
 }
 
+export async function getBidBoard() {
+  const res = await axiosClient.get("/study-groups/bids/board");
+  return res.data;
+}
+
+export async function getMyBids() {
+  const res = await axiosClient.get("/study-groups/bids/mine");
+  return res.data;
+}
+
+export async function placeStudyGroupBid(id, payload) {
+  const res = await axiosClient.post(`/study-groups/${id}/bids`, payload);
+  return res.data;
+}
+
+export async function withdrawStudyGroupBid(id) {
+  const res = await axiosClient.post(`/study-groups/${id}/bids/withdraw`);
+  return res.data;
+}
+
+export async function voteStudyGroupBid(groupId, bidId) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/bids/${bidId}/vote`);
+  return res.data;
+}
+
+export async function selectStudyGroupBid(groupId, bidId) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/bids/${bidId}/select`);
+  return res.data;
+}
+
 export async function inviteTutorToGroup(id, tutorId, inviteMessage) {
   const res = await axiosClient.post(`/study-groups/${id}/invite-tutor`, { tutorId, inviteMessage });
+  return res.data;
+}
+
+export async function getMyStudyDesk() {
+  const res = await axiosClient.get("/study-groups/my-desk");
   return res.data;
 }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -28,9 +28,15 @@ export default function Cart() {
     toggleSelect,
     toggleSelectAll,
     removeItem,
+    refreshCart,
   } = useCart();
 
   const [deletingId, setDeletingId] = useState(null);
+  const [removeError, setRemoveError] = useState("");
+
+  useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [couponError, setCouponError] = useState("");
@@ -63,7 +69,9 @@ export default function Cart() {
   const handleRemoveItem = async (bookingId) => {
     if (window.confirm("Bạn có chắc chắn muốn bỏ buổi học này khỏi danh sách?")) {
       setDeletingId(bookingId);
-      await removeItem(bookingId);
+      setRemoveError("");
+      const result = await removeItem(bookingId);
+      if (!result.success) setRemoveError(result.message);
       setDeletingId(null);
     }
   };
@@ -105,6 +113,12 @@ export default function Cart() {
             Tìm thêm gia sư
           </Link>
         </div>
+
+        {removeError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {removeError}
+          </div>
+        )}
 
         {loading ? (
           <div className="bg-white rounded-2xl p-16 border border-slate-100 text-center shadow-sm">

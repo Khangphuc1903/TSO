@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
-import { avatarUrl, getUser, isLoggedIn } from "../auth";
+import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { getSubjects, getTutorDetail } from "../api/tutorSearch";
 import { createTutorReview, getEligibleReviewBookings, getTutorReviews, replyToReview } from "../api/reviews";
 import { createBooking } from "../api/bookings";
@@ -410,9 +410,16 @@ export default function TutorProfile() {
                       <button
                         type="button"
                         onClick={async () => {
-                          if (!isLoggedIn()) return navigate("/login");
-                          const id = await openConversation(Number(tutorId));
-                          navigate(`/messages?c=${id}`);
+                          if (!isLoggedIn()) {
+                            return navigate(loginPath(`${window.location.pathname}${window.location.search}`));
+                          }
+                          try {
+                            const id = await openConversation(Number(tutorId));
+                            if (!id) return;
+                            navigate(`/messages?c=${id}`);
+                          } catch {
+                            /* phiên vẫn còn; không đẩy về trang đăng nhập */
+                          }
                         }}
                         className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"
                       >

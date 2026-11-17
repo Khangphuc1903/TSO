@@ -61,6 +61,10 @@ public class CreateStudyGroupDto
     public bool HasMentor { get; set; }
     public int? TutorId { get; set; }
     public string? InviteMessage { get; set; }
+    public string? HiringMode { get; set; }
+    public decimal? BudgetPerSession { get; set; }
+    public DateTime? BidDeadline { get; set; }
+    public string? TutorRequirements { get; set; }
 }
 
 public class StudyGroupSearchRequest
@@ -69,6 +73,7 @@ public class StudyGroupSearchRequest
     public int? SubjectId { get; set; }
     public string? City { get; set; }
     public string? District { get; set; }
+    public string? EducationLevel { get; set; }
     public bool? HasMentor { get; set; }
 }
 
@@ -79,6 +84,7 @@ public class StudyGroupListItemDto
     public string? Description { get; set; }
     public int SubjectId { get; set; }
     public string SubjectName { get; set; } = null!;
+    public string? EducationLevel { get; set; }
     public string? City { get; set; }
     public string? District { get; set; }
     public string MeetingMode { get; set; } = null!;
@@ -90,6 +96,12 @@ public class StudyGroupListItemDto
     public string Status { get; set; } = null!;
     public string CreatorName { get; set; } = null!;
     public DateTime CreatedAt { get; set; }
+    public string HiringMode { get; set; } = "Standard";
+    public bool IsMine { get; set; }
+    public decimal? BudgetPerSession { get; set; }
+    public DateTime? BidDeadline { get; set; }
+    public string? TutorRequirements { get; set; }
+    public int BidCount { get; set; }
 }
 
 public class StudyGroupDetailDto : StudyGroupListItemDto
@@ -100,8 +112,41 @@ public class StudyGroupDetailDto : StudyGroupListItemDto
     public bool IsMember { get; set; }
     public string MyJoinStatus { get; set; } = "None";
     public bool IsOwner { get; set; }
+    public bool Restricted { get; set; }
+    public bool CanBid { get; set; }
+    public bool CanVote { get; set; }
+    public bool CanSelect { get; set; }
+    public StudyGroupBidDto? MyBid { get; set; }
     public List<StudyGroupMemberDto> Members { get; set; } = new();
     public List<StudyGroupJoinRequestDto> JoinRequests { get; set; } = new();
+    public List<StudyGroupBidDto> Bids { get; set; } = new();
+}
+
+public class StudyGroupBidDto
+{
+    public int BidId { get; set; }
+    public int GroupId { get; set; }
+    public string? GroupTitle { get; set; }
+    public int TutorId { get; set; }
+    public string TutorName { get; set; } = null!;
+    public string? University { get; set; }
+    public string? Major { get; set; }
+    public int? YearsOfExperience { get; set; }
+    public decimal AverageRating { get; set; }
+    public decimal ProposedPrice { get; set; }
+    public string? CurriculumNote { get; set; }
+    public string? CertificateNote { get; set; }
+    public string Status { get; set; } = null!;
+    public int VoteCount { get; set; }
+    public bool VotedByMe { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class PlaceStudyGroupBidDto
+{
+    public decimal ProposedPrice { get; set; }
+    public string? CurriculumNote { get; set; }
+    public string? CertificateNote { get; set; }
 }
 
 public class StudyGroupMemberDto

@@ -5,6 +5,8 @@ namespace TutorPlatform.DTOs;
 
 public class DiagnoseHomeworkRequest
 {
+    public IFormFile? File { get; set; }
+
     public string? StudentNote { get; set; }
 }
 

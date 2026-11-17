@@ -1,7 +1,10 @@
 import axiosClient from "./axiosClient";
 
-export async function createPaymentIntent(bookingId) {
-  const res = await axiosClient.post("/payments/create-intent", { bookingId });
+export async function createPaymentIntent(bookingId, couponCode) {
+  const res = await axiosClient.post("/payments/create-intent", {
+    bookingId,
+    couponCode: couponCode || null,
+  });
   return res.data;
 }
 

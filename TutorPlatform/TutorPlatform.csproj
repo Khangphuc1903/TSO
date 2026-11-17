@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RollForward>Major</RollForward>
+    <StaticWebAssetsCacheDefineStaticWebAssetsEnabled>false</StaticWebAssetsCacheDefineStaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>

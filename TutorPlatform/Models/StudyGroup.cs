@@ -33,6 +33,14 @@ public partial class StudyGroup
 
     public bool HasMentor { get; set; }
 
+    public string HiringMode { get; set; } = "Standard";
+
+    public decimal? BudgetPerSession { get; set; }
+
+    public DateTime? BidDeadline { get; set; }
+
+    public string? TutorRequirements { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public virtual User CreatedByUser { get; set; } = null!;
@@ -44,6 +52,8 @@ public partial class StudyGroup
     public virtual ICollection<StudyGroupSchedule> StudyGroupSchedules { get; set; } = new List<StudyGroupSchedule>();
 
     public virtual ICollection<StudyGroupMessage> StudyGroupMessages { get; set; } = new List<StudyGroupMessage>();
+
+    public virtual ICollection<StudyGroupBid> StudyGroupBids { get; set; } = new List<StudyGroupBid>();
 
     public virtual Subject Subject { get; set; } = null!;
 }

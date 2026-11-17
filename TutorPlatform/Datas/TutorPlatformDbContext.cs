@@ -66,6 +66,10 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<StudyGroupSchedule> StudyGroupSchedules { get; set; }
 
+    public virtual DbSet<StudyGroupBid> StudyGroupBids { get; set; }
+
+    public virtual DbSet<StudyGroupBidVote> StudyGroupBidVotes { get; set; }
+
     public virtual DbSet<Subject> Subjects { get; set; }
 
     public virtual DbSet<TutorCertificate> TutorCertificates { get; set; }
@@ -97,7 +101,7 @@ public partial class TutorPlatformDbContext : DbContext
     {
         if (!optionsBuilder.IsConfigured)
         {
-            optionsBuilder.UseSqlServer("Server=LAPTOP-PJCV33QV\\SQLEXPRESS;Database=TutorPlatformDB;Uid=sa;Pwd=123;TrustServerCertificate=True;");
+            optionsBuilder.UseSqlServer("Server=localhost\\SQLEXPRESS;Database=TutorPlatformDB;Uid=sa;Pwd=123;TrustServerCertificate=True;");
         }
     }
 
@@ -355,8 +359,8 @@ public partial class TutorPlatformDbContext : DbContext
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
-            entity.Property(e => e.GatewayResponseCode).HasMaxLength(50);
-            entity.Property(e => e.GatewayTransactionId).HasMaxLength(100);
+            entity.Property(e => e.GatewayResponseCode).HasMaxLength(1000);
+            entity.Property(e => e.GatewayTransactionId).HasMaxLength(200);
             entity.Property(e => e.PaidAt).HasColumnType("datetime");
             entity.Property(e => e.PaymentMethod).HasMaxLength(20);
             entity.Property(e => e.PaymentUrl).HasMaxLength(1000);
@@ -565,6 +569,10 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasDefaultValue("Open");
             entity.Property(e => e.StudyGoal).HasMaxLength(50);
             entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.HiringMode).HasMaxLength(20).HasDefaultValue("Standard");
+            entity.Property(e => e.BudgetPerSession).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.BidDeadline).HasColumnType("datetime");
+            entity.Property(e => e.TutorRequirements).HasMaxLength(1000);
 
             entity.HasOne(d => d.CreatedByUser).WithMany(p => p.StudyGroups)
                 .HasForeignKey(d => d.CreatedByUserId)
@@ -645,6 +653,36 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.GroupId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_GSchedule_Group");
+        });
+
+        modelBuilder.Entity<StudyGroupBid>(entity =>
+        {
+            entity.HasKey(e => e.BidId);
+            entity.HasIndex(e => new { e.GroupId, e.TutorId }).IsUnique();
+            entity.Property(e => e.ProposedPrice).HasColumnType("decimal(10, 0)");
+            entity.Property(e => e.CurriculumNote).HasMaxLength(1000);
+            entity.Property(e => e.CertificateNote).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("Pending");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            entity.HasOne(d => d.Group).WithMany(p => p.StudyGroupBids)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(d => d.Tutor).WithMany()
+                .HasForeignKey(d => d.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StudyGroupBidVote>(entity =>
+        {
+            entity.HasKey(e => e.VoteId);
+            entity.HasIndex(e => new { e.BidId, e.VoterUserId }).IsUnique();
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            entity.HasOne(d => d.Bid).WithMany(p => p.Votes)
+                .HasForeignKey(d => d.BidId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(d => d.Voter).WithMany()
+                .HasForeignKey(d => d.VoterUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         modelBuilder.Entity<Subject>(entity =>

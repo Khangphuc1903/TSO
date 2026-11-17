@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { GraduationCap, Eye, EyeOff, ShieldCheck, Sparkles, BadgeCheck, Users } from "lucide-react";
 import axiosClient from "../api/axiosClient";
 import { redirectAfterAuth } from "../auth";
@@ -9,6 +9,7 @@ import Field, { Input } from "../components/ui/Field";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -24,7 +25,14 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axiosClient.post("/Auth/login", form);
-      redirectAfterAuth(navigate, res.data.token, res.data.needsOnboarding, rememberMe, res.data.refreshToken);
+      redirectAfterAuth(
+        navigate,
+        res.data.token,
+        res.data.needsOnboarding,
+        rememberMe,
+        res.data.refreshToken,
+        params.get("redirect") || ""
+      );
     } catch (err) {
       if (!err.response) {
         setError("Không thể kết nối đến máy chủ Backend (Port 5008). Vui lòng thử lại sau.");
@@ -101,7 +109,16 @@ export default function Login() {
 
           <GoogleSignInButton
             onError={setError}
-            onSuccess={(data) => redirectAfterAuth(navigate, data.token, data.needsOnboarding, rememberMe, data.refreshToken)}
+            onSuccess={(data) =>
+              redirectAfterAuth(
+                navigate,
+                data.token,
+                data.needsOnboarding,
+                rememberMe,
+                data.refreshToken,
+                params.get("redirect") || ""
+              )
+            }
           />
 
           <div className="flex items-center gap-3 my-6">

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Datas;
 using TutorPlatform.DTOs;
 using TutorPlatform.Model;
+using TutorPlatform.Services;
 
 namespace TutorPlatform.Controllers;
 
@@ -15,10 +16,12 @@ namespace TutorPlatform.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly TutorPlatformDbContext _db;
+    private readonly IdentityVerificationService _identity;
 
-    public AdminController(TutorPlatformDbContext db)
+    public AdminController(TutorPlatformDbContext db, IdentityVerificationService identity)
     {
         _db = db;
+        _identity = identity;
     }
 
     private int CurrentUserId
@@ -235,6 +238,69 @@ public class AdminController : ControllerBase
         });
     }
 
+    [HttpGet("payouts")]
+    public async Task<IActionResult> Payouts(CancellationToken cancellationToken)
+    {
+        const decimal tutorRate = 0.80m;
+        var payments = await _db.Payments
+            .AsNoTracking()
+            .Include(p => p.Booking).ThenInclude(b => b.Student)
+            .Include(p => p.Booking).ThenInclude(b => b.Tutor).ThenInclude(t => t.Tutor)
+            .Include(p => p.Booking).ThenInclude(b => b.Subject)
+            .Include(p => p.Refunds)
+            .Where(p => p.Status == "Success" || p.Status == "Refunded" || p.Status == "PartiallyRefunded")
+            .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var userIds = payments
+            .SelectMany(p => new[] { p.Booking.StudentId, p.Booking.TutorId })
+            .Distinct()
+            .ToList();
+        var banks = await _db.UserBankAccounts
+            .AsNoTracking()
+            .Where(b => userIds.Contains(b.UserId))
+            .ToListAsync(cancellationToken);
+
+        var rows = payments.Select(p =>
+        {
+            var tutorShare = Math.Round(p.Amount * tutorRate, 0);
+            var tutorBank = banks.FirstOrDefault(b => b.UserId == p.Booking.TutorId);
+            var studentBank = banks.FirstOrDefault(b => b.UserId == p.Booking.StudentId);
+            return new
+            {
+                p.PaymentId,
+                p.BookingId,
+                subjectName = p.Booking.Subject?.SubjectName,
+                studentName = p.Booking.Student?.FullName,
+                tutorName = p.Booking.Tutor?.Tutor?.FullName,
+                amount = p.Amount,
+                tutorPercent = 80,
+                platformPercent = 20,
+                tutorShare,
+                platformFee = p.Amount - tutorShare,
+                status = p.Status,
+                paidAt = p.PaidAt,
+                tutorBankName = tutorBank?.BankName,
+                tutorAccountNumber = tutorBank?.AccountNumber,
+                tutorAccountName = tutorBank?.AccountHolderName,
+                refunds = p.Refunds.Select(r => new
+                {
+                    r.RefundId,
+                    r.Amount,
+                    r.RefundPercent,
+                    r.Reason,
+                    r.Status,
+                    studentBankName = studentBank?.BankName,
+                    studentAccountNumber = studentBank?.AccountNumber,
+                    studentAccountName = studentBank?.AccountHolderName
+                })
+            };
+        });
+
+        return Ok(rows);
+    }
+
     // =========================================================================
     // 2. METRICS & OVERVIEW
     // =========================================================================
@@ -303,95 +369,24 @@ public class AdminController : ControllerBase
     [HttpGet("identity")]
     public async Task<IActionResult> ListIdentity([FromQuery] string? filter, CancellationToken cancellationToken)
     {
-        var query = _db.IdentityDocuments
-            .Include(d => d.Tutor).ThenInclude(t => t.Tutor)
-            .AsNoTracking();
-
-        if (string.Equals(filter, "pending", StringComparison.OrdinalIgnoreCase))
-            query = query.Where(d => d.Status == "Pending");
-
-        var documents = await query
-            .OrderByDescending(d => d.SubmittedAt)
-            .ToListAsync(cancellationToken);
-
-        var tutorIds = documents.Select(d => d.TutorId).Distinct().ToList();
-
-        // Load passed tests for these tutors to display qualification context
-        var attempts = await _db.TutorTestAttempts
-            .Include(a => a.Subject)
-            .AsNoTracking()
-            .Where(a => tutorIds.Contains(a.TutorId))
-            .OrderByDescending(a => a.SubmittedAt)
-            .ToListAsync(cancellationToken);
-
-        var result = documents.Select(d =>
-        {
-            var tutorTests = attempts
-                .Where(a => a.TutorId == d.TutorId)
-                .GroupBy(a => new { a.SubjectId, a.GradeLevel, a.TestType })
-                .Select(g => g.First())
-                .Select(a => new AdminIdentityTestDto
-                {
-                    SubjectName = a.Subject != null ? a.Subject.SubjectName : (a.TestType == "Pedagogical" ? "Sư phạm & An toàn" : "Chung"),
-                    GradeLevel = a.GradeLevel,
-                    ScorePercent = a.ScorePercent,
-                    IsPassed = a.IsPassed
-                })
-                .ToList();
-
-            return new AdminIdentityDto
-            {
-                DocumentId = d.DocumentId,
-                TutorId = d.TutorId,
-                TutorName = d.Tutor?.Tutor?.FullName ?? $"Gia sư #{d.TutorId}",
-                Status = d.Status,
-                FrontUrl = d.IdCardFrontUrl,
-                BackUrl = d.IdCardBackUrl,
-                SelfieUrl = null,
-                SubmittedAt = d.SubmittedAt,
-                Tests = tutorTests
-            };
-        }).ToList();
-
+        var result = await _identity.ListForAdminAsync(filter, cancellationToken);
         return Ok(result);
+    }
+
+    [HttpGet("identity/{documentId:int}/image")]
+    public async Task<IActionResult> IdentityImage(int documentId, [FromQuery] string side, CancellationToken cancellationToken)
+    {
+        var file = await _identity.OpenAdminImageAsync(documentId, side, cancellationToken);
+        if (file == null) return NotFound(new { message = "Ảnh CCCD không còn." });
+        return File(file.Value.Stream, file.Value.ContentType);
     }
 
     [HttpPost("identity/{documentId:int}/review")]
     public async Task<IActionResult> ReviewIdentity(int documentId, [FromBody] AdminReviewIdentityDto dto, CancellationToken cancellationToken)
     {
-        var doc = await _db.IdentityDocuments
-            .Include(d => d.Tutor)
-            .FirstOrDefaultAsync(d => d.DocumentId == documentId, cancellationToken);
-
-        if (doc == null)
-            return NotFound(new { message = "Không tìm thấy hồ sơ CCCD." });
-
-        var isApprove = string.Equals(dto.Action, "Approve", StringComparison.OrdinalIgnoreCase);
-        doc.Status = isApprove ? "Approved" : "Rejected";
-        doc.RejectionReason = isApprove ? null : dto.Reason;
-        doc.ReviewedBy = CurrentUserId > 0 ? CurrentUserId : null;
-        doc.ReviewedAt = DateTime.UtcNow;
-
-        if (isApprove && doc.Tutor != null)
-        {
-            doc.Tutor.VerificationStatus = "Verified";
-        }
-
-        if (CurrentUserId > 0)
-        {
-            _db.AdminActionLogs.Add(new AdminActionLog
-            {
-                AdminId = CurrentUserId,
-                ActionType = isApprove ? "ApproveIdentity" : "RejectIdentity",
-                TargetEntityType = "IdentityDocument",
-                TargetEntityId = documentId,
-                Description = $"Duyệt CCCD #{documentId}: {doc.Status}. Lý do: {dto.Reason}",
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        await _db.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = isApprove ? "Đã duyệt CCCD thành công." : "Đã từ chối CCCD." });
+        var approve = dto.Approve == true || string.Equals(dto.Action, "Approve", StringComparison.OrdinalIgnoreCase);
+        var result = await _identity.ReviewAsync(documentId, CurrentUserId, approve, dto.Reason, cancellationToken);
+        return result.Success ? Ok(new { message = result.Message }) : NotFound(new { message = result.Message });
     }
 
     // =========================================================================

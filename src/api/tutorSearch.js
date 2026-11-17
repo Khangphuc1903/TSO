@@ -1,5 +1,6 @@
-import axiosClient from "./axiosClient";
+import axiosClient, { API_ORIGIN } from "./axiosClient";
 import { avatarUrl } from "../auth";
+import { fileHref } from "../utils/format";
 
 export function mapTutor(item) {
   const price = item.hourlyRate ?? item.hourlyRateMin ?? item.hourlyRateMax ?? 0;
@@ -18,7 +19,7 @@ export function mapTutor(item) {
     tags,
     subject: tags[0] || item.major || "Tutor",
     price,
-    photoUrl: item.avatarUrl || avatarUrl(item.fullName || item.email),
+    photoUrl: fileHref(item.avatarUrl, API_ORIGIN) || avatarUrl(item.fullName || item.email),
     city: item.city || "",
     district: item.district || "",
     teachingMode: item.teachingMode || "",

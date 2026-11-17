@@ -38,6 +38,7 @@ import {
 } from "../api/study";
 import LocationFields from "../components/LocationFields";
 import BankAccountManager from "../components/BankAccountManager";
+import { loadTutorGate } from "../tutorGate";
 import { phoneError, regionError } from "../data/locations";
 
 const TABS = [
@@ -58,6 +59,7 @@ export default function Profile() {
   const isTutor = (session?.role || "").toLowerCase() === "tutor";
 
   const [tab, setTab] = useState("info");
+  const [tutorReady, setTutorReady] = useState(false);
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -105,13 +107,18 @@ export default function Profile() {
       return;
     }
     load().catch(() => setError("Không tải được hồ sơ. Hãy đăng nhập lại."));
-  }, [navigate]);
+    if (isTutor) loadTutorGate(true).then((gate) => setTutorReady(Boolean(gate?.ready)));
+  }, [navigate, isTutor]);
 
   const today = useMemo(
     () => bookings.filter((b) => b.isToday && (b.status === "Confirmed" || b.status === "Pending")),
     [bookings]
   );
   const pending = useMemo(() => bookings.filter((b) => b.status === "Pending"), [bookings]);
+  const visibleTabs =
+    isTutor && !tutorReady
+      ? TABS.filter((t) => t.id === "info" || t.id === "bank" || t.id === "password")
+      : TABS;
 
   const asTutorOn = (b) => Number(b.tutorId) === Number(session?.userId || profile?.userId);
 
@@ -286,13 +293,17 @@ export default function Profile() {
         <div className="max-w-5xl mx-auto">
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 bg-brand-50 px-3 py-1.5 rounded-full mb-4">
             <Sparkles size={14} />
-            Tài khoản đã xác thực trên TSG
+            {isTutor ? "Hồ sơ gia sư" : "Tài khoản đã xác thực trên TSG"}
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">
             Trang <span className="text-brand-600">cá nhân</span>
           </h1>
           <p className="text-slate-500 mt-2 max-w-xl">
-            Quản lý hồ sơ, đổi mật khẩu, theo dõi lịch học và đơn chờ xác nhận trong một nơi.
+            {isTutor
+              ? tutorReady
+                ? "Hồ sơ cá nhân, tài khoản nhận tiền và lịch dạy."
+                : "Chỉ hồ sơ, tài khoản nhận tiền và mật khẩu. Lịch dạy mở sau khi xác thực CCCD và đạt bài test."
+              : "Quản lý hồ sơ, đổi mật khẩu, theo dõi lịch học và đơn chờ xác nhận trong một nơi."}
           </p>
           {!isTutor && (session?.role || "").toLowerCase() !== "admin" && (
             <button
@@ -364,7 +375,7 @@ export default function Profile() {
 
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
           <div className="flex overflow-x-auto border-b border-slate-100 px-2">
-            {TABS.map((t) => {
+            {visibleTabs.map((t) => {
               const Icon = t.icon;
               const count = t.id === "pending" ? pending.length : t.id === "today" ? today.length : null;
               return (
@@ -600,13 +611,15 @@ export default function Profile() {
             <span className="font-medium text-slate-900">Tất cả thông báo</span>
             <ArrowRight size={16} className="text-brand-600" />
           </Link>
+          {(!isTutor || tutorReady) && (
           <Link
             to="/bookings"
             className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md transition-shadow flex items-center justify-between"
           >
-            <span className="font-medium text-slate-900">Trang lịch học</span>
+            <span className="font-medium text-slate-900">{isTutor ? "Lịch dạy" : "Trang lịch học"}</span>
             <ArrowRight size={16} className="text-brand-600" />
           </Link>
+          )}
         </div>
       </main>
     </div>

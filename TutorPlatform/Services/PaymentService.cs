@@ -74,19 +74,36 @@ public class PaymentService
         if (existingSuccess != null)
             return (false, StatusCodes.Status400BadRequest, "Buổi học này đã được thanh toán thành công trước đó.", null);
 
-        var tutorName = booking.Tutor?.Tutor?.FullName ?? "Gia sư";
-        var subjectName = booking.Subject?.SubjectName ?? "Môn học";
-        var desc = $"TSG Buoi hoc #{booking.BookingId}";
-        if (desc.Length > 25) desc = $"TSG #{booking.BookingId}";
+        var priced = ResolvePayableAmount(booking.Price, request.CouponCode);
+        if (!priced.Ok)
+            return (false, StatusCodes.Status400BadRequest, priced.Message, null);
 
-        long amountInt = (long)Math.Round(booking.Price, 0);
-        if (amountInt <= 0) amountInt = 10000;
+        var tutorName = booking.Tutor?.Tutor?.FullName ?? "Gia su";
+        var subjectName = booking.Subject?.SubjectName ?? "Mon hoc";
+        var desc = $"TSG buoi hoc {booking.BookingId}";
+        if (desc.Length > 25) desc = $"TSG {booking.BookingId}";
 
-        // Tái sử dụng payment link gần đây (dưới 14 phút) nếu còn hiệu lực để tránh tạo trùng nhiều đơn trên PayOS
-        var recentPending = await _db.Payments
-            .Where(p => p.BookingId == booking.BookingId && p.Status == "Pending" && p.CreatedAt >= DateTime.UtcNow.AddMinutes(-14))
+        long amountInt = priced.Amount;
+
+        // Chỉ dùng lại mã còn hạn khi đúng số tiền. Mã cũ khác giá (vừa áp coupon) phải bỏ.
+        var pendingPayments = await _db.Payments
+            .Where(p => p.BookingId == booking.BookingId && p.Status == "Pending")
             .OrderByDescending(p => p.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+
+        var recentPending = pendingPayments.FirstOrDefault(p =>
+            p.Amount == amountInt &&
+            !string.IsNullOrEmpty(p.PaymentUrl) &&
+            p.CreatedAt >= DateTime.UtcNow.AddMinutes(-14));
+
+        foreach (var old in pendingPayments)
+        {
+            if (recentPending != null && old.PaymentId == recentPending.PaymentId) continue;
+            old.Status = "Cancelled";
+        }
+
+        if (pendingPayments.Any(p => p.Status == "Cancelled"))
+            await _db.SaveChangesAsync(ct);
 
         if (recentPending != null && !string.IsNullOrEmpty(recentPending.PaymentUrl))
         {
@@ -172,18 +189,27 @@ public class PaymentService
         {
             BookingId = booking.BookingId,
             PayerUserId = studentId,
-            Amount = booking.Price,
+            Amount = amountInt,
             PaymentMethod = "PayOS",
             TransactionCode = orderCode.ToString(),
             Status = "Pending",
             PaymentUrl = result.CheckoutUrl,
-            GatewayResponseCode = result.QrCode,
-            GatewayTransactionId = $"{result.Bin}|{result.AccountNumber}|{result.AccountName}",
+            GatewayResponseCode = TrimTo(result.QrCode, 1000),
+            GatewayTransactionId = TrimTo($"{result.Bin}|{result.AccountNumber}|{result.AccountName}", 200),
             CreatedAt = DateTime.UtcNow
         };
 
         _db.Payments.Add(payment);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Đã tạo link PayOS nhưng không lưu được payment cho booking #{BookingId}", booking.BookingId);
+            return (false, StatusCodes.Status500InternalServerError,
+                "PayOS đã tạo mã nhưng hệ thống chưa lưu được. " + (ex.InnerException?.Message ?? ex.Message), null);
+        }
 
         var qrImageUrl = !string.IsNullOrEmpty(result.Bin) && !string.IsNullOrEmpty(result.AccountNumber)
             ? $"https://img.vietqr.io/image/{result.Bin}-{result.AccountNumber}-compact2.png?amount={amountInt}&addInfo={Uri.EscapeDataString(desc)}&accountName={Uri.EscapeDataString(result.AccountName ?? "")}"
@@ -201,7 +227,7 @@ public class PaymentService
             AccountName = result.AccountName ?? string.Empty,
             Description = result.Description ?? desc,
             QrImageUrl = qrImageUrl,
-            Amount = booking.Price,
+            Amount = amountInt,
             Status = payment.Status
         };
 
@@ -416,7 +442,12 @@ public class PaymentService
             else refundPercentage = 0m;
         }
 
-        var refundAmount = Math.Round(booking.Price * (refundPercentage / 100m), 0);
+        var paidAmount = await _db.Payments
+            .Where(p => p.BookingId == booking.BookingId && (p.Status == "Success" || p.Status == "Refunded" || p.Status == "PartiallyRefunded"))
+            .Select(p => (decimal?)p.Amount)
+            .FirstOrDefaultAsync(ct);
+        var refundBase = paidAmount ?? booking.Price;
+        var refundAmount = Math.Round(refundBase * (refundPercentage / 100m), 0);
 
         return new RefundPreviewDto
         {
@@ -488,6 +519,11 @@ public class PaymentService
 
             successPayment.Status = (preview.RefundPercentage >= 100m) ? "Refunded" : "PartiallyRefunded";
         }
+        else
+        {
+            foreach (var pending in booking.Payments.Where(p => p.Status == "Pending"))
+                pending.Status = "Cancelled";
+        }
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -502,7 +538,11 @@ public class PaymentService
             booking.BookingId,
             ct);
 
-        return (true, StatusCodes.Status200OK, $"Hủy buổi học thành công. Bạn được hoàn {preview.RefundPercentage}% ({preview.RefundAmount:N0} ₫).");
+        var message = successPayment != null
+            ? $"Hủy buổi học thành công. Bạn được hoàn {preview.RefundPercentage}% ({preview.RefundAmount:N0} ₫)."
+            : "Đã hủy buổi học. Bạn chưa chuyển khoản nên không phát sinh khoản hoàn.";
+
+        return (true, StatusCodes.Status200OK, message);
     }
 
     public async Task<string> ConfirmWebhookAsync(string webhookUrl)
@@ -663,5 +703,42 @@ public class PaymentService
 
         var relativeUrl = $"/uploads/qr/{userId}/{safeName}";
         return (true, StatusCodes.Status200OK, "Tải ảnh mã QR thành công.", relativeUrl);
+    }
+
+    private static (bool Ok, string Message, long Amount) ResolvePayableAmount(decimal price, string? couponCode)
+    {
+        var baseAmount = (long)Math.Round(price, 0);
+        if (baseAmount <= 0) baseAmount = 10000;
+
+        var code = (couponCode ?? string.Empty).Trim().ToUpperInvariant();
+        long discount = 0;
+        if (string.IsNullOrEmpty(code))
+        {
+            discount = 0;
+        }
+        else if (code == "TSG50K")
+        {
+            discount = 50000;
+        }
+        else if (code == "TSGNEW" || code == "HOCVIENMOI")
+        {
+            discount = (long)Math.Round(price * 0.1m, 0);
+        }
+        else
+        {
+            return (false, "Mã ưu đãi không hợp lệ.", 0);
+        }
+
+        var amount = baseAmount - discount;
+        if (amount < 10000)
+            return (false, "Số tiền sau giảm giá thấp hơn mức tối thiểu 10.000 ₫.", 0);
+
+        return (true, string.Empty, amount);
+    }
+
+    private static string? TrimTo(string? value, int max)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= max) return value;
+        return value.Substring(0, max);
     }
 }

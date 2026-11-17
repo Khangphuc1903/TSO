@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Clock, Radio, Siren, Sparkles, Zap } from "lucide-react";
 import Navbar from "../components/Navbar";
-import { getUser, isLoggedIn } from "../auth";
+import { getUser, isLoggedIn, loginPath } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
 import { createAppHub } from "../api/hub";
 import { API_ORIGIN } from "../api/axiosClient";
@@ -42,6 +42,7 @@ export default function SosRescue() {
   const [form, setForm] = useState({ subjectId: "", questionNote: "", image: null });
   const preview = form.image ? URL.createObjectURL(form.image) : "";
   const hubRef = useRef(null);
+  const fileRef = useRef(null);
 
   const loadStudent = async () => {
     const data = await getMySosRequests();
@@ -55,7 +56,7 @@ export default function SosRescue() {
 
   useEffect(() => {
     if (!isLoggedIn()) {
-      navigate("/login");
+      navigate(loginPath("/sos"));
       return;
     }
     getSosConfig().then(setConfig).catch(() => {});
@@ -142,9 +143,9 @@ export default function SosRescue() {
   return (
     <div className="min-h-screen bg-surface">
       <Navbar />
-      <section className="relative overflow-hidden pt-10 pb-8 px-6">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-rose-950 via-brand-900 to-brand-800" />
-        <div className="max-w-5xl mx-auto text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#4C0519] via-[#0F294A] to-[#0D5C63] px-6 pb-14 pt-10 text-white">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-rose-400/20 blur-3xl" />
+        <div className="relative z-10 mx-auto max-w-5xl">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/10 px-3 py-1.5 rounded-full mb-4">
             <Siren size={14} />
             Flash Micro-Tutoring
@@ -169,7 +170,7 @@ export default function SosRescue() {
         </div>
       </section>
 
-      <main className="max-w-5xl mx-auto px-6 -mt-4 pb-16 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 mt-8 pb-16 space-y-6">
         {error && (
           <div className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">{error}</div>
         )}
@@ -201,17 +202,26 @@ export default function SosRescue() {
                   ))}
                 </select>
               </label>
-              <label className="block text-sm">
+              <div className="block text-sm">
                 <span className="text-slate-600">Ảnh đề bài</span>
                 <input
+                  ref={fileRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
                   required={!form.image}
                   onChange={(e) => setForm((f) => ({ ...f, image: e.target.files?.[0] || null }))}
-                  className="mt-1 w-full text-sm"
+                  className="sr-only"
                 />
-              </label>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm text-slate-700 hover:border-rose-200 hover:bg-rose-50"
+                >
+                  <span className="font-medium text-slate-900">Chọn ảnh</span>
+                  <span className="truncate text-slate-500">{form.image?.name || "Chưa chọn tệp"}</span>
+                </button>
+              </div>
               {preview && <img src={preview} alt="" className="max-h-48 rounded-xl object-cover" />}
               <label className="block text-sm">
                 <span className="text-slate-600">Ghi chú (không bắt buộc)</span>

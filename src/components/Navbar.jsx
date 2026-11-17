@@ -24,6 +24,7 @@ import { fileHref } from "../utils/format";
 import { useCart } from "../context/CartContext";
 import { getInboxBadges } from "../api/study";
 import { createAppHub } from "../api/hub";
+import { invalidateTutorGate, loadTutorGate } from "../tutorGate";
 
 export default function Navbar() {
   const location = useLocation();
@@ -42,6 +43,25 @@ export default function Navbar() {
   const [notifUnread, setNotifUnread] = useState(0);
   const [chatUnreadPeople, setChatUnreadPeople] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [tutorReady, setTutorReady] = useState(false);
+
+  useEffect(() => {
+    if (!loggedIn || !isTutor) {
+      setTutorReady(false);
+      return;
+    }
+    let cancelled = false;
+    const pull = () =>
+      loadTutorGate(true).then((gate) => {
+        if (!cancelled) setTutorReady(Boolean(gate?.ready));
+      });
+    pull();
+    window.addEventListener("tutor-gate", pull);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("tutor-gate", pull);
+    };
+  }, [loggedIn, isTutor, location.pathname]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -99,23 +119,30 @@ export default function Navbar() {
           { label: "Bảng điều khiển", to: "/admin" },
           { label: "Trang chủ", to: "/" },
         ]
-      : [
-          { label: "Trang chủ", to: "/" },
-          { label: "Tìm gia sư", to: "/tutors" },
-          { label: "Chẩn đoán AI ✨", to: "/ai-diagnosis" },
-          { label: "Nhóm học", to: "/study-groups" },
-          { label: "SOS", to: "/sos" },
-          { label: "Hỏi đáp", to: "/faq" },
-
-        { label: isTutor ? "Lịch dạy" : "Lịch học", to: "/bookings" },
-        ...(isTutor
-          ? [
-              { label: "Bảng làm việc", to: "/tutor" },
-              { label: "CCCD", to: "/tutor-identity" },
-              { label: "Bài test", to: "/tutor-tests" },
-            ]
-          : []),
-      ];
+      : isTutor
+        ? [
+            { label: "Hồ sơ", to: "/profile" },
+            { label: "Bảng dạy", to: "/tutor" },
+            { label: "CCCD", to: "/tutor-identity" },
+            { label: "Bài test", to: "/tutor-tests" },
+            ...(tutorReady
+              ? [
+                  { label: "Lịch dạy", to: "/bookings" },
+                  { label: "Chào thầu", to: "/study-groups/bids" },
+                  { label: "SOS", to: "/sos" },
+                ]
+              : []),
+          ]
+        : [
+            { label: "Trang chủ", to: "/" },
+            { label: "Tìm gia sư", to: "/tutors" },
+            { label: "Chẩn đoán", to: "/ai-diagnosis" },
+            { label: "Nhóm học", to: "/study-groups" },
+            ...(loggedIn ? [{ label: "Nhóm của tôi", to: "/study-groups/mine" }] : []),
+            { label: "SOS", to: "/sos" },
+            { label: "Hỏi đáp", to: "/faq" },
+            { label: "Lịch học", to: "/bookings" },
+          ];
 
   const handleLogout = async () => {
     const refreshToken = getRefreshToken();
@@ -124,37 +151,40 @@ export default function Navbar() {
     } catch {
       /* still clear local session */
     }
+    invalidateTutorGate();
     logout();
     setMenuOpen(false);
     navigate("/");
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-slate-100">
-      <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
-        <Link to="/" className="flex shrink-0 items-center gap-2.5 focus-ring rounded-xl">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm">
-            <GraduationCap size={19} />
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0F294A]">
+      <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-4 px-4 sm:px-6">
+        <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-xl focus-ring">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#1E40AF] to-[#0D9488] text-white shadow-md">
+            <GraduationCap size={18} />
           </span>
-          <span className="text-lg font-extrabold tracking-tight text-brand-900">
-            TSG
-            <span className="ml-1 hidden text-[10px] font-bold uppercase tracking-wider text-brand-400 sm:inline">
-              Tutor
+          <span className="leading-tight">
+            <span className="block text-lg font-extrabold tracking-tight text-white">
+              TSG<span className="text-[#5EEAD4]">Tutor</span>
+            </span>
+            <span className="hidden text-[10px] font-medium uppercase tracking-wider text-white/50 sm:block">
+              Học thật • Tiến bộ thật
             </span>
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex">
           {navLinks.map((link) => {
             const isActive = location.pathname === link.to;
             return (
               <Link
                 key={link.to}
                 to={link.to}
-                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
+                className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-semibold transition ${
                   isActive
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-700 focus-ring"
+                    ? "bg-white/10 text-[#5EEAD4]"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {link.label}
@@ -169,7 +199,7 @@ export default function Navbar() {
             <Link
               to="/notifications"
               aria-label="Thông báo"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
             >
               <Bell size={20} />
               {notifUnread > 0 && (
@@ -181,7 +211,7 @@ export default function Navbar() {
               to="/messages"
 
               aria-label="Tin nhắn"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
 
             >
               <MessageCircle size={20} />
@@ -196,7 +226,7 @@ export default function Navbar() {
               <Link
                 to="/wishlist"
                 aria-label="Yêu thích"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-rose-600 transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-rose-200"
               >
                 <Heart size={20} />
               </Link>
@@ -206,7 +236,7 @@ export default function Navbar() {
               <Link
                 to="/cart"
                 aria-label="Giỏ hàng"
-                className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-50 hover:text-brand-600 transition-colors"
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <ShoppingCart size={20} />
                 {cartCount > 0 && (
@@ -221,7 +251,7 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="ml-1 h-9 w-9 rounded-full overflow-hidden ring-2 ring-slate-100 hover:ring-brand-200 transition focus-ring"
+                className="ml-1 h-9 w-9 overflow-hidden rounded-full ring-2 ring-white/30 transition hover:ring-[#5EEAD4] focus-ring"
                 aria-label="Menu tài khoản"
                 aria-expanded={menuOpen}
               >
@@ -239,7 +269,7 @@ export default function Navbar() {
                     <User size={16} />
                     Trang cá nhân
                   </Link>
-                  {!isAdmin && (
+                  {!isAdmin && (!isTutor || tutorReady) && (
                     <Link
                       to="/payments"
                       onClick={() => setMenuOpen(false)}
@@ -310,16 +340,16 @@ export default function Navbar() {
         ) : (
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
-              to="/register"
-              className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 sm:block focus-ring"
-            >
-              Đăng ký
-            </Link>
-            <Link
               to="/login"
-              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-px hover:bg-brand-700 hover:shadow-md focus-ring"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10 sm:inline-flex focus-ring"
             >
               Đăng nhập
+            </Link>
+            <Link
+              to="/register"
+              className="rounded-xl bg-[#0D9488] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-[#0F766E] focus-ring"
+            >
+              Đăng ký
             </Link>
           </div>
         )}
@@ -328,22 +358,22 @@ export default function Navbar() {
             onClick={() => setMobileNavOpen((v) => !v)}
             aria-label="Menu điều hướng"
             aria-expanded={mobileNavOpen}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-50 md:hidden focus-ring"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:hidden focus-ring"
           >
             {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
         {mobileNavOpen && (
-          <nav className="absolute inset-x-0 top-full z-50 border-b border-slate-200 bg-white px-4 pb-4 pt-2 shadow-pop animate-scale-in md:hidden">
+          <nav className="absolute inset-x-0 top-full z-50 border-b border-white/10 bg-[#0F294A] px-4 pb-4 pt-2 shadow-pop animate-scale-in lg:hidden">
             {navLinks.map((link) => (
               <Link
                 key={`m-${link.to}`}
                 to={link.to}
                 onClick={() => setMobileNavOpen(false)}
-                className={`block rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                   location.pathname === link.to
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-700"
+                    ? "bg-white/10 text-[#5EEAD4]"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {link.label}

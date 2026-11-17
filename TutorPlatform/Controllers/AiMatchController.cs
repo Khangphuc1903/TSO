@@ -35,10 +35,10 @@ public class AiMatchController : ControllerBase
     /// </summary>
     [Authorize]
     [HttpPost("diagnose")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(12_000_000)]
     public async Task<IActionResult> DiagnoseHomework(
-        [FromForm] IFormFile file,
-        [FromForm] string? studentNote,
+        [FromForm] DiagnoseHomeworkRequest form,
         CancellationToken ct)
     {
         if (CurrentUserId is not int studentId)
@@ -46,12 +46,16 @@ public class AiMatchController : ControllerBase
 
         try
         {
-            var result = await _aiService.DiagnoseHomeworkAsync(studentId, file, studentNote, ct);
+            var result = await _aiService.DiagnoseHomeworkAsync(studentId, form.File, form.StudentNote, ct);
             return Ok(result);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(502, new { message = ex.Message });
         }
         catch (Exception ex)
         {

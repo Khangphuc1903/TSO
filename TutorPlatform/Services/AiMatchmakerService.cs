@@ -32,7 +32,7 @@ public class AiMatchmakerService
 
     public async Task<DiagnosisResultDto> DiagnoseHomeworkAsync(
         int studentId,
-        IFormFile file,
+        IFormFile? file,
         string? studentNote,
         CancellationToken ct = default)
     {
@@ -66,23 +66,7 @@ public class AiMatchmakerService
         // 2. Gọi AI Gemini chẩn đoán
         var aiOutput = await _gemini.DiagnoseHomeworkImageAsync(imageBytes, file.ContentType, studentNote, ct);
         if (aiOutput == null)
-        {
-            // Fallback thân thiện nếu AI bận
-            aiOutput = new GeminiDiagnosisOutput
-            {
-                SubjectName = "Toán",
-                GradeLevel = "Lớp 11",
-                TopicName = "Hình học không gian - Khoảng cách",
-                TopicCode = "TOAN_11_HHKG_KHOANG_CACH",
-                Severity = "Moderate",
-                OcrText = "Ảnh bài tập học sinh tải lên",
-                StudentMistake = "Học sinh xác định sai hình chiếu vuông góc, dẫn đến dựng sai khoảng cách.",
-                AiSummary = "Hổng phương pháp dựng góc và khoảng cách trong Hình học không gian lớp 11",
-                GapDetail = "Học sinh cần củng cố lại định lý ba đường vuông góc và phương pháp đổi điểm khi tính khoảng cách từ điểm đến mặt phẳng.",
-                StudyPlan = "Cần 3 buổi cùng gia sư: Buổi 1: Quan hệ vuông góc; Buổi 2: Phương pháp dựng đường cao; Buổi 3: Luyện đề thi.",
-                RecommendedKeywords = new List<string> { "Hình học không gian", "Khoảng cách", "Toán 11" }
-            };
-        }
+            throw new InvalidOperationException("Gemini không đọc được ảnh.");
 
         // 3. Khớp SubjectId & TopicId
         var subject = await FindMatchingSubjectAsync(aiOutput.SubjectName, ct);

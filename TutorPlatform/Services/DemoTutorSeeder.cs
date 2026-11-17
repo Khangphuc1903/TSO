@@ -43,48 +43,33 @@ public static class DemoTutorSeeder
             await db.SaveChangesAsync();
         }
 
+        await RenameLegacyTutorAsync(db, "tutor.vance@tsg.com", "tutor.lananh@tsg.com");
+        await HideForeignDemoTutorsAsync(db);
+
         var tutors = new[]
         {
-            new DemoTutor(
-                "tutor.vance@tsg.com", "Marcus Vance", "Male", "Ha Noi", "Ba Dinh", "18 Lieu Giai",
-                "https://i.pravatar.cc/300?img=13", "0901111001",
-                "Gia su Data Science, huong dan Python, Machine Learning va thong ke ung dung cho sinh vien.",
-                "Dai hoc Bach Khoa Ha Noi", "Khoa hoc May tinh", 8, 250000, 450000, "Online", "Verified", 4.90m, 12,
-                new[] { "Tiếng Anh", "Toán" },
-                new[] { ("IELTS 8.0", "British Council", "2022-05-10"), ("AWS Cloud Practitioner", "Amazon", "2023-01-20") },
-                new[] { (1, "18:00", "20:00"), (3, "19:00", "21:00"), (6, "09:00", "11:00") }),
-            new DemoTutor(
-                "tutor.chen@tsg.com", "Sarah Chen", "Female", "Ha Noi", "Dong Da", "22 Ton Duc Thang",
-                "https://i.pravatar.cc/300?img=47", "0901111002",
-                "Chuyen Toan cap 3 va luyen thi Dai hoc. Giai de chi tiet, tap trung tu duy.",
-                "Dai hoc Su Pham Ha Noi", "Su pham Toan", 6, 180000, 300000, "Both", "Verified", 5.00m, 20,
-                new[] { "Toán", "Vật Lý" },
-                new[] { ("Chung chi Su pham Toan", "Bo GD&DT", "2020-08-01"), ("IMO Trainer", "VMO", "2021-11-15") },
-                new[] { (2, "17:30", "19:30"), (4, "17:30", "19:30"), (0, "08:00", "10:00") }),
-            new DemoTutor(
-                "tutor.rodriguez@tsg.com", "David Rodriguez", "Male", "TP. Ho Chi Minh", "Binh Thanh", "45 Xo Viet Nghe Tinh",
-                "https://i.pravatar.cc/300?img=12", "0901111003",
-                "Full-stack web: React, Node.js, CSS. Kem cap do an va phong van junior.",
-                "RMIT Vietnam", "Software Engineering", 5, 220000, 400000, "Online", "Verified", 4.80m, 9,
-                new[] { "Tiếng Anh" },
-                new[] { ("Meta Front-End Certificate", "Coursera", "2023-03-12") },
-                new[] { (1, "20:00", "22:00"), (5, "20:00", "22:00") }),
-            new DemoTutor(
-                "tutor.rostova@tsg.com", "Elena Rostova", "Female", "Ha Noi", "Hai Ba Trung", "7 Pho Hue",
-                "https://i.pravatar.cc/300?img=48", "0901111004",
-                "Luyen Writing va van hoc Anh. Sua bai luan, IELTS Writing task 1-2.",
-                "University of Cambridge", "English Literature", 10, 300000, 550000, "Both", "Verified", 4.90m, 18,
-                new[] { "Ngữ Văn", "Tiếng Anh" },
-                new[] { ("CELTA", "Cambridge English", "2018-06-01"), ("IELTS 8.5", "IDP", "2024-02-02") },
-                new[] { (2, "19:00", "21:00"), (6, "14:00", "16:00") }),
-            new DemoTutor(
-                "tutor.minh@tsg.com", "Tran Gia Minh", "Male", "Da Nang", "Hai Chau", "10 Bach Dang",
-                "https://i.pravatar.cc/300?img=15", "0901111005",
-                "Gia su Hoa va Sinh cap 3, on thi khoi B. Bai tap theo chuyen de, de minh hoa.",
-                "Dai hoc Y Duoc Hue", "Hoa Sinh", 4, 150000, 250000, "Offline", "Verified", 4.70m, 7,
-                new[] { "Hóa Học", "Sinh Học" },
-                new[] { ("Olympic Hoa sinh vien", "Bo GD&DT", "2019-04-18") },
-                new[] { (3, "18:00", "20:00"), (5, "18:00", "20:00"), (6, "09:00", "11:00") })
+            Tutor("tutor.lananh@tsg.com", "Nguyễn Lan Anh", "Female", "Hà Nội", "Cầu Giấy", "12 Trần Duy Hưng", "/uploads/avatars/lan-anh.jpg", "0902000001",
+                "Giáo viên Toán cấp 2, cấp 3. Dạy chậm, chữa bài từng bước và kèm đề thi học kỳ.", "Đại học Sư phạm Hà Nội", "Sư phạm Toán", 6, 180000, 280000, "Both", 4.90m, 18, new[] { "Toan" }),
+            Tutor("tutor.thuha@tsg.com", "Trần Thu Hà", "Female", "TP. Hồ Chí Minh", "Quận 3", "45 Nam Kỳ Khởi Nghĩa", "/uploads/avatars/thu-ha.webp", "0902000002",
+                "Luyện tiếng Anh giao tiếp và ngữ pháp THPT. Sửa bài viết mỗi buổi.", "Đại học Ngoại thương", "Ngôn ngữ Anh", 7, 220000, 350000, "Online", 4.80m, 14, new[] { "Tieng Anh" }),
+            Tutor("tutor.minhkhoa@tsg.com", "Lê Minh Khoa", "Male", "Đà Nẵng", "Hải Châu", "10 Bạch Đằng", "/uploads/avatars/minh-khoa.jpg", "0902000003",
+                "Dạy Vật lý cấp 3, chú trọng công thức và bài tập vận dụng.", "Đại học Bách khoa Đà Nẵng", "Sư phạm Vật lý", 5, 170000, 260000, "Both", 4.70m, 9, new[] { "Vat Ly" }),
+            Tutor("tutor.quochuy@tsg.com", "Phạm Quốc Huy", "Male", "Cần Thơ", "Ninh Kiều", "25 Hòa Bình", "/uploads/avatars/quoc-huy.jpg", "0902000004",
+                "Ôn Toán lớp 12 và đánh giá năng lực. Có giáo án theo tuần.", "Đại học Cần Thơ", "Sư phạm Toán", 4, 150000, 240000, "Offline", 4.80m, 11, new[] { "Toan" }),
+            Tutor("tutor.thanhnam@tsg.com", "Võ Thành Nam", "Male", "Hải Phòng", "Ngô Quyền", "8 Lạch Tray", "/uploads/avatars/thanh-nam.webp", "0902000005",
+                "Tiếng Anh cấp 2, phát âm và từ vựng theo chủ đề.", "Đại học Hàng hải Việt Nam", "Ngôn ngữ Anh", 5, 160000, 250000, "Both", 4.60m, 8, new[] { "Tieng Anh" }),
+            Tutor("tutor.hoanglong@tsg.com", "Đặng Hoàng Long", "Male", "Thừa Thiên Huế", "Huế", "15 Lê Lợi", "/uploads/avatars/hoang-long.jpg", "0902000006",
+                "Ngữ văn THPT, đọc hiểu và nghị luận xã hội.", "Đại học Sư phạm Huế", "Sư phạm Ngữ văn", 8, 160000, 250000, "Online", 4.90m, 16, new[] { "Van", "Ngữ Văn" }),
+            Tutor("tutor.thanhtam@tsg.com", "Lý Thanh Tâm", "Female", "Khánh Hòa", "Nha Trang", "30 Trần Phú", "/uploads/avatars/thanh-tam.webp", "0902000007",
+                "Dạy Văn và kể chuyện cho học sinh cấp 2. Giao bài đọc mỗi tuần.", "Đại học Khánh Hòa", "Sư phạm Ngữ văn", 6, 150000, 230000, "Offline", 4.80m, 10, new[] { "Van" }),
+            Tutor("tutor.ducanh@tsg.com", "Ngô Đức Anh", "Male", "Nghệ An", "Vinh", "5 Quang Trung", "/uploads/avatars/duc-anh.jpg", "0902000008",
+                "Hóa học lớp 10–12, bài tập định lượng và đề minh họa.", "Đại học Vinh", "Sư phạm Hóa", 4, 150000, 240000, "Both", 4.70m, 7, new[] { "Hoa Hoc" }),
+            Tutor("tutor.ngocmai@tsg.com", "Bùi Ngọc Mai", "Female", "Đồng Nai", "Biên Hòa", "18 Phạm Văn Thuận", "/uploads/avatars/ngoc-mai.webp", "0902000009",
+                "Tiếng Anh tiểu học và THCS. Dạy bằng trò chơi và hội thoại ngắn.", "Đại học Sư phạm TP.HCM", "Sư phạm Tiếng Anh", 5, 140000, 220000, "Offline", 5.00m, 21, new[] { "Tieng Anh" }),
+            Tutor("tutor.hongnhung@tsg.com", "Phan Hồng Nhung", "Female", "Bình Dương", "Thủ Dầu Một", "9 Yersin", "/uploads/avatars/hong-nhung.jpg", "0902000010",
+                "Sinh học cấp 3, sơ đồ tư duy và ôn chuyên đề di truyền.", "Đại học Khoa học Tự nhiên", "Sư phạm Sinh", 6, 160000, 250000, "Online", 4.80m, 12, new[] { "Sinh Hoc" }),
+            Tutor("tutor.giabao@tsg.com", "Đỗ Gia Bảo", "Male", "Hà Nội", "Đống Đa", "40 Tây Sơn", "/uploads/avatars/gia-bao.jpg", "0902000011",
+                "Toán lớp 9 và luyện thi vào 10. Chữa đề theo dạng.", "Đại học Bách khoa Hà Nội", "Toán tin", 3, 170000, 260000, "Both", 4.60m, 6, new[] { "Toan" }),
         };
 
         var createdTutors = new List<User>();
@@ -159,7 +144,20 @@ public static class DemoTutorSeeder
     private static async Task<User> EnsureUserAsync(TutorPlatformDbContext db, int roleId, string passwordHash, DemoUser info)
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == info.Email);
-        if (user != null) return user;
+        if (user != null)
+        {
+            user.FullName = info.FullName;
+            user.PhoneNumber = info.Phone;
+            user.Gender = info.Gender;
+            user.City = info.City;
+            user.District = info.District;
+            user.Address = info.Address;
+            user.AvatarUrl = info.AvatarUrl;
+            user.Status = "Active";
+            user.IsEmailConfirmed = true;
+            await db.SaveChangesAsync();
+            return user;
+        }
 
         user = new User
         {
@@ -222,7 +220,10 @@ public static class DemoTutorSeeder
 
         foreach (var subjectName in item.Subjects)
         {
-            var subject = subjects.FirstOrDefault(s => s.SubjectName == subjectName)
+            var folded = VietnameseText.Fold(subjectName);
+            var subject = subjects.FirstOrDefault(s =>
+                              string.Equals(s.SubjectName, subjectName, StringComparison.OrdinalIgnoreCase) ||
+                              VietnameseText.Fold(s.SubjectName) == folded)
                           ?? subjects[0];
             var exists = await db.TutorSubjects.AnyAsync(ts => ts.TutorId == tutorId && ts.SubjectId == subject.SubjectId);
             if (!exists)
@@ -253,7 +254,7 @@ public static class DemoTutorSeeder
             }
         }
 
-        if (!await db.AvailabilitySlots.AnyAsync(s => s.TutorId == tutorId))
+        if (!await db.AvailabilitySlots.AnyAsync(s => s.TutorId == tutorId && s.IsRecurring))
         {
             foreach (var slot in item.Slots)
             {
@@ -268,14 +269,28 @@ public static class DemoTutorSeeder
                     IsBooked = false
                 });
             }
+        }
 
+        var openDates = new (int Offset, TimeOnly Start, TimeOnly End)[]
+        {
+            (1, new TimeOnly(18, 0), new TimeOnly(20, 0)),
+            (2, new TimeOnly(19, 0), new TimeOnly(21, 0)),
+            (3, new TimeOnly(9, 0), new TimeOnly(11, 0)),
+            (4, new TimeOnly(14, 0), new TimeOnly(16, 0))
+        };
+        foreach (var open in openDates)
+        {
+            var date = DateOnly.FromDateTime(DateTime.Today.AddDays(open.Offset));
+            var exists = await db.AvailabilitySlots.AnyAsync(s =>
+                s.TutorId == tutorId && !s.IsRecurring && s.SpecificDate == date && s.StartTime == open.Start);
+            if (exists) continue;
             db.AvailabilitySlots.Add(new AvailabilitySlot
             {
                 TutorId = tutorId,
                 DayOfWeek = null,
-                SpecificDate = DateOnly.FromDateTime(DateTime.Today.AddDays(3)),
-                StartTime = new TimeOnly(19, 0),
-                EndTime = new TimeOnly(21, 0),
+                SpecificDate = date,
+                StartTime = open.Start,
+                EndTime = open.End,
                 IsRecurring = false,
                 IsBooked = false
             });
@@ -336,6 +351,44 @@ public static class DemoTutorSeeder
             });
             await db.SaveChangesAsync();
         }
+    }
+
+    private static async Task RenameLegacyTutorAsync(TutorPlatformDbContext db, string fromEmail, string toEmail)
+    {
+        if (await db.Users.AnyAsync(u => u.Email == toEmail)) return;
+        var source = await db.Users.FirstOrDefaultAsync(u => u.Email == fromEmail);
+        if (source == null) return;
+        source.Email = toEmail;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task HideForeignDemoTutorsAsync(TutorPlatformDbContext db)
+    {
+        var legacyEmails = new[]
+        {
+            "tutor.vance@tsg.com", "tutor.chen@tsg.com", "tutor.rodriguez@tsg.com", "tutor.rostova@tsg.com"
+        };
+        var legacy = await db.Users.Where(u => legacyEmails.Contains(u.Email)).ToListAsync();
+        foreach (var user in legacy)
+        {
+            user.Status = "Inactive";
+            user.AvatarUrl = null;
+            var profile = await db.TutorProfiles.FindAsync(user.UserId);
+            if (profile != null) profile.IsPublished = false;
+        }
+        if (legacy.Count > 0) await db.SaveChangesAsync();
+    }
+
+    private static DemoTutor Tutor(
+        string email, string name, string gender, string city, string district, string address, string avatar, string phone,
+        string bio, string university, string major, int years, decimal rateMin, decimal rateMax, string mode,
+        decimal rating, int reviews, string[] subjects)
+    {
+        return new DemoTutor(
+            email, name, gender, city, district, address, avatar, phone, bio, university, major, years,
+            rateMin, rateMax, mode, "Verified", rating, reviews, subjects,
+            new[] { ("Bằng tốt nghiệp sư phạm", "Bộ GD&ĐT", "2020-08-01") },
+            new[] { (1, "18:00", "20:00"), (3, "18:00", "20:00"), (6, "09:00", "11:00") });
     }
 
     private record DemoUser(string Email, string FullName, string Phone, string Gender, string City, string District, string Address, string AvatarUrl);

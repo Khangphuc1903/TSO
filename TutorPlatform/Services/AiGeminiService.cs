@@ -19,7 +19,7 @@ public class AiGeminiService
     }
 
     private string ApiKey => _config["Gemini:ApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "";
-    private string ModelName => _config["Gemini:Model"] ?? "gemini-2.5-flash";
+    private string ModelName => _config["Gemini:Model"] ?? "gemini-3.8-flash";
 
     /// <summary>
     /// Chẩn đoán lỗ hổng kiến thức từ ảnh bài tập/đề thi qua Gemini Multimodal Vision
@@ -101,6 +101,46 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             {
                 temperature = 0.2,
                 topP = 0.8,
+                maxOutputTokens = 8192,
+                responseMimeType = "application/json"
+            }
+        };
+
+        var responseJson = await CallGeminiApiAsync(payload, ct);
+        var parsed = CleanAndParseJson<GeminiDiagnosisOutput>(responseJson);
+        if (parsed == null)
+            throw new InvalidOperationException("Gemini đã trả lời nhưng không đúng dạng chẩn đoán.");
+        return parsed;
+    }
+
+    public async Task<T?> ReadImagesAsJsonAsync<T>(
+        string prompt,
+        IReadOnlyList<(byte[] Bytes, string Mime)> images,
+        CancellationToken ct = default) where T : class
+    {
+        var parts = new List<object>();
+        foreach (var image in images)
+        {
+            parts.Add(new
+            {
+                inlineData = new
+                {
+                    mimeType = string.IsNullOrWhiteSpace(image.Mime) ? "image/jpeg" : image.Mime,
+                    data = Convert.ToBase64String(image.Bytes)
+                }
+            });
+        }
+        parts.Add(new { text = prompt });
+
+        var payload = new
+        {
+            contents = new[]
+            {
+                new { parts = parts.ToArray() }
+            },
+            generationConfig = new
+            {
+                temperature = 0.1,
                 maxOutputTokens = 2048,
                 responseMimeType = "application/json"
             }
@@ -108,8 +148,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
 
         var responseJson = await CallGeminiApiAsync(payload, ct);
         if (string.IsNullOrWhiteSpace(responseJson)) return null;
-
-        return CleanAndParseJson<GeminiDiagnosisOutput>(responseJson);
+        return CleanAndParseJson<T>(responseJson);
     }
 
     /// <summary>
@@ -192,23 +231,68 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
         return CleanAndParseJson<GeminiNaturalSearchOutput>(responseJson);
     }
 
+    private IEnumerable<string> ModelCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { ModelName, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest" })
+        {
+            if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
+                yield return name;
+        }
+    }
+
     private async Task<string?> CallGeminiApiAsync(object payload, CancellationToken ct)
     {
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent?key={ApiKey}";
-        var jsonContent = JsonSerializer.Serialize(payload);
+        if (string.IsNullOrWhiteSpace(ApiKey) || ApiKey.Contains("YOUR_GEMINI_API_KEY", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Chưa cấu hình Gemini:ApiKey.");
+            return null;
+        }
 
+        var jsonContent = JsonSerializer.Serialize(payload);
+        string? lastError = null;
+
+        foreach (var model in ModelCandidates())
+        {
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                var result = await SendOnceAsync(model, jsonContent, ct);
+                if (result.Text != null) return result.Text;
+                lastError = result.Error;
+                var retryable = result.Status is 0 or 404 or 429 or 503;
+                if (!retryable)
+                    throw new InvalidOperationException(result.Error);
+                if (result.Status is 429 or 503 or 0 && attempt == 1)
+                {
+                    await Task.Delay(700, ct);
+                    continue;
+                }
+                _logger.LogWarning("Gemini model {Model} lỗi {Status}: {Error}", model, result.Status, result.Error);
+                break;
+            }
+        }
+
+        throw new InvalidOperationException(lastError ?? "Gemini đang quá tải. Hãy thử lại sau ít giây.");
+    }
+
+    private async Task<(string? Text, string Error, int Status)> SendOnceAsync(string model, string jsonContent, CancellationToken ct)
+    {
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Headers.TryAddWithoutValidation("x-goog-api-key", ApiKey);
         request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         try
         {
-            var response = await _httpClient.SendAsync(request, ct);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(25));
+            var response = await _httpClient.SendAsync(request, timeout.Token);
             var body = await response.Content.ReadAsStringAsync(ct);
-
+            var status = (int)response.StatusCode;
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Gemini API Error {StatusCode}: {Body}", response.StatusCode, body);
-                return null;
+                _logger.LogError("Gemini API Error {StatusCode} model {Model}: {Body}", status, model, body);
+                return (null, GeminiErrorMessage(status, body), status);
             }
 
             using var doc = JsonDocument.Parse(body);
@@ -222,20 +306,56 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
                 foreach (var part in parts.EnumerateArray())
                 {
                     if (part.TryGetProperty("text", out var textEl))
-                    {
                         sb.Append(textEl.GetString());
-                    }
                 }
-                return sb.ToString();
+                if (sb.Length > 0) return (sb.ToString(), "", status);
             }
 
-            return null;
+            return (null, "Gemini không tạo được nội dung cho ảnh này.", status);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Lỗi khi gọi Gemini API");
-            return null;
+            throw;
         }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Gemini model {Model} quá 25 giây, chuyển model khác.", model);
+            return (null, "Gemini phản hồi quá lâu.", 0);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Gemini model {Model} bị đứt kết nối.", model);
+            return (null, "Kết nối tới Gemini bị đứt giữa chừng.", 0);
+        }
+    }
+
+    private static string GeminiErrorMessage(int status, string body)
+    {
+        var detail = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var error) &&
+                error.TryGetProperty("message", out var message))
+            {
+                detail = message.GetString() ?? "";
+            }
+        }
+        catch
+        {
+            detail = "";
+        }
+
+        if (detail.Length > 180) detail = detail.Substring(0, 180);
+        if (status == 401 || status == 403)
+            return string.IsNullOrWhiteSpace(detail)
+                ? "Google từ chối API key."
+                : $"Google từ chối API key: {detail}";
+        if (status is 429 or 503)
+            return "Gemini đang quá tải tạm thời. Hãy bấm chẩn đoán lại sau vài giây.";
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"Gemini trả về lỗi {status}."
+            : $"Gemini trả về lỗi {status}: {detail}";
     }
 
     private T? CleanAndParseJson<T>(string rawText) where T : class

@@ -3,6 +3,7 @@ namespace TutorPlatform.DTOs;
 public class CreatePaymentIntentRequest
 {
     public int BookingId { get; set; }
+    public string? CouponCode { get; set; }
 }
 
 public class PaymentIntentResponse

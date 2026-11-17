@@ -83,6 +83,16 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
+export function safeInternalPath(raw) {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "";
+  return raw;
+}
+
+export function loginPath(redirect = "") {
+  const path = safeInternalPath(redirect);
+  return path ? `/login?redirect=${encodeURIComponent(path)}` : "/login";
+}
+
 export function homeForRole(role) {
   const r = (role || "").toLowerCase();
   if (r === "pending") return "/onboarding";
@@ -90,7 +100,7 @@ export function homeForRole(role) {
   return r === "tutor" ? "/tutor" : "/profile";
 }
 
-export function redirectAfterAuth(navigate, token, needsOnboarding, remember = false, refreshToken = "") {
+export function redirectAfterAuth(navigate, token, needsOnboarding, remember = false, refreshToken = "", redirect = "") {
   const user = saveSession(token, remember, refreshToken);
   if (needsOnboarding || (user?.role || "").toLowerCase() === "pending") {
     authStore().setItem("needsOnboarding", "1");
@@ -99,7 +109,7 @@ export function redirectAfterAuth(navigate, token, needsOnboarding, remember = f
   }
   sessionStorage.removeItem("needsOnboarding");
   localStorage.removeItem("needsOnboarding");
-  navigate(homeForRole(user?.role));
+  navigate(safeInternalPath(redirect) || homeForRole(user?.role));
 }
 
 export function logout() {
@@ -115,5 +125,5 @@ export function logout() {
 
 export function avatarUrl(email) {
   const name = encodeURIComponent(email || "User");
-  return `https://ui-avatars.com/api/?name=${name}&background=1D3FAE&color=fff&size=128`;
+  return `https://ui-avatars.com/api/?name=${name}&background=0D9488&color=fff&size=128`;
 }

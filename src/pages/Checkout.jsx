@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   CreditCard,
@@ -28,10 +28,12 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import Navbar from "../components/Navbar";
+import CancelRefundModal from "../components/CancelRefundModal";
 import { getMyBookings } from "../api/study";
 import { createPaymentIntent, getPaymentByBooking, getRefundPreview } from "../api/payment";
 import { createAppHub } from "../api/hub";
 import { isLoggedIn, avatarUrl } from "../auth";
+import { useCart } from "../context/CartContext";
 
 const BANK_MAP = {
   "970422": "MB Bank (Ngân hàng Quân Đội)",
@@ -69,6 +71,7 @@ const BANK_MAP = {
 export default function Checkout() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
+  const { refreshCart } = useCart();
 
   const [booking, setBooking] = useState(null);
   const [refundInfo, setRefundInfo] = useState(null);
@@ -80,6 +83,7 @@ export default function Checkout() {
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [qrImageError, setQrImageError] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
 
   // Coupon state
   const [couponCode, setCouponCode] = useState("");
@@ -90,18 +94,26 @@ export default function Checkout() {
   // 15-minute countdown timer
   const [timeLeft, setTimeLeft] = useState(15 * 60);
 
-  const initPayment = useCallback(async (bId) => {
+  const paymentRequest = useRef(0);
+
+  const initPayment = useCallback(async (bId, coupon) => {
+    const token = ++paymentRequest.current;
     try {
       setPaying(true);
       setError("");
-      const res = await createPaymentIntent(Number(bId));
+      const res = await createPaymentIntent(Number(bId), coupon || "");
+      if (token !== paymentRequest.current) return false;
+      setQrImageError(false);
       setPaymentData(res);
+      return res;
     } catch (err) {
+      if (token !== paymentRequest.current) return null;
       const msg = err.response?.data?.message || err.message || "Không thể khởi tạo mã VietQR tự động.";
       console.warn("Payment auto-init error:", msg);
       setError(msg);
+      return null;
     } finally {
-      setPaying(false);
+      if (token === paymentRequest.current) setPaying(false);
     }
   }, []);
 
@@ -198,18 +210,7 @@ export default function Checkout() {
     };
   }, [bookingId, paymentData, navigate]);
 
-  const handleStartPayment = async () => {
-    try {
-      setPaying(true);
-      setError("");
-      const res = await createPaymentIntent(Number(bookingId));
-      setPaymentData(res);
-    } catch (err) {
-      setError(err.response?.data?.message || "Không thể khởi tạo link thanh toán PayOS.");
-    } finally {
-      setPaying(false);
-    }
-  };
+  const handleStartPayment = () => initPayment(bookingId, couponCode);
 
   const copyToClipboard = (text, fieldName) => {
     if (!text) return;
@@ -218,22 +219,42 @@ export default function Checkout() {
     setTimeout(() => setCopiedField(""), 2500);
   };
 
-  const applyCouponCode = (code) => {
+  const applyCouponCode = async (code) => {
     const cleanCode = code.trim().toUpperCase();
     setCouponCode(cleanCode);
     setCouponError("");
     setCouponSuccess("");
 
     const basePrice = Number(booking?.price || 0);
+    let nextDiscount = 0;
+    let success = "";
     if (cleanCode === "TSG50K") {
-      setDiscount(50000);
-      setCouponSuccess("Áp dụng mã TSG50K thành công! Giảm 50.000 ₫.");
+      nextDiscount = 50000;
+      success = "Áp dụng mã TSG50K thành công! Giảm 50.000 ₫.";
     } else if (cleanCode === "TSGNEW" || cleanCode === "HOCVIENMOI") {
-      const disc = Math.round(basePrice * 0.1);
-      setDiscount(disc);
-      setCouponSuccess(`Áp dụng mã ${cleanCode} thành công! Giảm 10% (${disc.toLocaleString("vi-VN")} ₫).`);
+      nextDiscount = Math.round(basePrice * 0.1);
+      success = `Áp dụng mã ${cleanCode} thành công! Giảm 10% (${nextDiscount.toLocaleString("vi-VN")} ₫).`;
     } else {
       setCouponError("Mã ưu đãi không hợp lệ.");
+      setDiscount(0);
+      return;
+    }
+
+    if (basePrice - nextDiscount < 10000) {
+      setCouponError("Số tiền sau giảm thấp hơn mức tối thiểu 10.000 ₫.");
+      setDiscount(0);
+      return;
+    }
+
+    setDiscount(nextDiscount);
+    const res = await initPayment(bookingId, cleanCode);
+    const expected = basePrice - nextDiscount;
+    if (res && Number(res.amount) === expected) {
+      setCouponSuccess(`${success} Mã QR đã được tạo lại theo số tiền mới.`);
+    } else if (res) {
+      setDiscount(0);
+      setCouponError("Mã QR vẫn giữ học phí gốc. Tắt API trong Visual Studio, bấm F5, rồi áp dụng lại.");
+    } else {
       setDiscount(0);
     }
   };
@@ -402,7 +423,7 @@ export default function Checkout() {
         </div>
 
         {/* HERO EXECUTIVE ESCROW BANNER WITH TIMER */}
-        <div className="mb-8 relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE] p-6 sm:p-8 text-white shadow-xl shadow-brand-900/15">
+        <div className="mb-8 relative overflow-hidden rounded-3xl bg-hero p-6 sm:p-8 text-white shadow-xl shadow-brand-900/15">
           {/* Subtle background glow effect */}
           <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
           <div className="absolute -left-20 -bottom-20 w-80 h-80 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
@@ -685,9 +706,10 @@ export default function Checkout() {
                   </div>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                    disabled={paying}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
                   >
-                    Áp dụng
+                    {paying ? "Đang cập nhật" : "Áp dụng"}
                   </button>
                 </form>
 
@@ -752,7 +774,7 @@ export default function Checkout() {
                 <div className="pt-3 border-t border-slate-200 flex justify-between items-baseline">
                   <div>
                     <span className="text-sm sm:text-base font-extrabold text-slate-900">Tổng thanh toán:</span>
-                    <p className="text-[10px] text-slate-400">Tiền được tạm giữ đến khi hoàn thành buổi học</p>
+                    <p className="text-[10px] text-slate-400">Tiền được tạm giữ đến khi hoàn thành buổi học. Gia sư nhận 80%, nền tảng giữ 20%.</p>
                   </div>
                   <span className="text-2xl sm:text-3xl font-black text-brand-600 tracking-tight">
                     {finalPrice.toLocaleString("vi-VN")} ₫
@@ -762,27 +784,42 @@ export default function Checkout() {
 
               {/* KHU VỰC HIỂN THỊ VIETQR PAYOS */}
               {!paymentData ? (
-                <button
-                  onClick={handleStartPayment}
-                  disabled={paying}
-                  className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold py-4 px-4 rounded-2xl text-sm shadow-lg shadow-brand-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {paying ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Đang khởi tạo mã VietQR...
-                    </>
-                  ) : (
-                    <>
-                      <QrCode size={18} />
-                      Tạo mã VietQR thanh toán
-                    </>
-                  )}
-                </button>
+                <div className="space-y-2.5">
+                  <button
+                    onClick={handleStartPayment}
+                    disabled={paying}
+                    className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold py-4 px-4 rounded-2xl text-sm shadow-lg shadow-brand-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {paying ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Đang khởi tạo mã VietQR...
+                      </>
+                    ) : (
+                      <>
+                        <QrCode size={18} />
+                        Tạo mã VietQR thanh toán
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCancel(true)}
+                    className="w-full bg-white hover:bg-red-50 text-red-600 font-semibold py-3 px-4 rounded-2xl text-sm border border-red-200 hover:border-red-300 transition cursor-pointer"
+                  >
+                    Hủy buổi học
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-4 pt-1">
                   {/* Khung hiển thị QR code chuẩn VietQR */}
                   <div className="bg-gradient-to-b from-slate-50 to-white p-5 rounded-3xl border border-slate-200/90 text-center relative shadow-sm">
+                    {paying && (
+                      <div className="absolute inset-0 z-10 bg-white/85 rounded-3xl flex flex-col items-center justify-center gap-2">
+                        <div className="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-xs font-semibold text-slate-600">Đang tạo lại mã QR theo số tiền mới...</p>
+                      </div>
+                    )}
                     {/* Header VietQR & Napas */}
                     <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-800 mb-3">
                       <Smartphone size={16} className="text-brand-600" />
@@ -792,6 +829,7 @@ export default function Checkout() {
                     {paymentData.qrImageUrl && !qrImageError ? (
                       <div className="bg-white p-3 rounded-2xl shadow-sm inline-block border border-slate-200/80 relative group max-w-[290px] mx-auto">
                         <img
+                          key={paymentData.orderCode}
                           src={paymentData.qrImageUrl}
                           alt="Mã thanh toán VietQR"
                           className="w-full h-auto object-contain rounded-xl"
@@ -967,6 +1005,14 @@ export default function Checkout() {
                       </div>
                     )}
 
+                    <button
+                      type="button"
+                      onClick={() => setShowCancel(true)}
+                      className="w-full bg-white hover:bg-red-50 text-red-600 font-semibold py-2.5 px-4 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 border border-red-200 hover:border-red-300 cursor-pointer"
+                    >
+                      Hủy buổi học
+                    </button>
+
                     {paymentData.checkoutUrl && (
                       <a
                         href={paymentData.checkoutUrl}
@@ -1016,6 +1062,17 @@ export default function Checkout() {
           </div>
         </div>
       </main>
+
+      {showCancel && (
+        <CancelRefundModal
+          bookingId={Number(bookingId)}
+          onClose={() => setShowCancel(false)}
+          onSuccess={() => {
+            refreshCart();
+            navigate("/bookings");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -94,6 +94,8 @@ builder.Services.AddScoped<TutorTestService>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<SosService>();
 builder.Services.AddScoped<AiGeminiService>();
+builder.Services.AddScoped<IdentityVerificationService>();
+builder.Services.AddHostedService<IdentityImagePurgeService>();
 builder.Services.AddScoped<AiMatchmakerService>();
 
 var payOsSection = builder.Configuration.GetSection("PayOS");

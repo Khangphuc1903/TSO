@@ -96,10 +96,20 @@ public class AdminIdentityDto
     public int DocumentId { get; set; }
     public int TutorId { get; set; }
     public string TutorName { get; set; } = null!;
+    public string? TutorEmail { get; set; }
     public string Status { get; set; } = null!;
-    public string? FrontUrl { get; set; }
-    public string? BackUrl { get; set; }
-    public string? SelfieUrl { get; set; }
+    public string? ProfileVerification { get; set; }
+    public bool ImagesAvailable { get; set; }
+    public bool HasFront { get; set; }
+    public bool HasBack { get; set; }
+    public bool HasSelfie { get; set; }
+    public string? OcrName { get; set; }
+    public string? OcrIdNumber { get; set; }
+    public string? FaceStatus { get; set; }
+    public decimal? FaceScore { get; set; }
+    public bool LowConfidence { get; set; }
+    public bool FaceMatch { get; set; }
+    public DateTime? HoldExpiresAt { get; set; }
     public DateTime SubmittedAt { get; set; }
     public List<AdminIdentityTestDto> Tests { get; set; } = new();
 }
@@ -114,8 +124,43 @@ public class AdminIdentityTestDto
 
 public class AdminReviewIdentityDto
 {
-    public string Action { get; set; } = null!;
+    public string? Action { get; set; }
+    public bool? Approve { get; set; }
     public string? Reason { get; set; }
+}
+
+public class TutorIdentityStatusDto
+{
+    public string? FullName { get; set; }
+    public string? Gender { get; set; }
+    public string? DateOfBirth { get; set; }
+    public string? IdNumber { get; set; }
+    public string? Address { get; set; }
+    public string? OriginLocation { get; set; }
+    public string? Status { get; set; }
+    public bool IdentityCompleted { get; set; }
+    public bool OcrFilled { get; set; }
+    public string? OcrMessage { get; set; }
+    public decimal? FaceMatchPercent { get; set; }
+    public bool ImagesHeldForAdmin { get; set; }
+    public DateTime? HoldExpiresAt { get; set; }
+}
+
+public class CccdReadResult
+{
+    public string? FullName { get; set; }
+    public string? IdNumber { get; set; }
+    public string? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public string? Address { get; set; }
+    public int Confidence { get; set; }
+    public bool LooksLikeCccd { get; set; }
+}
+
+public class FaceCompareResult
+{
+    public bool SamePerson { get; set; }
+    public int Confidence { get; set; }
 }
 
 public class AdminSettingItemDto

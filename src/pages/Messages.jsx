@@ -4,7 +4,7 @@ import { MessageCircle, Search, Sparkles, Users } from "lucide-react";
 import { ChatComposer, ChatMessageBody } from "../components/ChatMedia";
 import Navbar from "../components/Navbar";
 import GroupChatPane from "../components/GroupChatPane";
-import { avatarUrl, getUser, isLoggedIn } from "../auth";
+import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { createAppHub } from "../api/hub";
 import { getConversations, getMessages, sendMessage, sendMessageAttachment } from "../api/study";
 import { getMyStudyGroupChats } from "../api/studyGroups";
@@ -131,7 +131,7 @@ export default function Messages() {
       appendMessage(msg);
       loadConvos();
     } catch (err) {
-      setSendError(err.response?.data?.message || "Không gửi được tin nhắn. Thử đăng xuất rồi đăng nhập lại.");
+      setSendError(err.response?.data?.message || "Không gửi được tin nhắn. Bạn vẫn đang đăng nhập, thử gửi lại.");
       throw err;
     }
   };
@@ -170,15 +170,32 @@ export default function Messages() {
       </section>
 
       <main className="max-w-6xl mx-auto px-6 pb-8">
-        {error ? (
+        {!isLoggedIn() ? (
           <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-12 text-center">
             <MessageCircle className="mx-auto text-brand-600 mb-3" />
             <p className="text-slate-500">
-              {error}{" "}
-              <Link to="/login" className="text-brand-600 font-medium hover:underline">
+              {error || "Đăng nhập để nhắn tin với gia sư hoặc nhóm học."}{" "}
+              <Link to={loginPath("/messages")} className="text-brand-600 font-medium hover:underline">
                 Đăng nhập
               </Link>
             </p>
+          </div>
+        ) : error ? (
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-12 text-center">
+            <MessageCircle className="mx-auto text-brand-600 mb-3" />
+            <p className="text-slate-600">{error}</p>
+            <p className="text-sm text-slate-400 mt-2">Phiên đăng nhập vẫn còn. Không cần đăng nhập lại.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError("");
+                loadConvos().catch(() => setError("Không tải được tin nhắn."));
+                loadGroups().catch(() => {});
+              }}
+              className="mt-4 inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              Thử lại
+            </button>
           </div>
         ) : (
           <div className="grid md:grid-cols-[300px_1fr] gap-4 h-[calc(100vh-12rem)]">

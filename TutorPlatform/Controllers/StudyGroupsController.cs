@@ -38,6 +38,34 @@ public class StudyGroupsController : ControllerBase
     }
 
     [Authorize]
+    [HttpGet("bids/board")]
+    public async Task<IActionResult> BidBoard(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _service.ListBidBoardAsync(id, cancellationToken);
+        return result.Success
+            ? Ok(new { totalCount = result.Items.Count, items = result.Items })
+            : StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpGet("bids/mine")]
+    public async Task<IActionResult> MyBids(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _service.ListMyBidsAsync(id, cancellationToken));
+    }
+
+    [Authorize]
+    [HttpGet("my-desk")]
+    public async Task<IActionResult> MyDesk(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var items = await _service.ListMyDeskAsync(id, cancellationToken);
+        return Ok(new { totalCount = items.Count, items });
+    }
+
+    [Authorize]
     [HttpGet("mine")]
     public async Task<IActionResult> Mine(CancellationToken cancellationToken)
     {
@@ -140,6 +168,42 @@ public class StudyGroupsController : ControllerBase
     {
         if (UserId is not int userId) return Unauthorized();
         var result = await _service.RespondToJoinRequestAsync(userId, id, applicantId, dto.Accept, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/bids")]
+    public async Task<IActionResult> PlaceBid(int id, [FromBody] PlaceStudyGroupBidDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _service.PlaceBidAsync(userId, id, dto, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/bids/withdraw")]
+    public async Task<IActionResult> WithdrawBid(int id, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _service.WithdrawBidAsync(userId, id, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/bids/{bidId:int}/vote")]
+    public async Task<IActionResult> VoteBid(int id, int bidId, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _service.VoteBidAsync(userId, id, bidId, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/bids/{bidId:int}/select")]
+    public async Task<IActionResult> SelectBid(int id, int bidId, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _service.SelectBidAsync(userId, id, bidId, cancellationToken);
         return StatusCode(result.Status, new { message = result.Message });
     }
 

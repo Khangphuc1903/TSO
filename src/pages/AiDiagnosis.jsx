@@ -27,6 +27,7 @@ import Navbar from "../components/Navbar";
 import { diagnoseHomework, getMyDiagnoses, getDiagnosisById } from "../api/ai";
 import { isLoggedIn } from "../auth";
 import { API_ORIGIN } from "../api/axiosClient";
+import { fileHref } from "../utils/format";
 
 function normalizeDiagnosis(d) {
   if (!d) return null;
@@ -47,7 +48,7 @@ function normalizeDiagnosis(d) {
       tutorId: t.tutorId ?? t.TutorId,
       rankNo: t.rankNo ?? t.RankNo,
       matchScore: t.matchScore ?? t.MatchScore,
-      avatarUrl: t.avatarUrl ?? t.AvatarUrl,
+      avatarUrl: fileHref(t.avatarUrl ?? t.AvatarUrl, API_ORIGIN),
       fullName: t.fullName ?? t.FullName,
       university: t.university ?? t.University,
       averageRating: t.averageRating ?? t.AverageRating ?? 5.0,

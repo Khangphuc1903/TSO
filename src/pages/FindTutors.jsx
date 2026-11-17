@@ -18,6 +18,8 @@ import { getSubjects, searchTutors } from "../api/tutorSearch";
 import { naturalSearchTutors } from "../api/ai";
 import { wishlistApi } from "../api/wishlist";
 import { isLoggedIn } from "../auth";
+import { API_ORIGIN } from "../api/axiosClient";
+import { fileHref } from "../utils/format";
 import LocationFields from "../components/LocationFields";
 import { SkeletonTutorCard } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
@@ -148,7 +150,7 @@ export default function FindTutors() {
         bio: t.bio ?? t.Bio,
         tags: t.subjectNames ?? t.SubjectNames ?? [],
         price: t.hourlyRateMin ?? t.HourlyRateMin ?? 0,
-        photoUrl: t.avatarUrl ?? t.AvatarUrl ?? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+        photoUrl: fileHref(t.avatarUrl ?? t.AvatarUrl, API_ORIGIN) || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
         aiReason: t.reason ?? t.Reason,
         matchScore: t.matchScore ?? t.MatchScore,
       }));

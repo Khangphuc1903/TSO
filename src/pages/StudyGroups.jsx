@@ -24,7 +24,8 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { searchStudyGroups } from "../api/studyGroups";
 import { getSubjects } from "../api/tutorSearch";
 import LocationFields from "../components/LocationFields";
-import { avatarUrl } from "../auth";
+import { avatarUrl, getUser } from "../auth";
+import { STUDY_LEVELS, levelLabel, splitStudyCopy } from "../data/studyLevels";
 
 export default function StudyGroups() {
   const [params, setParams] = useSearchParams();
@@ -37,6 +38,7 @@ export default function StudyGroups() {
     city: params.get("city") || "",
     district: params.get("district") || "",
     hasMentor: params.get("hasMentor") || "",
+    educationLevel: params.get("educationLevel") || "",
   });
 
   useEffect(() => {
@@ -50,6 +52,7 @@ export default function StudyGroups() {
       city: params.get("city") || "",
       district: params.get("district") || "",
       hasMentor: params.get("hasMentor") || "",
+      educationLevel: params.get("educationLevel") || "",
     };
     setFilters(next);
     const query = {};
@@ -57,6 +60,7 @@ export default function StudyGroups() {
     if (next.subjectId) query.subjectId = next.subjectId;
     if (next.city) query.city = next.city;
     if (next.district) query.district = next.district;
+    if (next.educationLevel) query.educationLevel = next.educationLevel;
     if (next.hasMentor !== "") query.hasMentor = next.hasMentor === "true";
     setLoading(true);
     searchStudyGroups(query)
@@ -64,6 +68,14 @@ export default function StudyGroups() {
       .catch(() => setGroups([]))
       .finally(() => setLoading(false));
   }, [params]);
+
+  const publish = (nextFilters) => {
+    const next = {};
+    Object.entries(nextFilters).forEach(([k, v]) => {
+      if (v !== "") next[k] = v;
+    });
+    setParams(next);
+  };
 
   const apply = (e) => {
     e.preventDefault();
@@ -75,7 +87,7 @@ export default function StudyGroups() {
   };
 
   const clearFilters = () => {
-    setFilters({ keyword: "", subjectId: "", city: "", district: "", hasMentor: "" });
+    setFilters({ keyword: "", subjectId: "", city: "", district: "", hasMentor: "", educationLevel: "" });
     setParams({});
   };
 
@@ -87,7 +99,7 @@ export default function StudyGroups() {
 
       {/* HERO BANNER */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE]" />
+        <div className="absolute inset-0 bg-hero" />
         <div className="absolute -right-32 -top-32 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
         <div className="absolute -left-32 -bottom-32 w-96 h-96 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
 
@@ -110,7 +122,7 @@ export default function StudyGroups() {
             </h1>
 
             <p className="text-sm sm:text-base text-white/75 mt-4 max-w-xl leading-relaxed">
-              Kết nối với những bạn học cùng môn, cùng khu vực. Học nhóm có thể có gia sư mentor hỗ trợ hoặc chỉ các bạn học sinh tự hỗ trợ nhau qua chat realtime.
+              Tìm bạn học theo cùng môn và cùng cấp. Học sinh cấp 3 không vào nhóm của cấp 1.
             </p>
 
             {/* Thống kê nhanh */}
@@ -163,6 +175,12 @@ export default function StudyGroups() {
 
       {/* MAIN CONTENT */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 -mt-6 relative z-20 pb-20">
+        {(getUser()?.role || "").toLowerCase() === "tutor" && (
+          <Link to="/study-groups/bids" className="mb-4 flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+            <span className="font-semibold text-amber-950">Bài tìm gia sư chỉ hiện với giáo viên.</span>
+            <span className="font-bold text-amber-800">Mở bảng chào thầu →</span>
+          </Link>
+        )}
         {/* SEARCH & FILTER BAR */}
         <form
           onSubmit={apply}
@@ -174,7 +192,7 @@ export default function StudyGroups() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900">Bộ lọc tìm kiếm nhanh</h2>
-              <p className="text-[11px] text-slate-400">Lọc theo môn học, khu vực, hình thức để tìm nhóm phù hợp nhất</p>
+              <p className="text-[11px] text-slate-400">Lọc theo cấp học trước, rồi tới môn và khu vực. Mỗi cấp chỉ thấy nhóm của chính cấp đó.</p>
             </div>
             {hasActiveFilters && (
               <button
@@ -185,6 +203,47 @@ export default function StudyGroups() {
                 Xóa bộ lọc
               </button>
             )}
+          </div>
+
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => {
+                const next = { ...filters, educationLevel: "" };
+                setFilters(next);
+                publish(next);
+              }}
+              className={`h-16 rounded-2xl border px-3 text-left transition ${
+                filters.educationLevel === ""
+                  ? "border-brand-500 bg-brand-50"
+                  : "border-slate-200 bg-white hover:border-brand-200"
+              }`}
+            >
+              <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-400">Tất cả</span>
+              <span className="mt-0.5 block text-sm font-extrabold text-slate-900">Mọi cấp</span>
+            </button>
+            {STUDY_LEVELS.map((level) => {
+              const active = filters.educationLevel === level.value;
+              return (
+                <button
+                  key={level.value}
+                  type="button"
+                  onClick={() => {
+                    const next = { ...filters, educationLevel: level.value };
+                    setFilters(next);
+                    publish(next);
+                  }}
+                  className={`h-16 rounded-2xl border px-3 text-left transition ${
+                    active
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-slate-200 bg-white hover:border-brand-200"
+                  }`}
+                >
+                  <span className="block text-[11px] font-bold uppercase tracking-wide text-brand-600">{level.grade}</span>
+                  <span className="mt-0.5 block text-sm font-extrabold text-slate-900">{level.value}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
@@ -321,15 +380,18 @@ export default function StudyGroups() {
         ) : (
           /* GRID KẾT QUẢ */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {groups.map((g) => {
+            {groups.map((g, index) => {
               const slotsLeft = (g.maxMembers || 10) - (g.memberCount || 0);
               const isAlmostFull = slotsLeft <= 2;
+              const copy = splitStudyCopy(g.description);
+              const seekingTutor = g.hiringMode === "ReverseBid";
 
               return (
                 <Link
                   key={g.groupId}
                   to={`/study-groups/${g.groupId}`}
-                  className="group bg-white rounded-3xl border border-slate-200/80 p-6 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:border-brand-200 hover:-translate-y-0.5"
+                  className="group animate-fade-up bg-white rounded-3xl border border-slate-200/80 p-6 transition-all hover:-translate-y-1 hover:border-brand-200 hover:shadow-xl hover:shadow-slate-200/50"
+                  style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}
                 >
                   {/* Header row with badge */}
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -340,12 +402,18 @@ export default function StudyGroups() {
                     </div>
                     <span
                       className={`text-[11px] px-2.5 py-1 rounded-full font-bold shrink-0 border ${
-                        g.hasMentor
+                        seekingTutor
+                          ? "bg-amber-50 text-amber-800 border-amber-200"
+                          : g.hasMentor
                           ? "bg-brand-50 text-brand-700 border-brand-200"
                           : "bg-emerald-50 text-emerald-700 border-emerald-200"
                       }`}
                     >
-                      {g.hasMentor ? (
+                      {seekingTutor ? (
+                        <span className="inline-flex items-center gap-1">
+                          <GraduationCap size={12} /> Đang tìm gia sư
+                        </span>
+                      ) : g.hasMentor ? (
                         <span className="inline-flex items-center gap-1">
                           <GraduationCap size={12} /> Có gia sư
                         </span>
@@ -358,12 +426,23 @@ export default function StudyGroups() {
                   </div>
 
                   {/* Mô tả */}
-                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-2 mb-4">
-                    {g.description || "Nhóm học tập chia sẻ bài tập, thảo luận kiến thức và hỗ trợ nhau cùng tiến bộ."}
+                  <p className="mb-4 line-clamp-3 text-sm font-bold italic leading-relaxed text-slate-800">
+                    {copy.goal || "Cùng nhau học đúng trình độ, để mỗi buổi đều chạm đúng chỗ mình đang hổng."}
                   </p>
+                  {seekingTutor && (
+                    <p className="mb-4 text-xs font-semibold text-amber-800">
+                      Học sinh khác có thể xin vào nhóm. Gia sư chỉ gửi hồ sơ ứng tuyển.
+                    </p>
+                  )}
 
                   {/* Meta tags */}
                   <div className="flex flex-wrap gap-2 mb-4">
+                    {g.educationLevel && (
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
+                        <GraduationCap size={12} />
+                        {levelLabel(g.educationLevel)} · {g.educationLevel}
+                      </span>
+                    )}
                     {g.subjectName && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 border border-brand-100">
                         <BookOpen size={12} />

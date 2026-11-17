@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Users, X } from "lucide-react";
-import { avatarUrl, getUser, isLoggedIn } from "../auth";
+import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { createAppHub } from "../api/hub";
 import { getStudyGroup, getStudyGroupMessages, sendStudyGroupAttachment, sendStudyGroupMessage } from "../api/studyGroups";
 import { openConversation } from "../api/study";
@@ -75,7 +75,7 @@ export default function GroupChatPane({ groupId, title, members: membersProp = [
   };
 
   const dmMember = async (userId) => {
-    if (!isLoggedIn()) return navigate("/login");
+    if (!isLoggedIn()) return navigate(loginPath(`/study-groups/${groupId}`));
     if (Number(userId) === myId) return;
     const id = await openConversation(Number(userId));
     navigate(`/messages?c=${id}`);

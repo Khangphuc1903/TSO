@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TutorPlatform.DTOs;
@@ -14,12 +15,18 @@ public class TutorMeController : ControllerBase
     private readonly TutorWorkspaceService _workspace;
     private readonly StudyGroupService _groups;
     private readonly TutorTestService _tests;
+    private readonly IdentityVerificationService _identity;
 
-    public TutorMeController(TutorWorkspaceService workspace, StudyGroupService groups, TutorTestService tests)
+    public TutorMeController(
+        TutorWorkspaceService workspace,
+        StudyGroupService groups,
+        TutorTestService tests,
+        IdentityVerificationService identity)
     {
         _workspace = workspace;
         _groups = groups;
         _tests = tests;
+        _identity = identity;
     }
 
     private int? UserId
@@ -251,5 +258,52 @@ public class TutorMeController : ControllerBase
         return result.Success
             ? Ok(new { message = result.Message })
             : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpGet("identity/ekyc-config")]
+    public IActionResult EkycConfig()
+    {
+        if (UserId is not int) return Unauthorized();
+        return Ok(_identity.GetEkycConfig());
+    }
+
+    [HttpPost("identity/ekyc-result")]
+    public async Task<IActionResult> EkycResult([FromBody] JsonElement body, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var resultNode = body.ValueKind == JsonValueKind.Object && body.TryGetProperty("result", out var wrapped)
+            ? wrapped
+            : body;
+        var result = await _identity.ApplyVnptResultAsync(id, resultNode, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message, data = result.Data })
+            : StatusCode(result.Status, new { message = result.Message, data = result.Data });
+    }
+
+    [HttpGet("identity")]
+    public async Task<IActionResult> Identity(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        return Ok(await _identity.GetStatusAsync(id, cancellationToken));
+    }
+
+    [HttpPost("identity/card")]
+    public async Task<IActionResult> UploadCard(IFormFile? front, IFormFile? back, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _identity.UploadCardAsync(id, front, back, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message, data = result.Data })
+            : StatusCode(result.Status, new { message = result.Message, data = result.Data });
+    }
+
+    [HttpPost("identity/face")]
+    public async Task<IActionResult> VerifyFace(IFormFile? selfie, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _identity.VerifyFaceAsync(id, selfie, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message, data = result.Data })
+            : StatusCode(result.Status, new { message = result.Message, data = result.Data });
     }
 }

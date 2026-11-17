@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ban, Check, ClipboardList, Flag, IdCard, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
+import { Ban, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { getUser, isLoggedIn } from "../auth";
@@ -13,8 +13,31 @@ const TABS = [
   { id: "users", label: "Tài khoản", icon: Users },
   { id: "reports", label: "Báo cáo", icon: Flag },
   { id: "questions", label: "Ngân hàng câu hỏi", icon: ClipboardList },
+  { id: "payouts", label: "Chi trả", icon: Landmark },
   { id: "settings", label: "Cấu hình", icon: Settings },
 ];
+
+function HoldImage({ id, side, label }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let url = "";
+    let alive = true;
+    adminApi.identityImage(id, side).then((blob) => {
+      url = URL.createObjectURL(blob);
+      if (alive) setSrc(url);
+    }).catch(() => {});
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [id, side]);
+  return (
+    <figure>
+      <figcaption className="text-[11px] text-slate-500 mb-1">{label}</figcaption>
+      {src ? <img src={src} alt={label} className="h-40 w-full object-cover rounded-lg border" /> : <div className="h-40 rounded-lg border bg-slate-50" />}
+    </figure>
+  );
+}
 
 function media(path) {
   if (!path) return "";
@@ -55,6 +78,7 @@ export default function AdminDashboard() {
   const [editId, setEditId] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [settings, setSettings] = useState([]);
+  const [payouts, setPayouts] = useState([]);
 
   useEffect(() => {
     if (!isLoggedIn() || !isAdmin) {
@@ -73,6 +97,7 @@ export default function AdminDashboard() {
       setSubjects(await getSubjects().catch(() => []));
     }
     if (tab === "settings") setSettings(await adminApi.settings());
+    if (tab === "payouts") setPayouts(await adminApi.payouts());
   };
 
   useEffect(() => {
@@ -272,16 +297,17 @@ export default function AdminDashboard() {
             </div>
             {identity.map((c) => {
               const st = (c.status || "").toLowerCase();
-              const done = st === "verified";
+              const done = st === "approved" || st === "verified";
               const rejected = st === "rejected";
-              const pending = !done && !rejected;
+              const expired = st === "expired";
+              const pending = st === "pending";
               return (
               <div key={c.documentId} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div className="flex flex-wrap justify-between gap-2">
                   <div>
                     <p className="font-semibold">{c.tutorName} · {c.tutorEmail}</p>
                     <p className="text-xs text-slate-500">
-                      CCCD: {done ? "Đã duyệt" : rejected ? "Đã từ chối" : (c.status || "Chờ duyệt")} · Hồ sơ: {c.profileVerification}
+                      CCCD: {done ? "Đã duyệt" : rejected ? "Đã từ chối" : expired ? "Hết 24 giờ, ảnh đã xóa" : "Chờ duyệt"} · Hồ sơ: {c.profileVerification}
                       {pending && c.lowConfidence ? " · Dưới 85% — cần admin so chiếu" : ""}
                       {done && c.faceMatch ? " · ≥ 85% auto duyệt" : ""}
                     </p>
@@ -313,26 +339,20 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 </div>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  {c.frontUrl && (
-                    <figure>
-                      <figcaption className="text-[11px] text-slate-500 mb-1">CCCD mặt trước</figcaption>
-                      <img src={media(c.frontUrl)} alt="front" className="h-40 w-full object-cover rounded-lg border" />
-                    </figure>
-                  )}
-                  {c.backUrl && (
-                    <figure>
-                      <figcaption className="text-[11px] text-slate-500 mb-1">CCCD mặt sau</figcaption>
-                      <img src={media(c.backUrl)} alt="back" className="h-40 w-full object-cover rounded-lg border" />
-                    </figure>
-                  )}
-                  {c.selfieUrl && (
-                    <figure>
-                      <figcaption className="text-[11px] text-slate-500 mb-1">Ảnh chụp khuôn mặt</figcaption>
-                      <img src={media(c.selfieUrl)} alt="selfie" className="h-40 w-full object-cover rounded-lg border" />
-                    </figure>
-                  )}
-                </div>
+                {c.imagesAvailable ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-800">
+                      Ảnh chỉ giữ tạm đến {c.holdExpiresAt ? new Date(c.holdExpiresAt).toLocaleString("vi-VN") : "24 giờ"}. Duyệt hoặc từ chối xong, ảnh bị xóa ngay.
+                    </p>
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      {c.hasFront && <HoldImage id={c.documentId} side="front" label="CCCD mặt trước" />}
+                      {c.hasBack && <HoldImage id={c.documentId} side="back" label="CCCD mặt sau" />}
+                      {c.hasSelfie && <HoldImage id={c.documentId} side="selfie" label="Ảnh khuôn mặt" />}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">Ảnh CCCD đã bị xóa, không còn xem được.</p>
+                )}
                 {c.tests?.length > 0 && (
                   <p className="text-xs text-slate-600">
                     Điểm test: {c.tests.map((t) => `${t.subjectName}${t.gradeLevel ? " " + t.gradeLevel : ""} ${t.scorePercent}%${t.isPassed ? " đạt" : ""}`).join(" · ")}
@@ -472,6 +492,44 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {tab === "payouts" && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">
+              Học viên trả đủ học phí. Sau buổi học, chuyển 80% vào số tài khoản gia sư và giữ 20% cho nền tảng. Hoàn tiền thì chuyển vào số tài khoản học viên.
+            </p>
+            {payouts.length === 0 ? (
+              <div className="bg-white rounded-2xl border p-6 text-sm text-slate-500">Chưa có thanh toán thành công.</div>
+            ) : payouts.map((row) => (
+              <article key={row.paymentId} className="bg-white rounded-2xl border p-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-900">Buổi học #{row.bookingId} · {row.subjectName || "Môn học"}</p>
+                    <p className="text-slate-500 mt-1">{row.studentName} thanh toán cho {row.tutorName}</p>
+                  </div>
+                  <p className="font-extrabold text-slate-900">{Number(row.amount || 0).toLocaleString("vi-VN")} ₫</p>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p>Gia sư nhận 80%: <span className="font-bold">{Number(row.tutorShare || 0).toLocaleString("vi-VN")} ₫</span></p>
+                  <p>Nền tảng giữ 20%: <span className="font-bold">{Number(row.platformFee || 0).toLocaleString("vi-VN")} ₫</span></p>
+                </div>
+                <p className="mt-2 text-slate-700">
+                  Tài khoản gia sư: {row.tutorBankName && row.tutorAccountNumber
+                    ? `${row.tutorBankName} · ${row.tutorAccountNumber} · ${row.tutorAccountName}`
+                    : "Gia sư chưa lưu số tài khoản."}
+                </p>
+                {(row.refunds || []).map((refund) => (
+                  <p key={refund.refundId} className="mt-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-amber-900">
+                    Hoàn {Number(refund.amount || 0).toLocaleString("vi-VN")} ₫ ({refund.refundPercent}%).
+                    {" "}Tài khoản học viên: {refund.studentBankName && refund.studentAccountNumber
+                      ? `${refund.studentBankName} · ${refund.studentAccountNumber} · ${refund.studentAccountName}`
+                      : "Học viên chưa lưu số tài khoản."}
+                  </p>
+                ))}
+              </article>
+            ))}
           </div>
         )}
 

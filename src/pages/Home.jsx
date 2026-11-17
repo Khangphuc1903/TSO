@@ -8,7 +8,6 @@ import {
   Award,
   ShieldAlert,
   ArrowRight,
-  Sparkles,
   Star,
   BadgeCheck,
   ChevronRight,
@@ -37,6 +36,17 @@ export default function Home() {
   const [featured, setFeatured] = useState([]);
   const [loadingTutors, setLoadingTutors] = useState(true);
   const [homeStats, setHomeStats] = useState(null);
+  const [phrase, setPhrase] = useState(0);
+  const phrases = [
+    "gia sư đã xác thực CCCD",
+    "nhóm học cùng cấp",
+    "cứu viện bài tập 15 phút",
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => setPhrase((p) => (p + 1) % phrases.length), 3200);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setLoadingTutors(true);
@@ -68,18 +78,17 @@ export default function Home() {
       {/* ═══════════════════ HERO ═══════════════════ */}
       <section className="relative overflow-hidden">
         {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE]" />
-        <div className="absolute -right-40 -top-40 w-[500px] h-[500px] rounded-full bg-blue-400/8 blur-3xl pointer-events-none" />
-        <div className="absolute -left-40 bottom-0 w-[500px] h-[500px] rounded-full bg-indigo-400/8 blur-3xl pointer-events-none" />
-        <div className="absolute right-1/4 top-1/3 w-64 h-64 rounded-full bg-emerald-400/5 blur-3xl pointer-events-none" />
+        <div className="absolute inset-0 bg-hero" />
+        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-teal-300/10 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-10 h-72 w-72 rounded-full bg-blue-300/10 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 pt-16 sm:pt-20 lg:pt-24 pb-32 sm:pb-36 lg:pb-40">
           <div className="max-w-3xl">
             {/* Badge */}
-            <div className="flex flex-wrap items-center gap-2.5 mb-6">
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-white/10 text-white/90 border border-white/20 backdrop-blur-md">
-                <Sparkles size={14} className="text-amber-300" />
-                Nền tảng Gia sư #1 Việt Nam
+            <div className="flex flex-wrap items-center gap-2.5 mb-6 animate-fade-up">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-white/10 text-teal-100 border border-white/20 backdrop-blur-md">
+                <span className="h-2 w-2 rounded-full bg-teal-300 animate-pulse" />
+                100% gia sư xác thực CCCD, bằng cấp và bài test
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-400/15 text-emerald-200 border border-emerald-300/25 backdrop-blur-md">
                 <ShieldCheck size={13} className="text-emerald-300" />
@@ -88,19 +97,21 @@ export default function Home() {
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.1]">
-              Tìm <span className="text-blue-200">gia sư chất lượng</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-[52px] font-extrabold text-white tracking-tight leading-[1.15] animate-fade-up" style={{ animationDelay: "80ms" }}>
+              Kết nối đúng <span className="bg-gradient-to-r from-teal-200 to-emerald-200 bg-clip-text text-transparent">gia sư giỏi</span>
               <br />
-              & nhóm học tập
-              <span className="inline-block ml-2 text-amber-300">✦</span>
+              và nhóm học cùng cấp
             </h1>
+            <p key={phrase} className="mt-4 text-lg sm:text-xl font-semibold text-teal-100 animate-phrase">
+              {phrases[phrase]}
+            </p>
 
-            <p className="text-sm sm:text-base lg:text-lg text-white/70 mt-5 max-w-xl leading-relaxed">
+            <p className="text-sm sm:text-base lg:text-lg text-white/70 mt-4 max-w-xl leading-relaxed animate-fade-up" style={{ animationDelay: "160ms" }}>
               Kết nối gia sư đã xác thực CCCD với học viên trên toàn quốc. Thanh toán ký quỹ PayOS – hoàn tiền theo chính sách hủy.
             </p>
 
             {/* Stats row */}
-            <div className="flex flex-wrap gap-8 mt-8 pt-6 border-t border-white/10">
+            <div className="flex flex-wrap gap-8 mt-8 pt-6 border-t border-white/10 animate-fade-up" style={{ animationDelay: "240ms" }}>
               <div>
                 <p className="text-2xl sm:text-3xl font-black text-white">{homeStats?.tutorCount ?? "—"}</p>
                 <p className="text-[11px] text-white/50 font-medium mt-0.5">Gia sư đang mở lớp</p>
@@ -126,7 +137,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════════ SEARCH CARD (Floating) ═══════════════════ */}
-      <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 -mt-20">
+      <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 -mt-20 animate-fade-up" style={{ animationDelay: "280ms" }}>
         <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-300/30 border border-slate-200/80 p-5 sm:p-7">
           {/* Tab buttons */}
           <div className="flex border-b border-slate-100 mb-5">
@@ -176,10 +187,10 @@ export default function Home() {
 
             <button
               type="submit"
-              className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl px-7 py-3.5 text-sm transition shadow-lg shadow-brand-600/20 cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#0D9488] to-emerald-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-teal-700/25 transition hover:from-teal-600 hover:to-emerald-700 cursor-pointer"
             >
+              <Search size={16} />
               Tìm kiếm
-              <ArrowRight size={16} />
             </button>
           </form>
 
@@ -208,8 +219,9 @@ export default function Home() {
           to="/sos"
           className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-4 hover:bg-rose-100/70 transition"
         >
-          <span className="h-11 w-11 rounded-xl bg-rose-600 text-white grid place-items-center shrink-0">
-            <Siren size={20} />
+          <span className="relative h-11 w-11 rounded-xl bg-rose-600 text-white grid place-items-center shrink-0">
+            <span className="absolute inset-0 rounded-xl bg-rose-500 animate-ping opacity-40" />
+            <Siren size={20} className="relative" />
           </span>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900">Cứu viện bài tập 15 phút</p>
@@ -364,9 +376,9 @@ export default function Home() {
 
       {/* ═══════════════════ CTA: NHÓM HỌC ═══════════════════ */}
       <section className="max-w-7xl mx-auto px-6 pb-16">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F1E4D] via-[#16307F] to-[#1D3FAE] p-8 sm:p-12 lg:p-16">
-          <div className="absolute -right-20 -top-20 w-72 h-72 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
-          <div className="absolute -left-20 -bottom-20 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+        <div className="relative overflow-hidden rounded-3xl bg-hero p-8 sm:p-12 lg:p-16">
+          <div className="absolute -right-20 -top-20 w-72 h-72 rounded-full bg-teal-300/15 blur-3xl pointer-events-none" />
+          <div className="absolute -left-20 -bottom-20 w-72 h-72 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
 
           <div className="relative z-10 grid lg:grid-cols-2 gap-8 items-center">
             <div>
@@ -455,12 +467,12 @@ function StepCard({ step, icon, title, desc, color }) {
   const colorMap = {
     brand: "bg-brand-50 text-brand-600 border-brand-100",
     emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
+    indigo: "bg-sky-50 text-[#1E40AF] border-sky-100",
   };
   const stepColor = {
     brand: "text-brand-600",
     emerald: "text-emerald-600",
-    indigo: "text-indigo-600",
+    indigo: "text-[#1E40AF]",
   };
 
   return (
