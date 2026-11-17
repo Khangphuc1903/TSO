@@ -102,7 +102,6 @@ export default function FindTutors() {
     } catch {
       setTutors([]);
       setTotal(0);
-      setError("Không thể tải danh sách gia sư. Kiểm tra backend đang chạy.");
     } finally {
       setLoading(false);
     }
