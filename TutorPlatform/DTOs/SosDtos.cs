@@ -54,6 +54,8 @@ public sealed class SosSessionDto
     public int DurationMinutes { get; set; }
     public decimal FeeAmount { get; set; }
     public string PayoutStatus { get; set; } = null!;
+    public int? BookingId { get; set; }
+    public bool Paid { get; set; }
     public bool CanReview { get; set; }
     public byte? MyRating { get; set; }
 }

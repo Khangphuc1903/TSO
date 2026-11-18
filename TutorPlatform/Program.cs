@@ -166,6 +166,32 @@ IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyG
 IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMessages','AttachmentType') IS NULL
     EXEC(N'ALTER TABLE StudyGroupMessages ADD AttachmentType NVARCHAR(50) NULL');
 
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','TutorCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD TutorCompleted BIT NOT NULL CONSTRAINT DF_Bookings_TutorCompleted DEFAULT (0)');
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','StudentCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD StudentCompleted BIT NOT NULL CONSTRAINT DF_Bookings_StudentCompleted DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.LessonReports', N'U') IS NULL AND OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.LessonReports (
+        LessonReportId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        BookingId INT NOT NULL,
+        TutorId INT NOT NULL,
+        Content NVARCHAR(2000) NOT NULL,
+        Homework NVARCHAR(500) NULL,
+        CreatedAt DATETIME NOT NULL,
+        UpdatedAt DATETIME NULL,
+        CONSTRAINT FK_LessonReports_Booking FOREIGN KEY (BookingId) REFERENCES dbo.Bookings(BookingId),
+        CONSTRAINT UQ_LessonReports_Booking UNIQUE (BookingId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL AND COL_LENGTH('SosSessions','BookingId') IS NULL
+    EXEC(N'ALTER TABLE SosSessions ADD BookingId INT NULL');
+
 IF OBJECT_ID(N'dbo.PlatformSettings', N'U') IS NOT NULL
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosFeeAmount')

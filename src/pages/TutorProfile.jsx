@@ -149,7 +149,7 @@ export default function TutorProfile() {
     setAllSubjects(sysSubjects || []);
 
     const role = (getUser()?.role || "").toLowerCase();
-    if (isLoggedIn() && (role === "student" || role === "tutor") && !isOwnProfile) {
+    if (isLoggedIn() && (role === "student" || role === "parent" || role === "tutor") && !isOwnProfile) {
       try {
         const eligible = await getEligibleReviewBookings(tutorId);
         setEligibleBookings(Array.isArray(eligible) ? eligible : []);

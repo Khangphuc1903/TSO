@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ban, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
+import { Ban, BarChart3, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getUser, isLoggedIn } from "../auth";
 import { adminApi } from "../api/admin";
@@ -12,9 +12,28 @@ const TABS = [
   { id: "users", label: "Tài khoản", icon: Users },
   { id: "reports", label: "Báo cáo", icon: Flag },
   { id: "questions", label: "Ngân hàng câu hỏi", icon: ClipboardList },
+  { id: "revenue", label: "Doanh số", icon: BarChart3 },
   { id: "payouts", label: "Chi trả", icon: Landmark },
   { id: "settings", label: "Cấu hình", icon: Settings },
 ];
+
+const REPORT_REASONS = {
+  Harassment: "Quấy rối",
+  Fraud: "Gian lận",
+  Safety: "An toàn",
+  Other: "Khác",
+};
+
+function vnd(value) {
+  return `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
+}
+
+const ROLE_LABELS = {
+  Tutor: "Gia sư",
+  Student: "Học viên",
+  Parent: "Phụ huynh",
+  Admin: "Quản trị",
+};
 
 function HoldImage({ id, side, label }) {
   const [src, setSrc] = useState("");
@@ -33,7 +52,7 @@ function HoldImage({ id, side, label }) {
   return (
     <figure>
       <figcaption className="text-[11px] text-slate-500 mb-1">{label}</figcaption>
-      {src ? <img src={src} alt={label} className="h-40 w-full object-cover rounded-lg border" /> : <div className="h-40 rounded-lg border bg-slate-50" />}
+      {src ? <img src={src} alt={label} className="h-56 w-full object-contain rounded-lg border bg-slate-50" /> : <div className="h-56 rounded-lg border bg-slate-50" />}
     </figure>
   );
 }
@@ -78,6 +97,7 @@ export default function AdminDashboard() {
   const [subjects, setSubjects] = useState([]);
   const [settings, setSettings] = useState([]);
   const [payouts, setPayouts] = useState([]);
+  const [revenue, setRevenue] = useState(null);
 
   useEffect(() => {
     if (!isLoggedIn() || !isAdmin) {
@@ -96,13 +116,21 @@ export default function AdminDashboard() {
       setSubjects(await getSubjects().catch(() => []));
     }
     if (tab === "settings") setSettings(await adminApi.settings());
+    if (tab === "revenue") setRevenue(await adminApi.revenue());
     if (tab === "payouts") setPayouts(await adminApi.payouts());
   };
 
   useEffect(() => {
     if (!isAdmin) return;
+    setInfo("");
     loadTab().catch((e) => setError(e.response?.data?.message || "Không tải được dữ liệu admin."));
   }, [tab, idFilter, qType, isAdmin]);
+
+  useEffect(() => {
+    if (!info) return undefined;
+    const timer = setTimeout(() => setInfo(""), 3500);
+    return () => clearTimeout(timer);
+  }, [info]);
 
   const run = async (fn) => {
     setBusy(true);
@@ -342,10 +370,10 @@ export default function AdminDashboard() {
                     <p className="text-xs text-amber-800">
                       Ảnh chỉ giữ tạm đến {c.holdExpiresAt ? new Date(c.holdExpiresAt).toLocaleString("vi-VN") : "24 giờ"}. Duyệt hoặc từ chối xong, ảnh bị xóa ngay.
                     </p>
-                    <div className="grid sm:grid-cols-3 gap-3">
-                      {c.hasFront && <HoldImage id={c.documentId} side="front" label="CCCD mặt trước" />}
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {c.hasFront && <HoldImage id={c.documentId} side="front" label="Ảnh căn cước" />}
+                      {c.hasSelfie && <HoldImage id={c.documentId} side="selfie" label="Ảnh người" />}
                       {c.hasBack && <HoldImage id={c.documentId} side="back" label="CCCD mặt sau" />}
-                      {c.hasSelfie && <HoldImage id={c.documentId} side="selfie" label="Ảnh khuôn mặt" />}
                     </div>
                   </div>
                 ) : (
@@ -418,9 +446,16 @@ export default function AdminDashboard() {
           <div className="space-y-3">
             {reports.map((r) => (
               <div key={r.reportId} className="bg-white rounded-2xl border p-4">
-                <p className="font-semibold text-sm">{r.reason} · {r.entityType} #{r.entityId}</p>
-                <p className="text-xs text-slate-500">{r.reporterName} ({r.reporterEmail}) · {new Date(r.createdAt).toLocaleString("vi-VN")}</p>
-                <p className="text-sm mt-2">{r.description}</p>
+                <p className="font-semibold text-sm">
+                  Người bị báo cáo: {r.reportedName || `${r.entityType} #${r.entityId}`}
+                  {r.reportedRole ? ` · ${ROLE_LABELS[r.reportedRole] || r.reportedRole}` : ""}
+                </p>
+                {r.reportedEmail && <p className="text-xs text-slate-500">{r.reportedEmail}</p>}
+                <p className="text-xs text-slate-600 mt-1">
+                  Người báo cáo: {r.reporterName} ({r.reporterEmail}) · {new Date(r.createdAt).toLocaleString("vi-VN")}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Lý do: {REPORT_REASONS[r.reason] || r.reason}</p>
+                {r.description && <p className="text-sm mt-2">{r.description}</p>}
                 <div className="flex gap-2 mt-3">
                   <button type="button" disabled={busy} onClick={() => run(() => adminApi.resolveReport(r.reportId, { action: "Dismiss", note: "Không vi phạm" }))} className="h-8 px-3 rounded-lg border text-xs">Bỏ qua</button>
                   <button type="button" disabled={busy} onClick={() => run(() => adminApi.resolveReport(r.reportId, { action: "Warn", note: "Cảnh cáo" }))} className="h-8 px-3 rounded-lg border text-xs">Cảnh cáo</button>
@@ -493,10 +528,99 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {tab === "revenue" && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Doanh số là tổng học phí booking đã thanh toán. Sau khi trừ tiền hoàn, phần còn lại chia 20% cho web và 80% cho gia sư. Cột chuyển khoản là số tiền gia sư thực nhận.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="bg-white rounded-2xl border p-4">
+                <p className="text-xs text-slate-500">Doanh số booking</p>
+                <p className="mt-1 text-xl font-extrabold text-slate-900">{vnd(revenue?.gross)}</p>
+                <p className="text-xs text-slate-500 mt-1">{revenue?.bookingCount || 0} buổi đã thanh toán</p>
+              </div>
+              <div className="bg-white rounded-2xl border p-4">
+                <p className="text-xs text-slate-500">Web thực nhận · 20%</p>
+                <p className="mt-1 text-xl font-extrabold text-slate-900">{vnd(revenue?.platformFee)}</p>
+                <p className="text-xs text-slate-500 mt-1">Sau khi trừ {vnd(revenue?.refunded)} hoàn tiền</p>
+              </div>
+              <div className="bg-white rounded-2xl border p-4">
+                <p className="text-xs text-slate-500">Gia sư thực nhận · 80%</p>
+                <p className="mt-1 text-xl font-extrabold text-brand-700">{vnd(revenue?.tutorShare)}</p>
+                <p className="text-xs text-slate-500 mt-1">Tổng số cần chuyển cho gia sư</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="p-3">Gia sư</th>
+                    <th className="p-3">Doanh số</th>
+                    <th className="p-3">Đã hoàn</th>
+                    <th className="p-3">Web nhận</th>
+                    <th className="p-3">Chuyển cho gia sư</th>
+                    <th className="p-3">Tài khoản</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(revenue?.tutors || []).map((row) => (
+                    <tr key={row.tutorId} className="border-t">
+                      <td className="p-3">
+                        <p className="font-medium">{row.tutorName}</p>
+                        <p className="text-xs text-slate-500">{row.bookings} buổi</p>
+                      </td>
+                      <td className="p-3">{vnd(row.gross)}</td>
+                      <td className="p-3">{vnd(row.refunded)}</td>
+                      <td className="p-3">{vnd(row.platformFee)}</td>
+                      <td className="p-3 font-bold text-brand-700">{vnd(row.tutorShare)}</td>
+                      <td className="p-3 text-xs text-slate-600">
+                        {row.bankName && row.accountNumber
+                          ? `${row.bankName} · ${row.accountNumber} · ${row.accountName}`
+                          : "Chưa lưu số tài khoản"}
+                      </td>
+                    </tr>
+                  ))}
+                  {(revenue?.tutors || []).length === 0 && (
+                    <tr><td className="p-4 text-slate-500" colSpan={6}>Chưa có booking đã thanh toán.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {(revenue?.months || []).length > 0 && (
+              <div className="bg-white rounded-2xl border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                    <tr>
+                      <th className="p-3">Tháng</th>
+                      <th className="p-3">Buổi</th>
+                      <th className="p-3">Doanh số</th>
+                      <th className="p-3">Thực nhận</th>
+                      <th className="p-3">Web</th>
+                      <th className="p-3">Gia sư</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {revenue.months.map((row) => (
+                      <tr key={row.label} className="border-t">
+                        <td className="p-3">{row.label}</td>
+                        <td className="p-3">{row.bookings}</td>
+                        <td className="p-3">{vnd(row.gross)}</td>
+                        <td className="p-3">{vnd(row.net)}</td>
+                        <td className="p-3">{vnd(row.platformFee)}</td>
+                        <td className="p-3 font-medium">{vnd(row.tutorShare)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === "payouts" && (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">
-              Học viên trả đủ học phí. Sau buổi học, chuyển 80% vào số tài khoản gia sư và giữ 20% cho nền tảng. Hoàn tiền thì chuyển vào số tài khoản học viên.
+              Học viên trả đủ học phí. Hoàn tiền được trừ trước, phần còn lại mới khấu trừ 20% cho nền tảng. Số in đậm là tiền cần chuyển vào tài khoản gia sư.
             </p>
             {payouts.length === 0 ? (
               <div className="bg-white rounded-2xl border p-6 text-sm text-slate-500">Chưa có thanh toán thành công.</div>
@@ -507,11 +631,16 @@ export default function AdminDashboard() {
                     <p className="font-bold text-slate-900">Buổi học #{row.bookingId} · {row.subjectName || "Môn học"}</p>
                     <p className="text-slate-500 mt-1">{row.studentName} thanh toán cho {row.tutorName}</p>
                   </div>
-                  <p className="font-extrabold text-slate-900">{Number(row.amount || 0).toLocaleString("vi-VN")} ₫</p>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Chuyển cho gia sư</p>
+                    <p className="font-extrabold text-brand-700">{vnd(row.tutorShare)}</p>
+                  </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <p>Gia sư nhận 80%: <span className="font-bold">{Number(row.tutorShare || 0).toLocaleString("vi-VN")} ₫</span></p>
-                  <p>Nền tảng giữ 20%: <span className="font-bold">{Number(row.platformFee || 0).toLocaleString("vi-VN")} ₫</span></p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <p>Học viên trả: <span className="font-bold">{vnd(row.amount)}</span></p>
+                  <p>Đã hoàn: <span className="font-bold">{vnd(row.refunded)}</span></p>
+                  <p>Khấu trừ web 20%: <span className="font-bold">{vnd(row.platformFee)}</span></p>
+                  <p>Gia sư nhận: <span className="font-bold">{vnd(row.tutorShare)}</span></p>
                 </div>
                 <p className="mt-2 text-slate-700">
                   Tài khoản gia sư: {row.tutorBankName && row.tutorAccountNumber

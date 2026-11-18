@@ -31,7 +31,7 @@ public class ReviewsController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Student,Parent")]
     [HttpGet("tutor/{tutorId:int}/eligible")]
     public async Task<IActionResult> Eligible(int tutorId, CancellationToken cancellationToken)
     {
@@ -42,7 +42,7 @@ public class ReviewsController : ControllerBase
         return Ok(items);
     }
 
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Student,Parent")]
     [HttpPost("tutor/{tutorId:int}")]
     public async Task<IActionResult> CreateReview(
         int tutorId,

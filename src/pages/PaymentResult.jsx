@@ -145,7 +145,9 @@ export default function PaymentResult() {
                 Thanh toán thành công!
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-8 leading-relaxed">
-                Khoản học phí đã được giữ an toàn trong Quỹ TSG Escrow. Gia sư phụ trách đã nhận được thông báo xác nhận và sẽ duyệt lịch học ngay.
+                {String(booking?.location || "").startsWith("SOS:")
+                  ? "Phí SOS đã được ghi nhận. Hãy quay lại phiên cứu viện để đánh giá gia sư."
+                  : "Khoản học phí đã được giữ an toàn trong Quỹ TSG Escrow. Gia sư phụ trách đã nhận được thông báo xác nhận và sẽ duyệt lịch học ngay."}
               </p>
 
               {/* Thông tin biên lai điện tử */}
@@ -211,11 +213,15 @@ export default function PaymentResult() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate("/bookings")}
+                  onClick={() => {
+                    const location = String(booking?.location || "");
+                    if (location.startsWith("SOS:")) navigate(`/sos/session/${location.slice(4)}`);
+                    else navigate("/bookings");
+                  }}
                   className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 px-5 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md shadow-brand-600/25 cursor-pointer"
                 >
                   <Calendar size={18} />
-                  Xem lịch học của tôi
+                  {String(booking?.location || "").startsWith("SOS:") ? "Đánh giá gia sư" : "Xem lịch học của tôi"}
                 </button>
 
                 <button

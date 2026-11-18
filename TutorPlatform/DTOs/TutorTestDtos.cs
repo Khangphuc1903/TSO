@@ -22,7 +22,7 @@ public class TutorTestQuestionsDto
     public int DurationMinutes { get; set; } = 25;
     public DateTime EndsAt { get; set; }
     public string Title => $"{SubjectName} · {GradeLevel}";
-    public string TestType => "Professional";
+    public string TestType { get; set; } = "Professional";
     public List<TutorTestQuestionDto> Questions { get; set; } = new();
 }
 
@@ -58,6 +58,7 @@ public class TutorTestListItemDto
 public class TutorTestAttemptDto
 {
     public int AttemptId { get; set; }
+    public string? TestType { get; set; }
     public int SubjectId { get; set; }
     public string? SubjectName { get; set; }
     public string EducationLevel { get; set; } = null!;
@@ -77,6 +78,12 @@ public class RegisterTestCombinationDto
 {
     public int SubjectId { get; set; }
     public string GradeLevel { get; set; } = null!;
+}
+
+public class CommitTeachingSubjectsDto
+{
+    public List<int> SubjectIds { get; set; } = new();
+    public string? GradeLevel { get; set; }
 }
 
 public class TutorTestStatusDto

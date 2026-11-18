@@ -16,7 +16,7 @@
           var url = typeof input === "string" ? input : (input && input.url) || "";
           if (url.indexOf("vnpt.vn") === -1) return orig.apply(this, arguments);
           var ctrl = new AbortController();
-          var timer = setTimeout(function () { ctrl.abort(); }, 40000);
+          var timer = setTimeout(function () { ctrl.abort(); }, 20000);
           var next = Object.assign({}, init || {}, { signal: ctrl.signal });
           return orig.call(window, input, next).then(function (res) {
             clearTimeout(timer);
@@ -34,7 +34,7 @@
             return res;
           }, function (err) {
             clearTimeout(timer);
-            parent.postMessage({ type: "VNPT_ERROR", message: "VNPT không phản hồi sau khi nhận ảnh. Đóng máy quét và thử lại." }, "*");
+            parent.postMessage({ type: "VNPT_TIMEOUT", message: "VNPT chưa phản hồi sau 20 giây." }, "*");
             return Promise.reject(err);
           });
         };

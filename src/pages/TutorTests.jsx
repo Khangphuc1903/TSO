@@ -16,6 +16,7 @@ import {
 import TutorSetupSteps from "../components/TutorSetupSteps";
 import { getUser, isLoggedIn } from "../auth";
 import {
+  commitTeachingSubjects,
   getTutorTestCatalog,
   getTutorTestCommon,
   getTutorTestHistory,
@@ -24,7 +25,8 @@ import {
   registerTutorTest,
   submitTutorTest,
 } from "../api/study";
-import { invalidateTutorGate } from "../tutorGate";
+import { getSubjects } from "../api/tutorSearch";
+import { invalidateTutorGate, loadTutorGate } from "../tutorGate";
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
@@ -36,16 +38,27 @@ function levelLabel(value) {
     HighSchool: "THPT",
     THCS: "THCS",
     THPT: "THPT",
+    "Tiểu học": "Cấp 1",
   };
   return map[value] || value || "Khác";
 }
 
 function bandOfLevel(educationLevel) {
   const v = (educationLevel || "").toLowerCase();
+  if (v.includes("tieu") || v.includes("tiểu") || v === "primary" || v.includes("cap 1")) return "Tiểu học";
   if (v.includes("thcs") || v === "secondary") return "THCS";
   if (v.includes("thpt") || v.includes("high")) return "THPT";
   return educationLevel || "THCS";
 }
+
+function subjectKey(name) {
+  const folded = foldVi(name);
+  if (folded === "van" || folded === "ngu van") return "ngu van";
+  return folded;
+}
+
+const SUBJECT_ORDER = ["toan", "tieng viet", "ngu van", "tieng anh", "ielts", "vat ly", "hoa hoc", "sinh hoc"];
+const PRIMARY_KEYS = ["toan", "tieng viet"];
 
 function foldVi(value) {
   return String(value || "")
@@ -60,20 +73,30 @@ function foldVi(value) {
 function mergeSubjects(list) {
   const map = new Map();
   for (const subj of list || []) {
-    const key = foldVi(subj.subjectName);
+    const key = subjectKey(subj.subjectName);
     const prev = map.get(key);
+    const name = key === "ngu van" ? "Ngữ Văn" : subj.subjectName;
+    const row = { ...subj, subjectName: name, grades: [...(subj.grades || [])] };
     if (!prev) {
-      map.set(key, { ...subj, grades: [...(subj.grades || [])] });
+      map.set(key, row);
       continue;
     }
-    const accent = (s) => [...String(s || "")].filter((c) => c.charCodeAt(0) > 127).length;
-    if (accent(subj.subjectName) > accent(prev.subjectName)) prev.subjectName = subj.subjectName;
+    const prevIsVan = foldVi(prev.subjectName) === "van";
+    const nextIsLiterature = key === "ngu van" && foldVi(subj.subjectName) === "ngu van";
+    if (nextIsLiterature || prevIsVan) {
+      map.set(key, { ...prev, ...row, grades: [...(prev.grades || []), ...(subj.grades || [])] });
+      continue;
+    }
     if ((subj.questionCount || 0) > (prev.questionCount || 0)) {
       prev.subjectId = subj.subjectId;
       prev.questionCount = subj.questionCount;
     }
   }
-  return [...map.values()];
+  return [...map.values()].sort((a, b) => {
+    const ia = SUBJECT_ORDER.indexOf(subjectKey(a.subjectName));
+    const ib = SUBJECT_ORDER.indexOf(subjectKey(b.subjectName));
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
 }
 
 function formatClock(totalSeconds) {
@@ -116,6 +139,7 @@ export default function TutorTests() {
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
 
   const [catalog, setCatalog] = useState([]);
+  const [allSubjects, setAllSubjects] = useState([]);
   const [common, setCommon] = useState([]);
   const [history, setHistory] = useState([]);
   const [passedCount, setPassedCount] = useState(0);
@@ -124,24 +148,42 @@ export default function TutorTests() {
   const [error, setError] = useState("");
   const [level, setLevel] = useState("");
   const [subjectId, setSubjectId] = useState(null);
+  const [subjectsLocked, setSubjectsLocked] = useState(false);
+  const [chosenSubjects, setChosenSubjects] = useState([]);
+  const [pickedIds, setPickedIds] = useState([]);
+  const [committing, setCommitting] = useState(false);
   const [session, setSession] = useState(null);
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [welcome, setWelcome] = useState(false);
   const submittedRef = useRef(false);
+  const readyBeforeRef = useRef(false);
 
   const load = async () => {
-    const [cat, com, hist, ws] = await Promise.all([
+    const [cat, com, hist, ws, subjectRows] = await Promise.all([
       getTutorTestCatalog(),
       getTutorTestCommon().catch(() => []),
       getTutorTestHistory().catch(() => []),
       getTutorWorkspace().catch(() => null),
+      getSubjects().catch(() => []),
     ]);
     setCatalog(cat);
+    setAllSubjects(subjectRows);
     setCommon(com);
     setHistory(hist);
     setPassedCount(ws?.passedTestCount || hist.filter((h) => h.isPassed && (h.testType === "Professional" || h.subjectId)).length);
     setIdentityCompleted(Boolean(ws?.identityCompleted));
+    const locked = Boolean(ws?.subjectsLocked);
+    setSubjectsLocked(locked);
+    const chosen = [];
+    const seen = new Set();
+    for (const subject of ws?.subjects || []) {
+      if (seen.has(subject.subjectId)) continue;
+      seen.add(subject.subjectId);
+      chosen.push(subject);
+    }
+    setChosenSubjects(chosen);
   };
 
   useEffect(() => {
@@ -156,26 +198,48 @@ export default function TutorTests() {
     load()
       .catch(() => setError("Không tải được bài kiểm tra. Kiểm tra backend đang chạy."))
       .finally(() => setLoading(false));
+    loadTutorGate().then((gate) => {
+      readyBeforeRef.current = Boolean(gate?.ready);
+    });
   }, [navigate, isTutor]);
 
-  const levels = useMemo(() => {
-    const map = new Map();
-    for (const l of catalog) {
-      const band = bandOfLevel(l.educationLevel);
-      if (band !== "THCS" && band !== "THPT") continue;
-      const prev = map.get(band);
-      if (!prev) {
-        map.set(band, { educationLevel: band, subjects: mergeSubjects(l.subjects) });
-      } else {
-        prev.subjects = mergeSubjects([...(prev.subjects || []), ...(l.subjects || [])]);
-      }
-    }
-    return ["THCS", "THPT"].filter((k) => map.has(k)).map((k) => map.get(k));
-  }, [catalog]);
+  const sharedSubjects = useMemo(() => {
+    const fromCatalog = catalog.flatMap((level) => level.subjects || []);
+    return mergeSubjects(allSubjects.length ? allSubjects : fromCatalog);
+  }, [allSubjects, catalog]);
+  const levels = useMemo(
+    () => [{ educationLevel: "Tiểu học" }, { educationLevel: "THCS" }, { educationLevel: "THPT" }],
+    []
+  );
   const levelSubjects = useMemo(() => {
-    const lv = levels.find((l) => l.educationLevel === level);
-    return lv ? mergeSubjects(lv.subjects) : [];
-  }, [levels, level]);
+    if (level === "Tiểu học") {
+      return sharedSubjects.filter((subject) => PRIMARY_KEYS.includes(subjectKey(subject.subjectName)));
+    }
+    return sharedSubjects.filter((subject) => subjectKey(subject.subjectName) !== "tieng viet");
+  }, [sharedSubjects, level]);
+  const agreeSubjects = async () => {
+    setError("");
+    setCommitting(true);
+    try {
+      if (!level) {
+        setError("Chọn cấp học trước.");
+        return;
+      }
+      await commitTeachingSubjects(pickedIds, level);
+      setPickedIds([]);
+      await load();
+    } catch (err) {
+      const status = err.response?.status;
+      setError(
+        err.response?.data?.message
+        || (status === 404
+          ? "Backend chưa có bước khóa môn. Dừng debug và bấm F5 lại trong Visual Studio."
+          : "Không khóa được môn dạy.")
+      );
+    } finally {
+      setCommitting(false);
+    }
+  };
 
   const startExam = async ({ testType, subjectId: sid, gradeLevel, educationLevel }) => {
     setError("");
@@ -192,7 +256,12 @@ export default function TutorTests() {
       setResult(null);
       setSubjectId(sid || 0);
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể bắt đầu bài kiểm tra.");
+      const status = err.response?.status;
+      setError(
+        (testType || "").toLowerCase() === "ielts" && status === 403
+          ? "Bài test IELTS cần backend mới. Dừng debug và bấm F5 trong Visual Studio."
+          : (err.response?.data?.message || "Không thể bắt đầu bài kiểm tra.")
+      );
     } finally {
       setSubmitting(false);
     }
@@ -218,6 +287,11 @@ export default function TutorTests() {
       setSession(null);
       await load();
       invalidateTutorGate();
+      const gate = await loadTutorGate(true);
+      if (data?.isPassed && gate?.ready && !readyBeforeRef.current) {
+        setWelcome(true);
+      }
+      readyBeforeRef.current = Boolean(gate?.ready);
     } catch (err) {
       submittedRef.current = false;
       setError(err.response?.data?.message || "Không thể nộp bài kiểm tra.");
@@ -244,13 +318,15 @@ export default function TutorTests() {
             Bài kiểm tra <span className="text-brand-600">gia sư</span>
           </h1>
           <p className="text-slate-500 mt-2 max-w-2xl">
-            Chọn THCS hoặc THPT, xác nhận môn dạy — hệ thống giao đề chuyên môn 25 phút. Đạt rồi làm bài An toàn và Kỹ năng sư phạm.
+            Chọn cấp học trước (cấp 1, THCS hoặc THPT), rồi chọn môn trong cấp đó. Đồng ý xong mới có bài test đúng cấp. Sau khi đồng ý không đổi môn được nữa.
           </p>
           <div className="mt-6">
             <TutorSetupSteps passedTestCount={passedCount} identityCompleted={identityCompleted} current="tests" />
           </div>
         </div>
       </section>
+
+      {welcome && <OfficialWelcome onDone={() => setWelcome(false)} />}
 
       <main className="max-w-5xl mx-auto px-6 pb-16">
         {error && (
@@ -292,13 +368,19 @@ export default function TutorTests() {
           />
         ) : (
           <WizardView
+            subjectsLocked={subjectsLocked}
+            chosenSubjects={chosenSubjects}
             levels={levels}
             level={level}
-            setLevel={(v) => {
-              setLevel(v);
-              setSubjectId(null);
+            setLevel={(value) => {
+              setLevel(value);
+              setPickedIds([]);
             }}
             levelSubjects={levelSubjects}
+            pickedIds={pickedIds}
+            setPickedIds={setPickedIds}
+            committing={committing}
+            onAgree={agreeSubjects}
             submitting={submitting}
             startExam={startExam}
             common={common}
@@ -433,6 +515,41 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
   );
 }
 
+function OfficialWelcome({ onDone }) {
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    const fade = setTimeout(() => setLeaving(true), 9400);
+    const done = setTimeout(() => doneRef.current(), 10000);
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(done);
+    };
+  }, []);
+
+  return (
+    <div
+      className={`fixed inset-0 z-[120] flex items-center justify-center px-6 transition-opacity duration-500 ${
+        leaving ? "opacity-0" : "opacity-100"
+      }`}
+    >
+      <div className="absolute inset-0 bg-slate-900/40" />
+      <div className="relative w-full max-w-md rounded-3xl bg-white px-8 py-10 text-center shadow-pop animate-scale-in">
+        <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+          <CheckCircle2 size={28} />
+        </span>
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Xin chào gia sư</p>
+        <h2 className="mt-2 text-2xl font-bold text-slate-900">Chúc mừng bạn đã trở thành gia sư chính thức</h2>
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
+          Hồ sơ đã đủ điều kiện. Bạn có thể nhận lớp, chào thầu và mở lịch dạy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ResultView({ result, onList, onRetry }) {
   const [wait, setWait] = useState(() => retryLeft(result.retryAvailableAt));
   useEffect(() => {
@@ -493,71 +610,159 @@ function ResultView({ result, onList, onRetry }) {
   );
 }
 
-function WizardView({ levels, level, setLevel, levelSubjects, submitting, startExam, common, history }) {
+function statusFromHistory(subject, history) {
+  const band = subject.gradeLevel || bandOfLevel(subject.educationLevel);
+  const rows = (history || []).filter((item) => {
+    if (item.subjectId !== subject.subjectId) return false;
+    if (!item.gradeLevel) return true;
+    return item.gradeLevel === band || bandOfLevel(item.gradeLevel) === band;
+  });
+  const passed = rows.find((item) => item.isPassed);
+  if (passed) {
+    return {
+      status: "Đạt",
+      grade: { latestScorePercent: passed.scorePercent, retryAvailableAt: null },
+    };
+  }
+  const failed = rows.find((item) => item.isPassed === false);
+  if (failed) {
+    return {
+      status: "Không đạt",
+      grade: { latestScorePercent: failed.scorePercent, retryAvailableAt: failed.retryAvailableAt },
+    };
+  }
+  return { status: "Chưa làm", grade: null };
+}
+
+function WizardView({
+  subjectsLocked,
+  chosenSubjects,
+  levels,
+  level,
+  setLevel,
+  levelSubjects,
+  pickedIds,
+  setPickedIds,
+  committing,
+  onAgree,
+  submitting,
+  startExam,
+  common,
+  history,
+}) {
+  const tests = subjectsLocked
+    ? chosenSubjects.map((chosen) => ({
+        ...chosen,
+        educationLevel: chosen.gradeLevel || chosen.educationLevel,
+      }))
+    : [];
+
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-100 p-6">
-        <h2 className="text-sm font-bold text-slate-800 mb-1">1. Chọn cấp học</h2>
-        <p className="text-xs text-slate-500 mb-3">Chỉ THCS hoặc THPT. Không chọn từng lớp.</p>
-        {levels.length === 0 ? (
-          <p className="text-sm text-slate-500">Chưa có đề chuyên môn. Hãy làm bài kỹ năng sư phạm bên dưới trước.</p>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {levels.map((lv) => (
-              <button
-                key={lv.educationLevel}
-                type="button"
-                onClick={() => setLevel(lv.educationLevel)}
-                className={`rounded-xl border px-5 py-3 text-sm font-medium transition-colors ${
-                  level === lv.educationLevel
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
-                }`}
-              >
-                {levelLabel(lv.educationLevel)}
-              </button>
-            ))}
+      {!subjectsLocked ? (
+        <>
+          <div className="bg-white rounded-2xl border border-slate-100 p-6">
+            <h2 className="text-sm font-bold text-slate-800 mb-1">1. Chọn cấp học</h2>
+            <p className="text-xs text-slate-500 mb-3">Chọn cấp 1, THCS hoặc THPT. Cấp 1 chỉ có Toán và Tiếng Việt.</p>
+            <div className="flex flex-wrap gap-3">
+              {(levels.length ? levels : [{ educationLevel: "Tiểu học" }, { educationLevel: "THCS" }, { educationLevel: "THPT" }]).map((lv) => (
+                <button
+                  key={lv.educationLevel}
+                  type="button"
+                  onClick={() => setLevel(lv.educationLevel)}
+                  className={`rounded-xl border px-5 py-3 text-sm font-medium ${
+                    level === lv.educationLevel
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600"
+                  }`}
+                >
+                  {levelLabel(lv.educationLevel)}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
-
-      {level && (
+          {level && (
+            <div className="bg-white rounded-2xl border border-slate-100 p-6">
+              <h2 className="text-sm font-bold text-slate-800 mb-1">2. Bạn muốn dạy môn gì ở {levelLabel(level)}?</h2>
+              <p className="text-xs text-slate-500 mb-3">Cấp 2 và cấp 3 có cùng các môn. Chọn 1 hoặc 2 môn, rồi đồng ý. Bài test sẽ theo đúng cấp vừa chọn.</p>
+              {levelSubjects.length === 0 ? (
+                <p className="text-sm text-slate-500">Cấp này chưa có môn có đề.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {levelSubjects.map((subject) => {
+                    const on = pickedIds.includes(subject.subjectId);
+                    return (
+                      <button
+                        key={subject.subjectId}
+                        type="button"
+                        onClick={() =>
+                          setPickedIds((current) => {
+                            if (current.includes(subject.subjectId)) return current.filter((id) => id !== subject.subjectId);
+                            if (current.length >= 2) return current;
+                            return [...current, subject.subjectId];
+                          })
+                        }
+                        className={`rounded-full border px-4 py-2 text-sm font-medium ${
+                          on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {subject.subjectName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={committing || pickedIds.length < 1}
+                onClick={onAgree}
+                className="mt-4 h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-50"
+              >
+                {committing ? "Đang lưu..." : "Đồng ý và làm bài test"}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
         <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-800">2. Xác nhận môn dạy — đề chuyên môn {levelLabel(level)}</h2>
-            <p className="text-xs text-slate-500 mt-1">Bấm bắt đầu: 25 phút, hết giờ tự nộp và chấm ngay.</p>
+            <h2 className="text-sm font-bold text-slate-800">Bài test chuyên môn</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Môn đã chọn: {chosenSubjects.map((s) => s.subjectName).join(", ")}. Không đổi môn dạy nữa.
+              {tests.length === 2 ? " Bạn có 2 bài test chuyên môn." : " Bạn có 1 bài test chuyên môn."}
+            </p>
           </div>
           <div className="divide-y divide-slate-100">
-            {levelSubjects.map((subj) => {
-              const g = (subj.grades || [])[0];
-              const wait = retryLeft(g?.retryAvailableAt);
-              const blocked = g?.status === "Không đạt" && wait > 0;
+            {tests.map((subj) => {
+              const info = statusFromHistory(subj, history);
+              const wait = retryLeft(info.grade?.retryAvailableAt);
+              const blocked = info.status === "Không đạt" && wait > 0;
               return (
                 <div key={subj.subjectId} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
                   <div>
                     <p className="font-semibold text-slate-900">{subj.subjectName}</p>
                     <p className="text-xs text-slate-400">
-                      {subj.questionCount} câu · {levelLabel(level)}
-                      {g?.latestScorePercent != null ? ` · lần gần nhất ${g.latestScorePercent}%` : ""}
+                      {levelLabel(subj.educationLevel)} · 25 phút
+                      {info.grade?.latestScorePercent != null ? ` · lần gần nhất ${info.grade.latestScorePercent}%` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <StatusBadge status={g?.status || "Chưa làm"} />
+                    <StatusBadge status={info.status} />
                     <button
                       type="button"
-                      disabled={submitting || !subj.questionCount || blocked}
+                      disabled={submitting || blocked || info.status === "Đạt"}
                       onClick={() =>
                         startExam({
                           testType: "Professional",
                           subjectId: subj.subjectId,
-                          gradeLevel: bandOfLevel(level),
-                          educationLevel: level,
+                          gradeLevel: subj.gradeLevel || bandOfLevel(subj.educationLevel),
+                          educationLevel: subj.educationLevel,
                         })
                       }
                       className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
                     >
                       <Play size={15} />
-                      {blocked ? `Thi lại ${formatClock(wait)}` : g?.status === "Đạt" ? "Làm lại" : "Bắt đầu 25 phút"}
+                      {info.status === "Đạt" ? "Đã đạt" : blocked ? `Thi lại ${formatClock(wait)}` : "Bắt đầu 25 phút"}
                     </button>
                   </div>
                 </div>
@@ -568,6 +773,42 @@ function WizardView({ levels, level, setLevel, levelSubjects, submitting, startE
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-bold text-slate-800">Bài test IELTS</h2>
+          <p className="text-xs text-slate-500">Bài riêng, không phụ thuộc môn đã khóa. 25 phút, đạt từ 70%.</p>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {(common.some((item) => (item.testType || "").toLowerCase() === "ielts")
+            ? common.filter((item) => (item.testType || "").toLowerCase() === "ielts")
+            : [{ testType: "IELTS", title: "Bài test IELTS", questionCount: 12, status: "Chưa làm" }]
+          ).map((item) => {
+            const wait = retryLeft(item.retryAvailableAt);
+            const blocked = item.status === "Không đạt" && wait > 0;
+            return (
+              <div key={item.testType} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+                <div>
+                  <p className="font-semibold text-slate-900">{item.title || "Bài test IELTS"}</p>
+                  <p className="text-xs text-slate-400">{item.questionCount || 0} câu · 25 phút</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={item.status} />
+                  <button
+                    type="button"
+                    disabled={submitting || blocked || item.status === "Đạt" || !item.questionCount}
+                    onClick={() => startExam({ testType: "IELTS", subjectId: 0, gradeLevel: "IELTS" })}
+                    className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+                  >
+                    <Play size={15} />
+                    {item.status === "Đạt" ? "Đã đạt" : blocked ? `Thi lại ${formatClock(wait)}` : "Bắt đầu"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
           <ShieldCheck size={18} className="text-brand-600" />
           <div>
@@ -576,7 +817,10 @@ function WizardView({ levels, level, setLevel, levelSubjects, submitting, startE
           </div>
         </div>
         <div className="divide-y divide-slate-100">
-          {(common.length ? common : []).map((item) => {
+          {(common.filter((item) => (item.testType || "").toLowerCase() !== "ielts").length
+            ? common.filter((item) => (item.testType || "").toLowerCase() !== "ielts")
+            : []
+          ).map((item) => {
             const wait = retryLeft(item.retryAvailableAt);
             const blocked = item.status === "Không đạt" && wait > 0;
             return (

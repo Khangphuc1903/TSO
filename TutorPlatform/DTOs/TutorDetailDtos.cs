@@ -106,6 +106,7 @@ public class TutorWorkspaceDto
     public decimal? HourlyRateMax { get; set; }
     public string TeachingMode { get; set; } = "Both";
     public bool IsPublished { get; set; }
+    public bool SubjectsLocked { get; set; }
     public string VerificationStatus { get; set; } = "Pending";
     public decimal AverageRating { get; set; }
     public int TotalReviews { get; set; }

@@ -208,6 +208,14 @@ public class TutorMeController : ControllerBase
     {
         if (UserId is not int id) return Unauthorized();
 
+        if (string.Equals(testType, "IELTS", StringComparison.OrdinalIgnoreCase))
+        {
+            var ieltsResult = await _tests.GetIeltsTestQuestionsAsync(id, cancellationToken);
+            return ieltsResult.Success
+                ? Ok(ieltsResult.Data)
+                : StatusCode(ieltsResult.StatusCode, new { message = ieltsResult.Message });
+        }
+
         if (string.Equals(testType, "Pedagogical", StringComparison.OrdinalIgnoreCase)
             || string.Equals(testType, "Safety", StringComparison.OrdinalIgnoreCase)
             || string.Equals(testType, "Pedagogy", StringComparison.OrdinalIgnoreCase))
@@ -229,6 +237,14 @@ public class TutorMeController : ControllerBase
     {
         if (UserId is not int id) return Unauthorized();
 
+        if (string.Equals(dto.TestType, "IELTS", StringComparison.OrdinalIgnoreCase))
+        {
+            var ieltsResult = await _tests.SubmitIeltsTestAsync(id, dto, cancellationToken);
+            return ieltsResult.Success
+                ? Ok(ieltsResult.Data)
+                : StatusCode(ieltsResult.StatusCode, new { message = ieltsResult.Message });
+        }
+
         if (string.Equals(dto.TestType, "Pedagogical", StringComparison.OrdinalIgnoreCase)
             || string.Equals(dto.TestType, "Safety", StringComparison.OrdinalIgnoreCase)
             || string.Equals(dto.TestType, "Pedagogy", StringComparison.OrdinalIgnoreCase))
@@ -246,6 +262,17 @@ public class TutorMeController : ControllerBase
         var result = await _tests.SubmitAsync(id, dto, cancellationToken);
         return result.Success
             ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [HttpPost("tests/commit-subjects")]
+    public async Task<IActionResult> CommitTeachingSubjects(
+        [FromBody] CommitTeachingSubjectsDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _tests.CommitTeachingSubjectsAsync(id, dto, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message })
             : StatusCode(result.StatusCode, new { message = result.Message });
     }
 
@@ -285,6 +312,25 @@ public class TutorMeController : ControllerBase
     {
         if (UserId is not int id) return Unauthorized();
         return Ok(await _identity.GetStatusAsync(id, cancellationToken));
+    }
+
+    [HttpPost("identity/manual")]
+    public async Task<IActionResult> ManualIdentity(
+        IFormFile? front,
+        IFormFile? selfie,
+        [FromForm] string? fullName,
+        [FromForm] string? idNumber,
+        [FromForm] string? dateOfBirth,
+        [FromForm] string? gender,
+        [FromForm] string? address,
+        CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _identity.SubmitManualReviewAsync(
+            id, front, selfie, fullName, idNumber, dateOfBirth, gender, address, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message, data = result.Data })
+            : StatusCode(result.Status, new { message = result.Message, data = result.Data });
     }
 
     [HttpPost("identity/card")]

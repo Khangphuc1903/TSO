@@ -17,11 +17,13 @@ public class AdminController : ControllerBase
 {
     private readonly TutorPlatformDbContext _db;
     private readonly IdentityVerificationService _identity;
+    private readonly NotificationService _notifications;
 
-    public AdminController(TutorPlatformDbContext db, IdentityVerificationService identity)
+    public AdminController(TutorPlatformDbContext db, IdentityVerificationService identity, NotificationService notifications)
     {
         _db = db;
         _identity = identity;
+        _notifications = notifications;
     }
 
     private int CurrentUserId
@@ -241,32 +243,14 @@ public class AdminController : ControllerBase
     [HttpGet("payouts")]
     public async Task<IActionResult> Payouts(CancellationToken cancellationToken)
     {
-        const decimal tutorRate = 0.80m;
-        var payments = await _db.Payments
-            .AsNoTracking()
-            .Include(p => p.Booking).ThenInclude(b => b.Student)
-            .Include(p => p.Booking).ThenInclude(b => b.Tutor).ThenInclude(t => t.Tutor)
-            .Include(p => p.Booking).ThenInclude(b => b.Subject)
-            .Include(p => p.Refunds)
-            .Where(p => p.Status == "Success" || p.Status == "Refunded" || p.Status == "PartiallyRefunded")
-            .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
-            .Take(100)
-            .ToListAsync(cancellationToken);
+        var payments = await LoadSettledPaymentsAsync(cancellationToken);
+        var banks = await LoadBanksAsync(payments, cancellationToken);
 
-        var userIds = payments
-            .SelectMany(p => new[] { p.Booking.StudentId, p.Booking.TutorId })
-            .Distinct()
-            .ToList();
-        var banks = await _db.UserBankAccounts
-            .AsNoTracking()
-            .Where(b => userIds.Contains(b.UserId))
-            .ToListAsync(cancellationToken);
-
-        var rows = payments.Select(p =>
+        var rows = payments.Take(100).Select(p =>
         {
-            var tutorShare = Math.Round(p.Amount * tutorRate, 0);
-            var tutorBank = banks.FirstOrDefault(b => b.UserId == p.Booking.TutorId);
-            var studentBank = banks.FirstOrDefault(b => b.UserId == p.Booking.StudentId);
+            var split = SplitPayment(p);
+            var tutorBank = PickBank(banks, p.Booking.TutorId);
+            var studentBank = PickBank(banks, p.Booking.StudentId);
             return new
             {
                 p.PaymentId,
@@ -275,10 +259,12 @@ public class AdminController : ControllerBase
                 studentName = p.Booking.Student?.FullName,
                 tutorName = p.Booking.Tutor?.Tutor?.FullName,
                 amount = p.Amount,
+                refunded = split.Refunded,
+                net = split.Net,
                 tutorPercent = 80,
                 platformPercent = 20,
-                tutorShare,
-                platformFee = p.Amount - tutorShare,
+                tutorShare = split.TutorShare,
+                platformFee = split.PlatformFee,
                 status = p.Status,
                 paidAt = p.PaidAt,
                 tutorBankName = tutorBank?.BankName,
@@ -299,6 +285,110 @@ public class AdminController : ControllerBase
         });
 
         return Ok(rows);
+    }
+
+    [HttpGet("revenue")]
+    public async Task<IActionResult> Revenue(CancellationToken cancellationToken)
+    {
+        var payments = await LoadSettledPaymentsAsync(cancellationToken);
+        var banks = await LoadBanksAsync(payments, cancellationToken);
+        var splits = payments.Select(p => (Payment: p, Split: SplitPayment(p))).ToList();
+
+        var byTutor = splits
+            .GroupBy(x => x.Payment.Booking.TutorId)
+            .Select(g =>
+            {
+                var first = g.First().Payment;
+                var bank = PickBank(banks, g.Key);
+                return new
+                {
+                    tutorId = g.Key,
+                    tutorName = first.Booking.Tutor?.Tutor?.FullName ?? $"Gia sư #{g.Key}",
+                    bookings = g.Count(),
+                    gross = g.Sum(x => x.Payment.Amount),
+                    refunded = g.Sum(x => x.Split.Refunded),
+                    net = g.Sum(x => x.Split.Net),
+                    tutorShare = g.Sum(x => x.Split.TutorShare),
+                    platformFee = g.Sum(x => x.Split.PlatformFee),
+                    bankName = bank?.BankName,
+                    accountNumber = bank?.AccountNumber,
+                    accountName = bank?.AccountHolderName
+                };
+            })
+            .OrderByDescending(x => x.tutorShare)
+            .ToList();
+
+        var byMonth = splits
+            .GroupBy(x =>
+            {
+                var at = (x.Payment.PaidAt ?? x.Payment.CreatedAt).AddHours(7);
+                return new DateTime(at.Year, at.Month, 1);
+            })
+            .OrderByDescending(g => g.Key)
+            .Select(g => new
+            {
+                label = g.Key.ToString("MM/yyyy"),
+                bookings = g.Count(),
+                gross = g.Sum(x => x.Payment.Amount),
+                refunded = g.Sum(x => x.Split.Refunded),
+                net = g.Sum(x => x.Split.Net),
+                tutorShare = g.Sum(x => x.Split.TutorShare),
+                platformFee = g.Sum(x => x.Split.PlatformFee)
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            bookingCount = payments.Count,
+            gross = payments.Sum(p => p.Amount),
+            refunded = splits.Sum(x => x.Split.Refunded),
+            net = splits.Sum(x => x.Split.Net),
+            tutorShare = splits.Sum(x => x.Split.TutorShare),
+            platformFee = splits.Sum(x => x.Split.PlatformFee),
+            tutorPercent = 80,
+            platformPercent = 20,
+            tutors = byTutor,
+            months = byMonth
+        });
+    }
+
+    private async Task<List<Payment>> LoadSettledPaymentsAsync(CancellationToken cancellationToken)
+    {
+        return await _db.Payments
+            .AsNoTracking()
+            .Include(p => p.Booking).ThenInclude(b => b.Student)
+            .Include(p => p.Booking).ThenInclude(b => b.Tutor).ThenInclude(t => t.Tutor)
+            .Include(p => p.Booking).ThenInclude(b => b.Subject)
+            .Include(p => p.Refunds)
+            .Where(p => p.Status == "Success" || p.Status == "Refunded" || p.Status == "PartiallyRefunded")
+            .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<UserBankAccount>> LoadBanksAsync(List<Payment> payments, CancellationToken cancellationToken)
+    {
+        var userIds = payments
+            .SelectMany(p => new[] { p.Booking.StudentId, p.Booking.TutorId })
+            .Distinct()
+            .ToList();
+        return await _db.UserBankAccounts
+            .AsNoTracking()
+            .Where(b => userIds.Contains(b.UserId))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static UserBankAccount? PickBank(IEnumerable<UserBankAccount> banks, int userId) =>
+        banks.Where(b => b.UserId == userId).OrderByDescending(b => b.IsDefault).ThenByDescending(b => b.Id).FirstOrDefault();
+
+    private static (decimal Refunded, decimal Net, decimal TutorShare, decimal PlatformFee) SplitPayment(Payment payment)
+    {
+        const decimal tutorRate = 0.80m;
+        var refunded = payment.Refunds.Sum(r => r.Amount);
+        if (refunded < 0) refunded = 0;
+        if (refunded > payment.Amount) refunded = payment.Amount;
+        var net = payment.Amount - refunded;
+        var tutorShare = Math.Round(net * tutorRate, 0, MidpointRounding.AwayFromZero);
+        return (refunded, net, tutorShare, net - tutorShare);
     }
 
     // =========================================================================
@@ -478,6 +568,29 @@ public class AdminController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        var personIds = reports
+            .Where(r => IsPersonReport(r.EntityType))
+            .Select(r => r.EntityId)
+            .Distinct()
+            .ToList();
+        if (personIds.Count > 0)
+        {
+            var people = await _db.Users
+                .AsNoTracking()
+                .Where(u => personIds.Contains(u.UserId))
+                .Select(u => new { u.UserId, u.FullName, u.Email, Role = u.Role.RoleName })
+                .ToListAsync(cancellationToken);
+            var byId = people.ToDictionary(p => p.UserId);
+            foreach (var report in reports)
+            {
+                if (!IsPersonReport(report.EntityType) || !byId.TryGetValue(report.EntityId, out var person))
+                    continue;
+                report.ReportedName = person.FullName;
+                report.ReportedEmail = person.Email;
+                report.ReportedRole = person.Role;
+            }
+        }
+
         return Ok(reports);
     }
 
@@ -488,21 +601,31 @@ public class AdminController : ControllerBase
         if (report == null)
             return NotFound(new { message = "Không tìm thấy báo cáo." });
 
+        var action = (dto.Action ?? "").Trim();
+        var isWarn = action.Equals("Warn", StringComparison.OrdinalIgnoreCase);
+        var isBan = action.Equals("Ban", StringComparison.OrdinalIgnoreCase);
+        User? target = null;
+        if (IsPersonReport(report.ReportedEntityType))
+        {
+            target = await _db.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == report.ReportedEntityId, cancellationToken);
+        }
+
+        if ((isWarn || isBan) && target == null)
+            return BadRequest(new { message = "Không tìm thấy người bị báo cáo." });
+        if (isBan && target!.Role?.RoleName == "Admin")
+            return BadRequest(new { message = "Không thể khóa tài khoản quản trị viên." });
+
         report.Status = "Resolved";
-        report.ActionTaken = dto.Action + (string.IsNullOrWhiteSpace(dto.Note) ? "" : $": {dto.Note}");
+        report.ActionTaken = action + (string.IsNullOrWhiteSpace(dto.Note) ? "" : $": {dto.Note}");
         report.ReviewedBy = CurrentUserId > 0 ? CurrentUserId : null;
         report.ReviewedAt = DateTime.UtcNow;
 
-        // If action is Ban and entity is User, ban the user
-        if (string.Equals(dto.Action, "Ban", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(report.ReportedEntityType, "User", StringComparison.OrdinalIgnoreCase))
+        if (isBan && target != null)
         {
-            var targetUser = await _db.Users.FirstOrDefaultAsync(u => u.UserId == report.ReportedEntityId, cancellationToken);
-            if (targetUser != null && targetUser.RoleId != 1) // not Admin
-            {
-                targetUser.Status = "Banned";
-                targetUser.UpdatedAt = DateTime.UtcNow;
-            }
+            target.Status = "Banned";
+            target.UpdatedAt = DateTime.UtcNow;
         }
 
         if (CurrentUserId > 0)
@@ -519,8 +642,78 @@ public class AdminController : ControllerBase
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Đã xử lý báo cáo thành công." });
+
+        if (target != null && (isWarn || isBan))
+        {
+            var detail = string.IsNullOrWhiteSpace(report.Description)
+                ? ReasonLabel(report.Reason)
+                : report.Description.Trim();
+            var name = string.IsNullOrWhiteSpace(target.FullName) ? "người bị báo cáo" : target.FullName.Trim();
+
+            if (isWarn)
+            {
+                await _notifications.NotifyAsync(
+                    target.UserId,
+                    "ReportWarning",
+                    "Bạn bị cảnh cáo",
+                    Clip($"Quản trị viên cảnh cáo bạn vì: {detail}"),
+                    "Report",
+                    report.ReportId,
+                    cancellationToken);
+                if (report.ReporterId != target.UserId)
+                {
+                    await _notifications.NotifyAsync(
+                        report.ReporterId,
+                        "ReportWarned",
+                        "Đã cảnh cáo người bị báo cáo",
+                        Clip($"Quản trị viên đã gửi cảnh cáo tới {name}."),
+                        "Report",
+                        report.ReportId,
+                        cancellationToken);
+                }
+            }
+            else
+            {
+                await _notifications.NotifyAsync(
+                    target.UserId,
+                    "ReportBan",
+                    "Tài khoản đã bị khóa",
+                    Clip($"Tài khoản của bạn bị khóa vì: {detail}"),
+                    "Report",
+                    report.ReportId,
+                    cancellationToken);
+                if (report.ReporterId != target.UserId)
+                {
+                    await _notifications.NotifyAsync(
+                        report.ReporterId,
+                        "ReportBanned",
+                        "Đã khóa tài khoản bị báo cáo",
+                        Clip($"Quản trị viên đã khóa tài khoản {name} theo báo cáo của bạn."),
+                        "Report",
+                        report.ReportId,
+                        cancellationToken);
+                }
+            }
+        }
+
+        return Ok(new { message = isWarn ? "Đã gửi cảnh cáo và thông báo cho hai bên." : isBan ? "Đã khóa tài khoản và báo cho người gửi báo cáo." : "Đã xử lý báo cáo thành công." });
     }
+
+    private static bool IsPersonReport(string? entityType) =>
+        string.Equals(entityType, "User", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(entityType, "Tutor", StringComparison.OrdinalIgnoreCase);
+
+    private static string ReasonLabel(string? reason) => reason switch
+    {
+        "Harassment" => "quấy rối",
+        "Fraud" => "gian lận",
+        "Safety" => "an toàn",
+        "Other" => "khác",
+        _ => string.IsNullOrWhiteSpace(reason) ? "vi phạm" : reason.Trim()
+    };
+
+    private static string Clip(string value, int max = 500) =>
+        value.Length <= max ? value : value[..max];
 
     // =========================================================================
     // 6. PLATFORM SETTINGS

@@ -43,6 +43,78 @@ const DAYS = [
   { v: 7, label: "Chủ nhật" },
 ];
 
+const CERTIFICATE_GROUPS = [
+  {
+    group: "Ngoại ngữ",
+    items: [
+      "IELTS",
+      "TOEIC",
+      "TOEFL iBT",
+      "TOEFL ITP",
+      "VSTEP",
+      "Cambridge Starters",
+      "Cambridge Movers",
+      "Cambridge Flyers",
+      "Cambridge KET (A2 Key)",
+      "Cambridge PET (B1 Preliminary)",
+      "Cambridge FCE (B2 First)",
+      "Cambridge CAE (C1 Advanced)",
+      "Cambridge CPE (C2 Proficiency)",
+      "TESOL",
+      "TEFL",
+      "CELTA",
+      "HSK",
+      "JLPT",
+      "TOPIK",
+      "DELF",
+      "DALF",
+      "Goethe-Zertifikat",
+      "Chứng chỉ tiếng Nga (ТРКИ)",
+    ],
+  },
+  {
+    group: "Học vấn",
+    items: [
+      "Bằng tốt nghiệp THPT",
+      "Bằng cao đẳng",
+      "Bằng cử nhân",
+      "Bằng kỹ sư",
+      "Bằng thạc sĩ",
+      "Bằng tiến sĩ",
+    ],
+  },
+  {
+    group: "Sư phạm",
+    items: [
+      "Chứng chỉ nghiệp vụ sư phạm",
+      "Chứng chỉ bồi dưỡng thường xuyên",
+      "Chứng chỉ phương pháp giảng dạy",
+    ],
+  },
+  {
+    group: "Tin học",
+    items: [
+      "MOS (Microsoft Office Specialist)",
+      "IC3",
+      "Chứng chỉ ứng dụng CNTT cơ bản",
+      "Chứng chỉ ứng dụng CNTT nâng cao",
+    ],
+  },
+  {
+    group: "Khác",
+    items: [
+      "SAT",
+      "ACT",
+      "GRE",
+      "GMAT",
+      "Giải học sinh giỏi quốc gia",
+      "Giải học sinh giỏi cấp tỉnh",
+      "Chứng chỉ sơ cấp cứu",
+      "Khác",
+    ],
+  },
+];
+
 const inputClass =
   "w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500";
 
@@ -74,7 +146,9 @@ export default function TutorDesk() {
     isPublished: false,
     subjectIds: [],
   });
+  const [certFileKey, setCertFileKey] = useState(0);
   const [certForm, setCertForm] = useState({
+    certificateType: "",
     certificateName: "",
     issuedBy: "",
     issuedDate: "",
@@ -167,15 +241,23 @@ export default function TutorDesk() {
       setError("Chọn tệp chứng chỉ.");
       return;
     }
+    const certificateName = certForm.certificateType === "Khác"
+      ? certForm.certificateName.trim()
+      : certForm.certificateType;
+    if (!certificateName) {
+      setError(certForm.certificateType === "Khác" ? "Nhập tên chứng chỉ." : "Chọn loại chứng chỉ.");
+      return;
+    }
     const data = new FormData();
-    data.append("certificateName", certForm.certificateName);
+    data.append("certificateName", certificateName);
     data.append("issuedBy", certForm.issuedBy);
     data.append("issuedDate", certForm.issuedDate);
     data.append("file", certForm.file);
     try {
       const res = await uploadTutorCertificate(data);
       setInfo(res.message);
-      setCertForm({ certificateName: "", issuedBy: "", issuedDate: "", file: null });
+      setCertForm({ certificateType: "", certificateName: "", issuedBy: "", issuedDate: "", file: null });
+      setCertFileKey((key) => key + 1);
       await load();
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.title || "Không tải được chứng chỉ.");
@@ -383,33 +465,40 @@ export default function TutorDesk() {
             </div>
             <div>
               <span className="text-sm font-medium text-slate-700">Môn dạy</span>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {subjects.map((s) => {
-                  const id = s.subjectId;
-                  const on = form.subjectIds.includes(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          subjectIds: on
-                            ? f.subjectIds.filter((x) => x !== id)
-                            : [...f.subjectIds, id],
-                        }))
-                      }
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
-                        on
-                          ? "bg-brand-50 border-brand-200 text-brand-700"
-                          : "bg-white border-slate-200 text-slate-600"
-                      }`}
-                    >
-                      {s.subjectName}
-                    </button>
-                  );
-                })}
-              </div>
+              {ws?.subjectsLocked ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  {(ws.subjects || []).filter((s, i, list) => list.findIndex((x) => x.subjectId === s.subjectId) === i).map((s) => s.subjectName).join(", ") || "Chưa chọn"}
+                  . Môn đã khóa khi làm bài test, không sửa lại được.
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {subjects.map((s) => {
+                    const id = s.subjectId;
+                    const on = form.subjectIds.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            subjectIds: on
+                              ? f.subjectIds.filter((x) => x !== id)
+                              : [...f.subjectIds, id],
+                          }))
+                        }
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                          on
+                            ? "bg-brand-50 border-brand-200 text-brand-700"
+                            : "bg-white border-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {s.subjectName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input
@@ -444,15 +533,45 @@ export default function TutorDesk() {
                 Tải chứng chỉ bổ sung
               </h2>
               <div className="grid sm:grid-cols-2 gap-4">
-                <label className="block sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-700">Tên chứng chỉ</span>
-                  <input
-                    required
-                    className={`${inputClass} mt-1`}
-                    value={certForm.certificateName}
-                    onChange={(e) => setCertForm({ ...certForm, certificateName: e.target.value })}
-                  />
-                </label>
+                <div className="sm:col-span-2">
+                  <span className="text-sm font-medium text-slate-700">Loại chứng chỉ</span>
+                  <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-200 p-3 space-y-3">
+                    {CERTIFICATE_GROUPS.map((group) => (
+                      <div key={group.group}>
+                        <p className="text-xs font-semibold text-slate-400 mb-1.5">{group.group}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {group.items.map((item) => {
+                            const on = certForm.certificateType === item;
+                            return (
+                              <button
+                                key={item}
+                                type="button"
+                                onClick={() => setCertForm({ ...certForm, certificateType: item, certificateName: "" })}
+                                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                                  on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                                }`}
+                              >
+                                {item}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {certForm.certificateType === "Khác" && (
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">Tên chứng chỉ</span>
+                    <input
+                      required
+                      className={`${inputClass} mt-1`}
+                      value={certForm.certificateName}
+                      onChange={(e) => setCertForm({ ...certForm, certificateName: e.target.value })}
+                      placeholder="Nhập tên chứng chỉ"
+                    />
+                  </label>
+                )}
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">Cấp bởi</span>
                   <input
@@ -473,6 +592,7 @@ export default function TutorDesk() {
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-slate-700">Tệp (PDF/ảnh, tối đa 8MB)</span>
                   <input
+                    key={certFileKey}
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.webp"
                     className="mt-1 text-sm"

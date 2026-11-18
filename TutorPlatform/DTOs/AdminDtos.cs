@@ -77,6 +77,9 @@ public class AdminReportDto
     public int ReportId { get; set; }
     public string ReporterName { get; set; } = null!;
     public string ReporterEmail { get; set; } = null!;
+    public string? ReportedName { get; set; }
+    public string? ReportedEmail { get; set; }
+    public string? ReportedRole { get; set; }
     public string Reason { get; set; } = null!;
     public string? Description { get; set; }
     public string EntityType { get; set; } = null!;

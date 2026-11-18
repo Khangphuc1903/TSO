@@ -32,6 +32,7 @@ import {
   getNotifications,
   openConversation,
   rejectBooking,
+  saveLessonReport,
   updateMyProfile,
   uploadMyAvatar,
 } from "../api/study";
@@ -554,6 +555,12 @@ export default function Profile() {
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
+                        canWriteReport={asTutorOn(b)}
+                        onSaveReport={async (payload) => {
+                          const res = await saveLessonReport(b.bookingId, payload);
+                          setInfo(res.message);
+                          await load();
+                        }}
                         actions={tutorActions(b)}
                       />
                     ))}
@@ -579,6 +586,12 @@ export default function Profile() {
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
+                        canWriteReport={asTutorOn(b)}
+                        onSaveReport={async (payload) => {
+                          const res = await saveLessonReport(b.bookingId, payload);
+                          setInfo(res.message);
+                          await load();
+                        }}
                         actions={tutorActions(b)}
                       />
                     ))}
@@ -599,6 +612,12 @@ export default function Profile() {
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
                         onChat={() => chat(b)}
+                        canWriteReport={asTutorOn(b)}
+                        onSaveReport={async (payload) => {
+                          const res = await saveLessonReport(b.bookingId, payload);
+                          setInfo(res.message);
+                          await load();
+                        }}
                         actions={tutorActions(b)}
                       />
                     ))}

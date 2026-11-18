@@ -342,9 +342,15 @@ INSERT INTO Questions (TestType, SubjectId, GradeLevel, Content, OptionA, Option
 SELECT t.TestType, s.SubjectId, t.GradeLevel, t.Content, t.OptionA, t.OptionB, t.OptionC, t.OptionD, t.CorrectAnswer, t.Difficulty, 1, GETDATE()
 FROM #AdvancedSeed t
 INNER JOIN Subjects s
-    ON s.SubjectName = t.SubjectName
-    AND s.EducationLevel = t.EducationLevel
+    ON s.EducationLevel = t.EducationLevel
     AND s.IsActive = 1
+    AND (
+        s.SubjectName = t.SubjectName
+        OR (t.SubjectName = N'Toan' AND s.SubjectName = N'Toán')
+        OR (t.SubjectName = N'Tieng Anh' AND s.SubjectName = N'Tiếng Anh')
+        OR (t.SubjectName = N'Vat Ly' AND s.SubjectName = N'Vật Lý')
+        OR (t.SubjectName = N'Hoa Hoc' AND s.SubjectName = N'Hóa Học')
+    )
 WHERE t.TestType = N'Professional'
   AND NOT EXISTS (
       SELECT 1 FROM Questions q

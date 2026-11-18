@@ -122,7 +122,8 @@ public static class DemoTutorSeeder
     {
         var needed = new (string Name, string Level)[]
         {
-            ("Toán", "Secondary"), ("Ngữ Văn", "Secondary"), ("Tiếng Anh", "Secondary"),
+            ("Toán", "Secondary"), ("Ngữ Văn", "Secondary"), ("Tiếng Anh", "Secondary"), ("IELTS", "Ngoại ngữ"),
+            ("Tiếng Việt", "Primary"),
             ("Vật Lý", "HighSchool"), ("Hóa Học", "HighSchool"), ("Sinh Học", "HighSchool")
         };
         var existing = await db.Subjects.AsNoTracking().Select(s => s.SubjectName).ToListAsync();

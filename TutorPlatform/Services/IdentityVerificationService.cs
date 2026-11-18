@@ -152,6 +152,103 @@ public class IdentityVerificationService
         return (true, 200, message, await BuildStatusAsync(tutorId, message, ct));
     }
 
+    public async Task<(bool Success, int Status, string Message, TutorIdentityStatusDto? Data)> SubmitManualReviewAsync(
+        int tutorId,
+        IFormFile? front,
+        IFormFile? selfie,
+        string? fullName,
+        string? idNumber,
+        string? dateOfBirth,
+        string? gender,
+        string? address,
+        CancellationToken ct)
+    {
+        var profile = await _db.TutorProfiles.Include(t => t.Tutor)
+            .FirstOrDefaultAsync(t => t.TutorId == tutorId, ct);
+        if (profile?.Tutor == null)
+            return (false, 400, "Hồ sơ gia sư chưa có. Hãy lưu hồ sơ dạy học trước.", null);
+
+        var name = Clean(fullName, 150);
+        var id = Digits(idNumber);
+        if (string.IsNullOrWhiteSpace(name))
+            return (false, 400, "Nhập họ tên trên căn cước.", null);
+        if (id.Length is not (9 or 12))
+            return (false, 400, "Số CCCD phải có 9 hoặc 12 chữ số.", null);
+        if (!DateOnly.TryParseExact(dateOfBirth, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dob))
+            return (false, 400, "Chọn ngày sinh.", null);
+
+        byte[] frontBytes;
+        string frontMime;
+        byte[] faceBytes;
+        string faceMime;
+        try
+        {
+            (frontBytes, frontMime) = await ReadImageAsync(front, "mặt trước CCCD", ct);
+            (faceBytes, faceMime) = await ReadImageAsync(selfie, "khuôn mặt đối chiếu", ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (false, 400, ex.Message, null);
+        }
+
+        var doc = await LatestPendingAsync(tutorId, ct) ?? new IdentityDocument
+        {
+            TutorId = tutorId,
+            IdCardFrontUrl = "",
+            IdCardBackUrl = "",
+            Status = "Pending",
+            SubmittedAt = DateTime.UtcNow
+        };
+        if (doc.DocumentId == 0) _db.IdentityDocuments.Add(doc);
+        doc.Status = "Pending";
+        doc.SubmittedAt = DateTime.UtcNow;
+        doc.ReviewedAt = null;
+        doc.ReviewedBy = null;
+        doc.RejectionReason = null;
+        profile.VerificationStatus = "Pending";
+        await _db.SaveChangesAsync(ct);
+        DeleteFolder(doc.DocumentId);
+
+        doc.IdCardFrontUrl = await SaveFileAsync(doc.DocumentId, "front", frontBytes, frontMime, ct);
+        doc.IdCardBackUrl = "";
+        var selfieName = await SaveFileAsync(doc.DocumentId, "selfie", faceBytes, faceMime, ct);
+
+        _db.OcrExtractionResults.Add(new OcrExtractionResult
+        {
+            DocumentId = doc.DocumentId,
+            FullName = name,
+            IdNumber = id,
+            DateOfBirth = dob,
+            Address = Clean(address, 255),
+            ExtractedAt = DateTime.UtcNow
+        });
+        ApplyOcrToUser(profile.Tutor, new CccdReadResult
+        {
+            FullName = name,
+            Gender = gender,
+            Address = address
+        }, dob, id);
+
+        var attempts = await _db.FaceVerificationLogs.CountAsync(f => f.DocumentId == doc.DocumentId, ct);
+        _db.FaceVerificationLogs.Add(new FaceVerificationLog
+        {
+            TutorId = tutorId,
+            DocumentId = doc.DocumentId,
+            SelfieImageUrl = selfieName,
+            MatchConfidenceScore = 0,
+            IsMatch = false,
+            ApiProvider = "Manual",
+            AttemptNumber = attempts + 1,
+            Status = "EscalatedToAdmin",
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(ct);
+
+        return (true, 200,
+            "Đã gửi ảnh đối chiếu và thông tin. Admin xét trong 24 giờ, sau đó ảnh bị xóa.",
+            await BuildStatusAsync(tutorId, "Chờ admin đối chiếu ảnh và thông tin.", ct));
+    }
+
     public async Task<(bool Success, int Status, string Message, TutorIdentityStatusDto? Data)> UploadCardAsync(
         int tutorId, IFormFile? front, IFormFile? back, CancellationToken ct)
     {
@@ -430,9 +527,19 @@ public class IdentityVerificationService
         if (file.Length > 4 * 1024 * 1024)
             throw new InvalidOperationException($"Ảnh {label} tối đa 4MB.");
         var mime = (file.ContentType ?? "").ToLowerInvariant();
-        if (mime is not ("image/jpeg" or "image/jpg" or "image/png" or "image/webp"))
-            throw new InvalidOperationException($"Ảnh {label} chỉ nhận JPG, PNG hoặc WEBP.");
         if (mime == "image/jpg") mime = "image/jpeg";
+        if (mime is not ("image/jpeg" or "image/png" or "image/webp"))
+        {
+            mime = Path.GetExtension(file.FileName).ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                _ => ""
+            };
+        }
+        if (mime is not ("image/jpeg" or "image/png" or "image/webp"))
+            throw new InvalidOperationException($"Ảnh {label} chỉ nhận JPG, PNG hoặc WEBP.");
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, ct);
         return (ms.ToArray(), mime);
