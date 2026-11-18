@@ -1,9 +1,10 @@
 import axios from "axios";
 import { getRefreshToken, getToken, saveSession } from "../auth";
 
-// Change this to match the port your .NET backend runs on (shown in the
-// console window when you press F5 in Visual Studio, e.g. https://localhost:7123/api)
-export const API_ORIGIN = "http://localhost:5008";
+// Local dev keeps localhost. A production build sets VITE_API_URL empty so the
+// site calls /api on the same Azure host.
+const fromEnv = import.meta.env.VITE_API_URL;
+export const API_ORIGIN = fromEnv === undefined ? "http://localhost:5008" : fromEnv;
 
 const axiosClient = axios.create({
   baseURL: `${API_ORIGIN}/api`,

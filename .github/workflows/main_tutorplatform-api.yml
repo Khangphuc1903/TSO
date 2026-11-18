@@ -23,11 +23,29 @@ jobs:
         with:
           dotnet-version: '8.x'
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_API_URL: ""
+
       - name: Build with dotnet
         run: dotnet build TutorPlatform/TutorPlatform.csproj --configuration Release
 
       - name: dotnet publish
         run: dotnet publish TutorPlatform/TutorPlatform.csproj -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+
+      - name: Copy frontend into the API site
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ env.DOTNET_ROOT }}/myapp/wwwroot" | Out-Null
+          Copy-Item -Path dist/* -Destination "${{ env.DOTNET_ROOT }}/myapp/wwwroot" -Recurse -Force
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4

@@ -288,4 +288,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<AppHub>("/hubs/app");
+var indexPath = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
+if (File.Exists(indexPath))
+{
+    app.MapFallback(async context =>
+    {
+        var path = context.Request.Path.Value ?? "";
+        if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(indexPath);
+    });
+}
 app.Run();
