@@ -64,7 +64,17 @@ public class AiMatchmakerService
         var relativeUrl = $"/uploads/diagnoses/{studentId}/{safeName}";
 
         // 2. Gọi AI Gemini chẩn đoán
-        var aiOutput = await _gemini.DiagnoseHomeworkImageAsync(imageBytes, file.ContentType, studentNote, ct);
+        var safeMime = !string.IsNullOrWhiteSpace(file.ContentType) &&
+                       file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+            ? file.ContentType
+            : ext.ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                _ => "image/jpeg"
+            };
+
+        var aiOutput = await _gemini.DiagnoseHomeworkImageAsync(imageBytes, safeMime, studentNote, ct);
         if (aiOutput == null)
             throw new InvalidOperationException("Gemini không đọc được ảnh.");
 
@@ -140,6 +150,10 @@ public class AiMatchmakerService
             .Include(d => d.TutorMatchSuggestions)
                 .ThenInclude(s => s.Tutor)
                     .ThenInclude(t => t.Tutor)
+            .Include(d => d.TutorMatchSuggestions)
+                .ThenInclude(s => s.Tutor)
+                    .ThenInclude(t => t.TutorSubjects)
+                        .ThenInclude(ts => ts.Subject)
             .Where(d => d.StudentId == studentId)
             .OrderByDescending(d => d.CreatedAt)
             .Take(20)
@@ -156,6 +170,10 @@ public class AiMatchmakerService
             .Include(d => d.TutorMatchSuggestions)
                 .ThenInclude(s => s.Tutor)
                     .ThenInclude(t => t.Tutor)
+            .Include(d => d.TutorMatchSuggestions)
+                .ThenInclude(s => s.Tutor)
+                    .ThenInclude(t => t.TutorSubjects)
+                        .ThenInclude(ts => ts.Subject)
             .FirstOrDefaultAsync(d => d.DiagnosisId == diagnosisId, ct);
 
         return item == null ? null : MapDiagnosisDto(item);
@@ -171,6 +189,8 @@ public class AiMatchmakerService
 
         var prompt = request.Prompt.Trim();
         var parsed = await _gemini.ParseNaturalSearchQueryAsync(prompt, ct);
+        if (parsed == null)
+            throw new InvalidOperationException("Chưa cấu hình Gemini:ApiKey hoặc AI không phân tích được yêu cầu tìm kiếm.");
 
         // Lưu lịch sử NaturalSearchQueries
         int? subId = null;
@@ -409,7 +429,9 @@ public class AiMatchmakerService
 
         foreach (var tutor in candidates)
         {
-            var bestAttempt = testAttempts.FirstOrDefault(a => a.TutorId == tutor.TutorId && (subjectId == null || a.SubjectId == subjectId));
+            var bestAttempt = testAttempts.FirstOrDefault(a =>
+                a.TutorId == tutor.TutorId &&
+                (!matchingSubIds.Any() || (a.SubjectId.HasValue && matchingSubIds.Contains(a.SubjectId.Value))));
             decimal testScore = bestAttempt?.ScorePercent ?? (tutor.VerificationStatus == "Verified" ? 85m : 75m);
             decimal ratingScore = (tutor.AverageRating > 0 ? tutor.AverageRating : 4.8m) * 20m;
             decimal bonus = 0m;
@@ -546,9 +568,20 @@ public class AiMatchmakerService
 
     private static DiagnosisResultDto MapDiagnosisDto(KnowledgeGapDiagnosis d)
     {
-        var rawParsed = !string.IsNullOrEmpty(d.RawAiJson)
-            ? JsonSerializer.Deserialize<GeminiDiagnosisOutput>(d.RawAiJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            : null;
+        GeminiDiagnosisOutput? rawParsed = null;
+        if (!string.IsNullOrEmpty(d.RawAiJson))
+        {
+            try
+            {
+                rawParsed = JsonSerializer.Deserialize<GeminiDiagnosisOutput>(
+                    d.RawAiJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                rawParsed = null;
+            }
+        }
 
         return new DiagnosisResultDto
         {
@@ -571,20 +604,23 @@ public class AiMatchmakerService
                 .Select(s => new TutorSuggestionItemDto
                 {
                     TutorId = s.TutorId,
-                    FullName = s.Tutor.Tutor.FullName,
-                    AvatarUrl = s.Tutor.Tutor.AvatarUrl,
+                    FullName = s.Tutor?.Tutor?.FullName ?? "Gia sư",
+                    AvatarUrl = s.Tutor?.Tutor?.AvatarUrl,
                     RankNo = s.RankNo,
                     MatchScore = s.MatchScore,
                     Reason = s.Reason,
-                    HourlyRateMin = s.Tutor.HourlyRateMin ?? 0m,
-                    HourlyRateMax = s.Tutor.HourlyRateMax ?? 0m,
-                    AverageRating = s.Tutor.AverageRating,
-                    TotalReviews = s.Tutor.TotalReviews,
-                    TeachingMode = s.Tutor.TeachingMode,
-                    VerificationStatus = s.Tutor.VerificationStatus,
-                    Bio = s.Tutor.Bio,
-                    University = s.Tutor.University,
-                    SubjectNames = s.Tutor.TutorSubjects.Select(ts => ts.Subject.SubjectName).ToList()
+                    HourlyRateMin = s.Tutor?.HourlyRateMin ?? 0m,
+                    HourlyRateMax = s.Tutor?.HourlyRateMax ?? 0m,
+                    AverageRating = s.Tutor?.AverageRating ?? 0m,
+                    TotalReviews = s.Tutor?.TotalReviews ?? 0,
+                    TeachingMode = s.Tutor?.TeachingMode ?? "Both",
+                    VerificationStatus = s.Tutor?.VerificationStatus ?? "Verified",
+                    Bio = s.Tutor?.Bio,
+                    University = s.Tutor?.University,
+                    SubjectNames = s.Tutor?.TutorSubjects
+                        .Where(ts => ts.Subject != null)
+                        .Select(ts => ts.Subject.SubjectName)
+                        .ToList() ?? new List<string>()
                 }).ToList()
         };
     }

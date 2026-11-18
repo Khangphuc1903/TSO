@@ -109,6 +109,10 @@ public class AiMatchController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(502, new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Lỗi tìm kiếm tự nhiên qua AI");
