@@ -239,15 +239,17 @@ export default function TutorIdentity() {
                   <CheckCircle2 size={16} /> Đã xác thực{pct != null ? ` · khớp ${pct}%` : ""}. Ảnh CCCD không còn lưu.
                 </p>
               )}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={openVnpt}
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
-              >
-                {busy ? <Loader2 className="animate-spin" size={16} /> : <IdCard size={16} />}
-                Mở máy quét VNPT
-              </button>
+              {!identityDone && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={openVnpt}
+                  className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="animate-spin" size={16} /> : <IdCard size={16} />}
+                  Mở máy quét VNPT
+                </button>
+              )}
             </section>
 
             {identityDone ? (

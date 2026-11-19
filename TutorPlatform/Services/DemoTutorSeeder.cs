@@ -216,8 +216,13 @@ public static class DemoTutorSeeder
             profile.HourlyRateMin = item.RateMin;
             profile.HourlyRateMax = item.RateMax;
             profile.TeachingMode = item.Mode;
+            profile.AverageRating = item.Rating;
+            profile.TotalReviews = item.Reviews;
+            profile.SubjectsLocked = true;
             await db.SaveChangesAsync();
         }
+
+        profile.SubjectsLocked = true;
 
         foreach (var subjectName in item.Subjects)
         {
@@ -298,6 +303,101 @@ public static class DemoTutorSeeder
         }
 
         await db.SaveChangesAsync();
+        await EnsureVerifiedAsync(db, tutorId, item);
+    }
+
+    private static async Task EnsureVerifiedAsync(TutorPlatformDbContext db, int tutorId, DemoTutor item)
+    {
+        var now = DateTime.Now;
+        var doc = await db.IdentityDocuments
+            .Where(d => d.TutorId == tutorId)
+            .OrderByDescending(d => d.SubmittedAt)
+            .FirstOrDefaultAsync();
+        if (doc == null)
+        {
+            doc = new IdentityDocument
+            {
+                TutorId = tutorId,
+                IdCardFrontUrl = item.AvatarUrl,
+                IdCardBackUrl = item.AvatarUrl,
+                Status = "Approved",
+                ReviewedAt = now,
+                SubmittedAt = now
+            };
+            db.IdentityDocuments.Add(doc);
+            await db.SaveChangesAsync();
+        }
+        else if (doc.Status != "Approved")
+        {
+            doc.Status = "Approved";
+            doc.ReviewedAt = now;
+            doc.RejectionReason = null;
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.OcrExtractionResults.AnyAsync(o => o.DocumentId == doc.DocumentId))
+        {
+            db.OcrExtractionResults.Add(new OcrExtractionResult
+            {
+                DocumentId = doc.DocumentId,
+                FullName = item.FullName,
+                DateOfBirth = new DateOnly(1998, 5, 12),
+                IdNumber = $"001098{tutorId:D6}",
+                Address = item.Address,
+                ExtractedAt = now
+            });
+        }
+
+        if (!await db.FaceVerificationLogs.AnyAsync(f => f.DocumentId == doc.DocumentId))
+        {
+            db.FaceVerificationLogs.Add(new FaceVerificationLog
+            {
+                TutorId = tutorId,
+                DocumentId = doc.DocumentId,
+                SelfieImageUrl = item.AvatarUrl,
+                MatchConfidenceScore = 98.5m,
+                IsMatch = true,
+                ApiProvider = "Admin",
+                AttemptNumber = 1,
+                Status = "Passed",
+                CreatedAt = now
+            });
+        }
+
+        var subjectId = await db.TutorSubjects
+            .Where(ts => ts.TutorId == tutorId)
+            .Select(ts => (int?)ts.SubjectId)
+            .FirstOrDefaultAsync();
+
+        if (!await db.TutorTestAttempts.AnyAsync(a => a.TutorId == tutorId && a.TestType == "Pedagogical" && a.IsPassed))
+        {
+            db.TutorTestAttempts.Add(PassedAttempt(tutorId, "Pedagogical", null, now));
+        }
+
+        if (!await db.TutorTestAttempts.AnyAsync(a => a.TutorId == tutorId && a.TestType == "Professional" && a.IsPassed))
+        {
+            db.TutorTestAttempts.Add(PassedAttempt(tutorId, "Professional", subjectId, now));
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static TutorTestAttempt PassedAttempt(int tutorId, string testType, int? subjectId, DateTime now)
+    {
+        return new TutorTestAttempt
+        {
+            TutorId = tutorId,
+            TestType = testType,
+            SubjectId = subjectId,
+            TotalQuestions = 10,
+            CorrectCount = 9,
+            ScorePercent = 90,
+            PassThreshold = 70,
+            IsPassed = true,
+            AttemptNumber = 1,
+            StartedAt = now.AddMinutes(-20),
+            SubmittedAt = now
+        };
     }
 
     private static async Task EnsureDemoReviewsAsync(TutorPlatformDbContext db, int studentId, List<User> tutors, List<Subject> subjects)
@@ -345,7 +445,7 @@ public static class DemoTutorSeeder
                 BookingId = booking.BookingId,
                 StudentId = studentId,
                 TutorId = tutorId,
-                Rating = ratings[i],
+                Rating = ratings[i % ratings.Length],
                 Comment = comments[i % comments.Length],
                 IsHidden = false,
                 CreatedAt = DateTime.Now.AddDays(-6)

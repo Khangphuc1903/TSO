@@ -349,16 +349,21 @@ if (args.Contains("--seed-demo"))
     return;
 }
 
+try
+{
+    await DemoTutorSeeder.SeedAsync(app.Services);
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Bo qua seed gia su Viet Nam.");
+}
+
 if (app.Environment.IsDevelopment())
 {
     try
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TutorPlatformDbContext>();
-        if (!await db.TutorProfiles.AnyAsync())
-        {
-            await DemoTutorSeeder.SeedAsync(app.Services);
-        }
         await KnowledgeTopicSeeder.SeedTopicsAsync(db);
     }
     catch (Exception ex)
