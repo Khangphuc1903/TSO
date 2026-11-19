@@ -323,6 +323,28 @@ public sealed class SosService
         };
     }
 
+    public async Task<List<SosSessionDto>> ListHistoryAsync(int userId, bool asTutor, CancellationToken cancellationToken)
+    {
+        var sessions = await _db.SosSessions.AsNoTracking()
+            .Include(s => s.Request).ThenInclude(r => r.Subject)
+            .Include(s => s.Student)
+            .Include(s => s.Tutor).ThenInclude(t => t.Tutor)
+            .Where(s => asTutor ? s.TutorId == userId : s.StudentId == userId)
+            .OrderByDescending(s => s.StartedAt)
+            .Take(12)
+            .ToListAsync(cancellationToken);
+
+        var list = new List<SosSessionDto>();
+        foreach (var session in sessions)
+        {
+            var ended = session.EndedAt != null || (session.EndsAt != null && session.EndsAt <= DateTime.UtcNow);
+            if (ended)
+                await EnsurePayableBookingAsync(session, cancellationToken);
+            list.Add(MapSession(session));
+        }
+        return list;
+    }
+
     public async Task<SosSessionDto> GetSessionAsync(int userId, int sessionId, CancellationToken cancellationToken)
     {
         var session = await _db.SosSessions.AsNoTracking()

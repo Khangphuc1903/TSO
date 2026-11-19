@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Siren } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { ChatComposer, ChatMessageBody } from "../components/ChatMedia";
 import { getUser, isLoggedIn } from "../auth";
 import { createAppHub } from "../api/hub";
 import { getMessages, sendMessage, sendMessageAttachment } from "../api/study";
 import { endSosSession, getSosSession, reviewSosSession } from "../api/sos";
+import { createPaymentIntent } from "../api/payment";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref, formatVnd } from "../utils/format";
 
@@ -42,6 +44,8 @@ export default function SosSession() {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [payment, setPayment] = useState(null);
+  const autoEndedRef = useRef(false);
   const bottomRef = useRef(null);
   const hubRef = useRef(null);
   const convRef = useRef(0);
@@ -194,7 +198,9 @@ export default function SosSession() {
   useEffect(() => {
     if (!session?.endsAt || session.endedAt) return;
     const end = parseServerTime(session.endsAt);
-    if (end && end.getTime() <= Date.now()) {
+    if (end && end.getTime() <= Date.now() && !autoEndedRef.current) {
+      autoEndedRef.current = true;
+      hangup(true);
       endSosSession(sessionId).then(setSession).catch(() => {});
     }
   }, [now, session?.endsAt, session?.endedAt, sessionId]);
@@ -254,7 +260,29 @@ export default function SosSession() {
     setMuted(next);
   };
 
+  useEffect(() => {
+    if (!ended || myId !== session?.studentId || session?.paid) return;
+    const timer = setInterval(() => {
+      getSosSession(sessionId).then(setSession).catch(() => {});
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [ended, myId, session?.studentId, session?.paid, sessionId]);
+
+  useEffect(() => {
+    if (!ended || myId !== session?.studentId || session?.paid || !session?.bookingId) return;
+    let cancelled = false;
+    createPaymentIntent(session.bookingId)
+      .then((data) => {
+        if (!cancelled) setPayment(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ended, myId, session?.studentId, session?.paid, session?.bookingId]);
+
   const peerName = myId === session?.studentId ? session?.tutorName : session?.studentName;
+  const qrValue = payment?.qrCode || payment?.checkoutUrl || "";
 
   return (
     <div className="min-h-screen bg-surface">
@@ -286,14 +314,26 @@ export default function SosSession() {
       Phiên đã hoàn thành. Cuộc trò chuyện đã đóng.
     </p>
     {myId === session?.studentId && !session?.paid && (
-      <button
-        type="button"
-        disabled={!session?.bookingId}
-        onClick={() => navigate(`/checkout/${session.bookingId}`)}
-        className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
-      >
-        Thanh toán {formatVnd(session?.feeAmount)}
-      </button>
+      <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+        <p className="text-sm font-semibold text-slate-800">Quét VietQR để thanh toán phí SOS</p>
+        {payment?.qrImageUrl ? (
+          <img src={payment.qrImageUrl} alt="Mã VietQR" className="mx-auto w-44 rounded-lg bg-white" />
+        ) : qrValue ? (
+          <QRCodeSVG value={qrValue} size={176} level="M" includeMargin className="mx-auto rounded-lg bg-white" />
+        ) : (
+          <p className="text-xs text-slate-500">Đang tạo mã QR...</p>
+        )}
+        <p className="text-sm font-bold text-slate-900">{formatVnd(session?.feeAmount)}</p>
+        {session?.bookingId && (
+          <button
+            type="button"
+            onClick={() => navigate(`/checkout/${session.bookingId}`)}
+            className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium"
+          >
+            Mở trang thanh toán
+          </button>
+        )}
+      </div>
     )}
     {myId === session?.tutorId && (
       <p className="text-sm text-slate-600">

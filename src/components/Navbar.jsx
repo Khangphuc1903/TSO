@@ -130,6 +130,7 @@ export default function Navbar() {
     hub.on("SosRequestCreated", pingSos);
     hub.on("SosRequestClaimedByOther", pingSos);
     hub.on("SosRequestExpired", pingSos);
+    hub.on("SosSessionEnded", pingSos);
     hub.start().catch(() => {});
 
     return () => {
@@ -142,6 +143,7 @@ export default function Navbar() {
       hub.off("SosRequestCreated", pingSos);
       hub.off("SosRequestClaimedByOther", pingSos);
       hub.off("SosRequestExpired", pingSos);
+      hub.off("SosSessionEnded", pingSos);
       hub.stop();
     };
   }, [loggedIn]);

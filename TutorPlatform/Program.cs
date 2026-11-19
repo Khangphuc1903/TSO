@@ -462,6 +462,34 @@ BEGIN
         INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
         VALUES (N'SosDurationMinutes', N'15', N'Thời lượng phiên SOS (phút)', GETDATE());
 END
+
+IF OBJECT_ID(N'dbo.Reviews', N'U') IS NOT NULL
+BEGIN
+    DECLARE @dropReview nvarchar(max) = N'';
+    SELECT @dropReview = @dropReview + N'ALTER TABLE dbo.Reviews DROP CONSTRAINT ' + QUOTENAME(kc.name) + N';'
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = OBJECT_ID(N'dbo.Reviews')
+      AND kc.[type] = 'UQ'
+      AND c.name = N'BookingId';
+    IF @dropReview <> N'' EXEC sp_executesql @dropReview;
+
+    IF COL_LENGTH('dbo.Reviews','SosSessionId') IS NULL
+        ALTER TABLE dbo.Reviews ADD SosSessionId INT NULL;
+    IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID(N'dbo.Reviews') AND name = N'BookingId' AND is_nullable = 0)
+        ALTER TABLE dbo.Reviews ALTER COLUMN BookingId INT NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Reviews_Booking' AND object_id = OBJECT_ID(N'dbo.Reviews'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_Reviews_Booking ON dbo.Reviews(BookingId) WHERE BookingId IS NOT NULL');
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Reviews_SosSession' AND object_id = OBJECT_ID(N'dbo.Reviews'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_Reviews_SosSession ON dbo.Reviews(SosSessionId) WHERE SosSessionId IS NOT NULL');
+    IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Review_SosSession')
+        ALTER TABLE dbo.Reviews ADD CONSTRAINT FK_Review_SosSession
+            FOREIGN KEY (SosSessionId) REFERENCES dbo.SosSessions(SessionId);
+END
 """);
     }
     catch (Exception ex)

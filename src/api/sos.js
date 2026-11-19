@@ -49,6 +49,11 @@ export async function sosHeartbeat() {
   await axiosClient.post("/sos/heartbeat");
 }
 
+export async function getMySosSessions() {
+  const res = await axiosClient.get("/sos/sessions/mine");
+  return res.data;
+}
+
 export async function getSosSession(sessionId) {
   const res = await axiosClient.get(`/sos/sessions/${sessionId}`);
   return res.data;
