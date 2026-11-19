@@ -249,6 +249,98 @@ END
     {
         app.Logger.LogWarning(ex, "Bo qua SQL khoi tao schema (cot/bang da co).");
     }
+
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','IsSosReady') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD IsSosReady BIT NOT NULL CONSTRAINT DF_TutorProfiles_IsSosReady DEFAULT (0)');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SosReadyAt') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD SosReadyAt DATETIME NULL');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','LastSosHeartbeat') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD LastSosHeartbeat DATETIME NULL');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked2 DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','TutorCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD TutorCompleted BIT NOT NULL CONSTRAINT DF_Bookings_TutorCompleted2 DEFAULT (0)');
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','StudentCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD StudentCompleted BIT NOT NULL CONSTRAINT DF_Bookings_StudentCompleted2 DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.LessonReports', N'U') IS NULL AND OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.LessonReports (
+        LessonReportId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        BookingId INT NOT NULL,
+        TutorId INT NOT NULL,
+        Content NVARCHAR(2000) NOT NULL,
+        Homework NVARCHAR(500) NULL,
+        CreatedAt DATETIME NOT NULL,
+        UpdatedAt DATETIME NULL,
+        CONSTRAINT FK_LessonReports_Booking2 FOREIGN KEY (BookingId) REFERENCES dbo.Bookings(BookingId),
+        CONSTRAINT UQ_LessonReports_Booking2 UNIQUE (BookingId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.KnowledgeTopics', N'U') IS NULL AND OBJECT_ID(N'dbo.Subjects', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.KnowledgeTopics (
+        TopicId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        SubjectId INT NOT NULL,
+        GradeLevel NVARCHAR(50) NULL,
+        TopicName NVARCHAR(200) NOT NULL,
+        TopicCode NVARCHAR(80) NULL,
+        Description NVARCHAR(500) NULL,
+        IsActive BIT NOT NULL CONSTRAINT DF_KnowledgeTopics_IsActive DEFAULT (1),
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_KnowledgeTopics_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_KnowledgeTopic_Subject FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.KnowledgeGapDiagnoses', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.KnowledgeGapDiagnoses (
+        DiagnosisId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        SubjectId INT NULL,
+        TopicId INT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        OcrText NVARCHAR(MAX) NULL,
+        AiSummary NVARCHAR(1000) NULL,
+        GapDetail NVARCHAR(MAX) NULL,
+        GradeLevel NVARCHAR(50) NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_KGD_Status DEFAULT (N'Pending'),
+        RawAiJson NVARCHAR(MAX) NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_KGD_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_KGD_Student FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_KGD_Subject FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId),
+        CONSTRAINT FK_KGD_Topic FOREIGN KEY (TopicId) REFERENCES dbo.KnowledgeTopics(TopicId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.TutorMatchSuggestions', N'U') IS NULL
+    AND OBJECT_ID(N'dbo.KnowledgeGapDiagnoses', N'U') IS NOT NULL
+    AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.TutorMatchSuggestions (
+        SuggestionId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        DiagnosisId INT NOT NULL,
+        TutorId INT NOT NULL,
+        RankNo TINYINT NOT NULL,
+        MatchScore DECIMAL(5, 2) NOT NULL,
+        Reason NVARCHAR(500) NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_TMS_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_TMS UNIQUE (DiagnosisId, TutorId),
+        CONSTRAINT FK_TMS_Diagnosis FOREIGN KEY (DiagnosisId) REFERENCES dbo.KnowledgeGapDiagnoses(DiagnosisId),
+        CONSTRAINT FK_TMS_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId)
+    );
+END
+""");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Bo qua SQL bang chan doan va danh gia buoi hoc.");
+    }
 }
 
 if (args.Contains("--seed-demo"))
