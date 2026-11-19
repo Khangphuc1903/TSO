@@ -143,6 +143,7 @@ function GroupCard({ group, busyKey, onRespond, onChoose }) {
   const joins = group.isOwner ? group.joinRequests || [] : [];
   const bids = group.isOwner && group.hiringMode === "ReverseBid" ? group.bids || [] : [];
   const winner = bids.find((bid) => bid.status === "Won");
+  const hired = Boolean(winner) || group.hasMentor || group.mentorStatus === "Accepted";
   const shownBids = winner ? [winner] : bids.filter((bid) => bid.status === "Pending");
   const pendingBids = shownBids.filter((bid) => bid.status === "Pending");
 
@@ -155,9 +156,14 @@ function GroupCard({ group, busyKey, onRespond, onChoose }) {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-bold text-slate-600">
               {group.isOwner ? "Bạn là chủ nhóm" : "Bạn đang tham gia"}
             </span>
-            {group.hiringMode === "ReverseBid" && (
+            {group.hiringMode === "ReverseBid" && !hired && (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800">
                 Đang tìm gia sư
+              </span>
+            )}
+            {group.hiringMode === "ReverseBid" && hired && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+                Đã chọn gia sư
               </span>
             )}
           </div>

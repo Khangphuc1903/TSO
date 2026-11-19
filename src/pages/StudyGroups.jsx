@@ -382,7 +382,8 @@ export default function StudyGroups() {
               const slotsLeft = (g.maxMembers || 10) - (g.memberCount || 0);
               const isAlmostFull = slotsLeft <= 2;
               const copy = splitStudyCopy(g.description);
-              const seekingTutor = g.hiringMode === "ReverseBid";
+              const hired = g.hasMentor || g.mentorStatus === "Accepted";
+              const seekingTutor = g.hiringMode === "ReverseBid" && !hired;
 
               return (
                 <Link

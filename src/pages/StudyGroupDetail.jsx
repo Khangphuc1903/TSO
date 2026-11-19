@@ -187,6 +187,8 @@ export default function StudyGroupDetail() {
 
   const isOwner = Number(user?.userId) === group.createdByUserId;
   const isMember = group.isMember || isOwner;
+  const hired = Boolean(group.hasMentor) || group.mentorStatus === "Accepted" || (group.bids || []).some((b) => b.status === "Won");
+  const seeking = group.hiringMode === "ReverseBid" && !hired;
   const slotsLeft = (group.maxMembers || 10) - (group.memberCount || 0);
 
   return (
@@ -514,7 +516,7 @@ export default function StudyGroupDetail() {
             )}
           </div>
 
-          {group.hiringMode === "ReverseBid" && group.restricted && (
+          {seeking && group.restricted && (
             <div className="bg-white rounded-3xl border border-amber-200 p-6">
               <h2 className="font-bold text-slate-900">Bài tìm gia sư chỉ giáo viên thấy</h2>
               <p className="text-sm text-slate-600 mt-2">
@@ -523,14 +525,14 @@ export default function StudyGroupDetail() {
             </div>
           )}
 
-          {group.hiringMode === "ReverseBid" && !group.restricted && (
+          {group.hiringMode === "ReverseBid" && !group.restricted && (isMember || isTutor) && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-5">
               <div>
                 <h2 className="font-bold text-slate-900 text-base">
-                  {(group.bids || []).some((b) => b.status === "Won") ? "Đã chốt gia sư cho nhóm" : "Đấu thầu ngược — tìm gia sư cho nhóm"}
+                  {hired ? "Đã chốt gia sư cho nhóm" : "Đấu thầu ngược — tìm gia sư cho nhóm"}
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  {(group.bids || []).some((b) => b.status === "Won")
+                  {hired
                     ? "Các hồ sơ khác đã được từ chối và không còn hiện ở đây."
                     : `Ngân sách nhóm đưa ra ${formatVnd(group.budgetPerSession)}/buổi.${group.bidDeadline ? ` Hạn ứng tuyển ${new Date(group.bidDeadline).toLocaleString("vi-VN")}.` : ""} Đã có ${group.bidCount || 0} hồ sơ.`}
                 </p>
@@ -645,7 +647,7 @@ export default function StudyGroupDetail() {
               </div>
               <h3 className="font-extrabold text-slate-900 text-lg mb-1">Chat nhóm realtime</h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                Khi trở thành thành viên, bạn có thể nhắn tin realtime với mọi người trong nhóm. {isTutor ? "Gia sư gửi hồ sơ ứng tuyển, không xin vào nhóm." : "Gửi lời xin vào nhóm để tham gia."}
+                Khi trở thành thành viên, bạn có thể nhắn tin realtime với mọi người trong nhóm. {isTutor ? (seeking ? "Gia sư gửi hồ sơ ứng tuyển, không xin vào nhóm." : "Nhóm này đã chọn gia sư.") : "Gửi lời xin vào nhóm để tham gia."}
               </p>
             </div>
           )}
