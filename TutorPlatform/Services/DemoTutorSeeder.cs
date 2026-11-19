@@ -116,7 +116,90 @@ public static class DemoTutorSeeder
             await db.SaveChangesAsync();
         }
 
+        await EnsureAdminFinanceDemoAsync(db, student.UserId);
+
         Console.WriteLine("Seed demo tutors xong. Login student: student.demo@tsg.com / Password123!");
+    }
+
+    private static async Task EnsureAdminFinanceDemoAsync(TutorPlatformDbContext db, int fallbackStudentId)
+    {
+        var studentId = await db.Users
+            .Where(u => u.Email == "student@tutor.com")
+            .Select(u => (int?)u.UserId)
+            .FirstOrDefaultAsync() ?? fallbackStudentId;
+
+        var rows = new (string Code, string TutorEmail, decimal Amount, int MonthsAgo, int Day, bool TutorPaid, string BankCode, string BankName, string Account, string Holder)[]
+        {
+            ("DEMO-ADM-01", "tutor.lananh@tsg.com", 280000, 1, 12, true, "MB", "MB Bank", "0902000001", "NGUYEN LAN ANH"),
+            ("DEMO-ADM-02", "tutor.lananh@tsg.com", 240000, 0, 4, true, "MB", "MB Bank", "0902000001", "NGUYEN LAN ANH"),
+            ("DEMO-ADM-03", "tutor.thuha@tsg.com", 320000, 0, 8, false, "VCB", "Vietcombank", "0011002345678", "TRAN THU HA"),
+            ("DEMO-ADM-04", "tutor.minhkhoa@tsg.com", 260000, 0, 11, true, "ACB", "ACB", "12345678901", "LE MINH KHOA"),
+            ("DEMO-ADM-05", "tutor.quochuy@tsg.com", 200000, 1, 18, true, "TCB", "Techcombank", "19034567890123", "PHAM QUOC HUY"),
+            ("DEMO-ADM-06", "tutor.hoanglong@tsg.com", 250000, 0, 15, false, "MB", "MB Bank", "0902000006", "DANG HOANG LONG"),
+        };
+
+        foreach (var row in rows)
+        {
+            if (await db.Payments.AnyAsync(p => p.TransactionCode == row.Code))
+                continue;
+            var tutorId = await db.Users.Where(u => u.Email == row.TutorEmail).Select(u => (int?)u.UserId).FirstOrDefaultAsync();
+            if (tutorId == null) continue;
+            var subjectId = await db.TutorSubjects.Where(ts => ts.TutorId == tutorId).Select(ts => (int?)ts.SubjectId).FirstOrDefaultAsync();
+            if (subjectId == null) continue;
+
+            if (!await db.UserBankAccounts.AnyAsync(b => b.UserId == tutorId))
+            {
+                db.UserBankAccounts.Add(new UserBankAccount
+                {
+                    UserId = tutorId.Value,
+                    BankCode = row.BankCode,
+                    BankName = row.BankName,
+                    AccountNumber = row.Account,
+                    AccountHolderName = row.Holder,
+                    IsDefault = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            var paidAt = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 3, 0, 0, DateTimeKind.Utc)
+                .AddMonths(-row.MonthsAgo)
+                .AddDays(row.Day - 1);
+            if (paidAt > DateTime.UtcNow)
+                paidAt = DateTime.UtcNow.AddHours(-6);
+            var booking = new Booking
+            {
+                StudentId = studentId,
+                TutorId = tutorId.Value,
+                SubjectId = subjectId.Value,
+                ScheduledDate = DateOnly.FromDateTime(paidAt.AddHours(7)),
+                StartTime = new TimeOnly(19, 0),
+                EndTime = new TimeOnly(21, 0),
+                TeachingMode = "Online",
+                Location = "Online",
+                Price = row.Amount,
+                Status = row.TutorPaid ? "Completed" : "Confirmed",
+                CreatedAt = paidAt.AddDays(-1),
+                ConfirmedAt = paidAt.AddHours(-2),
+                CompletedAt = row.TutorPaid ? paidAt.AddDays(1) : null
+            };
+            db.Bookings.Add(booking);
+            await db.SaveChangesAsync();
+
+            db.Payments.Add(new Payment
+            {
+                BookingId = booking.BookingId,
+                PayerUserId = studentId,
+                Amount = row.Amount,
+                PaymentMethod = "VietQR",
+                TransactionCode = row.Code,
+                Status = "Success",
+                PaidAt = paidAt,
+                CreatedAt = paidAt.AddMinutes(-10),
+                CallbackReceivedAt = paidAt,
+                TutorPaidAt = row.TutorPaid ? paidAt.AddDays(1) : null
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task<Role> EnsureRoleAsync(TutorPlatformDbContext db, string roleName)
