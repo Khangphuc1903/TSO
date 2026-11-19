@@ -239,9 +239,15 @@ BEGIN
     IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NULL
         EXEC(N'ALTER TABLE dbo.Payments ADD GatewayTransactionId NVARCHAR(100) NULL');
     IF COL_LENGTH('dbo.Payments','GatewayResponseCode') IS NULL
-        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayResponseCode NVARCHAR(50) NULL');
+        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayResponseCode NVARCHAR(1000) NULL');
     IF COL_LENGTH('dbo.Payments','CallbackReceivedAt') IS NULL
         EXEC(N'ALTER TABLE dbo.Payments ADD CallbackReceivedAt DATETIME NULL');
+    IF COL_LENGTH('dbo.Payments','GatewayResponseCode') IS NOT NULL
+       AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Payments') AND name = N'GatewayResponseCode') < 2000
+        ALTER TABLE dbo.Payments ALTER COLUMN GatewayResponseCode NVARCHAR(1000) NULL;
+    IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NOT NULL
+       AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Payments') AND name = N'GatewayTransactionId') < 400
+        ALTER TABLE dbo.Payments ALTER COLUMN GatewayTransactionId NVARCHAR(200) NULL;
 END
 """);
     }

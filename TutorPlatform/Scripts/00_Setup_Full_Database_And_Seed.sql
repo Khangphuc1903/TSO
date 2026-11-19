@@ -343,7 +343,7 @@ CREATE TABLE Payments (
 ALTER TABLE Payments
 ADD
     GatewayTransactionId NVARCHAR(100) NULL,
-    GatewayResponseCode  NVARCHAR(50) NULL,
+    GatewayResponseCode  NVARCHAR(1000) NULL,
     PaymentUrl           NVARCHAR(1000) NULL,
     CallbackReceivedAt   DATETIME NULL;
 
