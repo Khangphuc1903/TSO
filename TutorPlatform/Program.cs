@@ -171,6 +171,19 @@ IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','Attac
 IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','AttachmentType') IS NULL
     EXEC(N'ALTER TABLE Messages ADD AttachmentType NVARCHAR(50) NULL');
 
+IF OBJECT_ID(N'dbo.Wishlist', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.Wishlist (
+        WishlistId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        TutorId INT NOT NULL,
+        AddedAt DATETIME NOT NULL CONSTRAINT DF_Wishlist_AddedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_Wishlist_Student FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_Wishlist_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT UQ_Wishlist UNIQUE (StudentId, TutorId)
+    );
+END
+
 IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
     EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked DEFAULT (0)');
 

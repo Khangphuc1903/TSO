@@ -150,7 +150,9 @@ public class BookingService
             .Include(b => b.Payments)
             .AsQueryable();
 
-        query = role.Equals("Tutor", StringComparison.OrdinalIgnoreCase)
+        var asTutor = role.Equals("Tutor", StringComparison.OrdinalIgnoreCase)
+            || await _db.TutorProfiles.AsNoTracking().AnyAsync(t => t.TutorId == userId, cancellationToken);
+        query = asTutor
             ? query.Where(b => b.TutorId == userId)
             : query.Where(b => b.StudentId == userId);
 
