@@ -384,8 +384,24 @@ public sealed class SosService
         if (changed == 1)
             await PublishSessionEndedAsync(updated, cancellationToken);
 
-        await EnsurePayableBookingAsync(updated, cancellationToken);
-        return await WithReviewAsync(updated, userId, cancellationToken);
+        try
+        {
+            await EnsurePayableBookingAsync(updated, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Khong tao duoc booking sau khi ket thuc SOS #{SessionId}", sessionId);
+        }
+
+        try
+        {
+            return await WithReviewAsync(updated, userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Khong gan danh gia sau khi ket thuc SOS #{SessionId}", sessionId);
+            return MapSession(updated);
+        }
     }
 
     public async Task<SosSessionDto> ReviewSessionAsync(

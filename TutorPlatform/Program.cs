@@ -166,6 +166,11 @@ IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyG
 IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMessages','AttachmentType') IS NULL
     EXEC(N'ALTER TABLE StudyGroupMessages ADD AttachmentType NVARCHAR(50) NULL');
 
+IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','AttachmentUrl') IS NULL
+    EXEC(N'ALTER TABLE Messages ADD AttachmentUrl NVARCHAR(500) NULL');
+IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','AttachmentType') IS NULL
+    EXEC(N'ALTER TABLE Messages ADD AttachmentType NVARCHAR(50) NULL');
+
 IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
     EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked DEFAULT (0)');
 

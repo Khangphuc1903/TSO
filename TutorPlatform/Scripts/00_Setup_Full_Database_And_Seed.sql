@@ -399,6 +399,8 @@ CREATE TABLE Messages (
     ConversationId  INT             NOT NULL,
     SenderId        INT             NOT NULL,
     Content         NVARCHAR(2000)  NOT NULL,
+    AttachmentUrl   NVARCHAR(500)   NULL,
+    AttachmentType  NVARCHAR(50)    NULL,
     IsRead          BIT             NOT NULL DEFAULT 0,
     SentAt          DATETIME        NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_Msg_Conversation FOREIGN KEY (ConversationId) REFERENCES Conversations(ConversationId),

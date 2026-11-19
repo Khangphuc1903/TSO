@@ -148,8 +148,17 @@ export default function SosSession() {
         prev.some((m) => Number(m.messageId) === Number(msg.messageId)) ? prev : [...prev, msg]
       );
     });
-    hub.on("SosSessionEnded", () => {
+    const closeForEveryone = () => {
       hangup(false);
+      setSession((current) =>
+        current
+          ? { ...current, endedAt: current.endedAt || new Date().toISOString() }
+          : current
+      );
+    };
+    hub.on("SosSessionEnded", (payload) => {
+      if (payload?.sessionId && Number(payload.sessionId) !== Number(sessionId)) return;
+      closeForEveryone();
       load().catch(() => {});
     });
     hub.on("SosCallSignal", async (payload) => {
@@ -170,13 +179,24 @@ export default function SosSession() {
         }
       }
       if (payload.type === "hangup") hangup(false);
+      if (payload.type === "session-ended") {
+        closeForEveryone();
+        endSosSession(sessionId).then(setSession).catch(() => {});
+      }
+    });
+    const joinRooms = async () => {
+      await hub.invoke("JoinSosSession", Number(sessionId));
+      const data = await getSosSession(sessionId);
+      if (data?.conversationId) {
+        convRef.current = data.conversationId;
+        await hub.invoke("JoinConversation", data.conversationId);
+      }
+    };
+    hub.onreconnected(() => {
+      joinRooms().catch(() => {});
     });
     hub.start()
-      .then(async () => {
-        await hub.invoke("JoinSosSession", Number(sessionId));
-        const data = await getSosSession(sessionId);
-        if (data?.conversationId) await hub.invoke("JoinConversation", data.conversationId);
-      })
+      .then(joinRooms)
       .catch(() => {});
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => {
@@ -201,6 +221,10 @@ export default function SosSession() {
     if (end && end.getTime() <= Date.now() && !autoEndedRef.current) {
       autoEndedRef.current = true;
       hangup(true);
+      hubRef.current?.invoke("SosCallSignal", Number(sessionId), "session-ended", "{}").catch(() => {});
+      setSession((current) =>
+        current ? { ...current, endedAt: current.endedAt || new Date().toISOString() } : current
+      );
       endSosSession(sessionId).then(setSession).catch(() => {});
     }
   }, [now, session?.endsAt, session?.endedAt, sessionId]);
@@ -243,7 +267,16 @@ export default function SosSession() {
   };
 
   const onEnd = async () => {
+    autoEndedRef.current = true;
+    setSession((current) =>
+      current ? { ...current, endedAt: current.endedAt || new Date().toISOString() } : current
+    );
     await hangup(true);
+    try {
+      await hubRef.current?.invoke("SosCallSignal", Number(sessionId), "session-ended", "{}");
+    } catch {
+      /* bên kia vẫn nhận SosSessionEnded từ server */
+    }
     try {
       const data = await endSosSession(sessionId);
       setSession(data);
