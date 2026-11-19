@@ -341,7 +341,7 @@ export default function Home() {
         ) : featured.length === 0 ? (
           <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center shadow-sm">
             <GraduationCap size={40} className="text-slate-300 mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Chưa có gia sư nào. Hãy thử lại sau hoặc kiểm tra kết nối Backend.</p>
+            <p className="text-sm text-slate-500">Chưa có gia sư nào..</p>
             <div className="mt-5">
               <Button to="/tutors" variant="outline">
                 Xem tất cả gia sư
