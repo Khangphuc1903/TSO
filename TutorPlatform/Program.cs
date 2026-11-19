@@ -266,6 +266,8 @@ BEGIN
     IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NOT NULL
        AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Payments') AND name = N'GatewayTransactionId') < 400
         ALTER TABLE dbo.Payments ALTER COLUMN GatewayTransactionId NVARCHAR(200) NULL;
+    IF COL_LENGTH('dbo.Payments','TutorPaidAt') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD TutorPaidAt DATETIME NULL');
 END
 """);
     }

@@ -267,9 +267,13 @@ public class AdminController : ControllerBase
                 platformFee = split.PlatformFee,
                 status = p.Status,
                 paidAt = p.PaidAt,
+                tutorBankCode = tutorBank?.BankCode,
                 tutorBankName = tutorBank?.BankName,
                 tutorAccountNumber = tutorBank?.AccountNumber,
                 tutorAccountName = tutorBank?.AccountHolderName,
+                tutorQrCodeUrl = tutorBank?.QrCodeUrl,
+                bookingStatus = p.Booking.Status,
+                tutorPaidAt = p.TutorPaidAt,
                 refunds = p.Refunds.Select(r => new
                 {
                     r.RefundId,
@@ -285,6 +289,53 @@ public class AdminController : ControllerBase
         });
 
         return Ok(rows);
+    }
+
+    [HttpPost("payouts/{paymentId:int}/confirm")]
+    public async Task<IActionResult> ConfirmPayout(int paymentId, CancellationToken cancellationToken)
+    {
+        var payment = await _db.Payments
+            .Include(p => p.Booking)
+            .FirstOrDefaultAsync(p => p.PaymentId == paymentId, cancellationToken);
+        if (payment == null)
+            return NotFound(new { message = "Không tìm thấy khoản thanh toán." });
+        if (payment.Status != "Success")
+            return BadRequest(new { message = "Chỉ xác nhận chuyển tiền khi học viên đã thanh toán thành công." });
+        if (payment.TutorPaidAt != null)
+            return Ok(new { message = "Khoản này đã được xác nhận chuyển trước đó." });
+
+        payment.TutorPaidAt = DateTime.UtcNow;
+        var booking = payment.Booking;
+        if (booking.Status is not ("Cancelled" or "Rejected"))
+        {
+            booking.Status = "Completed";
+            booking.CompletedAt ??= DateTime.UtcNow;
+        }
+
+        if (CurrentUserId > 0)
+        {
+            _db.AdminActionLogs.Add(new AdminActionLog
+            {
+                AdminId = CurrentUserId,
+                ActionType = "ConfirmTutorPayout",
+                TargetEntityType = "Payment",
+                TargetEntityId = payment.PaymentId,
+                Description = $"Đã chuyển tiền gia sư cho buổi #{booking.BookingId}.",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await _notifications.NotifyAsync(
+            booking.TutorId,
+            "TutorPayout",
+            "Đã nhận học phí",
+            $"Quản trị đã chuyển học phí buổi học #{booking.BookingId}. Đơn được ghi hoàn thành.",
+            "Booking",
+            booking.BookingId,
+            cancellationToken);
+
+        return Ok(new { message = $"Đã xác nhận chuyển tiền. Buổi học #{booking.BookingId} được ghi hoàn thành." });
     }
 
     [HttpGet("revenue")]
@@ -310,9 +361,11 @@ public class AdminController : ControllerBase
                     net = g.Sum(x => x.Split.Net),
                     tutorShare = g.Sum(x => x.Split.TutorShare),
                     platformFee = g.Sum(x => x.Split.PlatformFee),
+                    bankCode = bank?.BankCode,
                     bankName = bank?.BankName,
                     accountNumber = bank?.AccountNumber,
-                    accountName = bank?.AccountHolderName
+                    accountName = bank?.AccountHolderName,
+                    qrCodeUrl = bank?.QrCodeUrl
                 };
             })
             .OrderByDescending(x => x.tutorShare)
@@ -406,7 +459,7 @@ public class AdminController : ControllerBase
         var lowConfidenceFaces = await _db.FaceVerificationLogs.CountAsync(f => f.MatchConfidenceScore < 70, cancellationToken);
         var pendingReports = await _db.Reports.CountAsync(r => r.Status == "Pending", cancellationToken);
         var bookings = await _db.Bookings.CountAsync(cancellationToken);
-        var paidPayments = await _db.Payments.CountAsync(p => p.Status == "Paid" || p.Status == "Completed", cancellationToken);
+        var paidPayments = await _db.Payments.CountAsync(p => p.Status == "Success" || p.Status == "Paid" || p.Status == "Completed", cancellationToken);
         var testsPassed = await _db.TutorTestAttempts.CountAsync(a => a.IsPassed, cancellationToken);
 
         // Monthly growth: past 12 months

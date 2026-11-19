@@ -31,6 +31,8 @@ public partial class Payment
 
     public DateTime? CallbackReceivedAt { get; set; }
 
+    public DateTime? TutorPaidAt { get; set; }
+
     public virtual Booking Booking { get; set; } = null!;
 
     public virtual User PayerUser { get; set; } = null!;

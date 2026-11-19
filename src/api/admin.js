@@ -14,6 +14,7 @@ export const adminApi = {
   updateQuestion: (id, body) => axiosClient.put(`/admin/questions/${id}`, body).then((r) => r.data),
   toggleQuestion: (id) => axiosClient.post(`/admin/questions/${id}/toggle`).then((r) => r.data),
   payouts: () => axiosClient.get("/admin/payouts").then((r) => r.data),
+  confirmPayout: (paymentId) => axiosClient.post(`/admin/payouts/${paymentId}/confirm`).then((r) => r.data),
   revenue: () => axiosClient.get("/admin/revenue").then((r) => r.data),
   settings: () => axiosClient.get("/admin/settings").then((r) => r.data),
   saveSettings: (settings) => axiosClient.put("/admin/settings", { settings }).then((r) => r.data),

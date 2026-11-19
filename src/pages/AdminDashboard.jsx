@@ -3,6 +3,7 @@ import { Ban, BarChart3, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDas
 import { useNavigate } from "react-router-dom";
 import { getUser, isLoggedIn } from "../auth";
 import { adminApi } from "../api/admin";
+import { VIETNAMESE_BANKS } from "../components/BankAccountManager";
 import { getSubjects } from "../api/tutorSearch";
 import { API_ORIGIN } from "../api/axiosClient";
 
@@ -60,6 +61,25 @@ function HoldImage({ id, side, label }) {
 function media(path) {
   if (!path) return "";
   return path.startsWith("http") ? path : `${API_ORIGIN}${path}`;
+}
+
+const BOOKING_STATUS = {
+  Pending: "Chờ xác nhận",
+  Confirmed: "Đã xác nhận",
+  Completed: "Hoàn thành",
+  Cancelled: "Đã hủy",
+  Rejected: "Từ chối",
+};
+
+function payoutQr(row) {
+  const bank = VIETNAMESE_BANKS.find((item) => item.code === row.tutorBankCode);
+  const amount = Math.round(Number(row.tutorShare) || 0);
+  if (bank && row.tutorAccountNumber && amount > 0) {
+    const info = encodeURIComponent(`TSG ${row.bookingId}`.slice(0, 25));
+    const name = encodeURIComponent(row.tutorAccountName || "");
+    return `https://img.vietqr.io/image/${bank.bin}-${row.tutorAccountNumber}-compact2.png?amount=${amount}&addInfo=${info}&accountName=${name}`;
+  }
+  return media(row.tutorQrCodeUrl);
 }
 
 const emptyQuestion = {
@@ -620,7 +640,7 @@ export default function AdminDashboard() {
         {tab === "payouts" && (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">
-              Học viên trả đủ học phí. Hoàn tiền được trừ trước, phần còn lại mới khấu trừ 20% cho nền tảng. Số in đậm là tiền cần chuyển vào tài khoản gia sư.
+              Mỗi buổi đã thu tiền có mã QR của gia sư và số tiền cần chuyển (sau khi trừ hoàn và 20% nền tảng). Bấm xác nhận khi đã chuyển xong, đơn được ghi hoàn thành.
             </p>
             {payouts.length === 0 ? (
               <div className="bg-white rounded-2xl border p-6 text-sm text-slate-500">Chưa có thanh toán thành công.</div>
@@ -642,11 +662,39 @@ export default function AdminDashboard() {
                   <p>Khấu trừ web 20%: <span className="font-bold">{vnd(row.platformFee)}</span></p>
                   <p>Gia sư nhận: <span className="font-bold">{vnd(row.tutorShare)}</span></p>
                 </div>
-                <p className="mt-2 text-slate-700">
-                  Tài khoản gia sư: {row.tutorBankName && row.tutorAccountNumber
-                    ? `${row.tutorBankName} · ${row.tutorAccountNumber} · ${row.tutorAccountName}`
-                    : "Gia sư chưa lưu số tài khoản."}
-                </p>
+                <div className="mt-4 flex flex-wrap items-start gap-4">
+                  {payoutQr(row) ? (
+                    <img src={payoutQr(row)} alt="Mã QR của gia sư" className="w-44 rounded-xl border bg-white" />
+                  ) : (
+                    <p className="text-sm text-amber-700">Gia sư chưa lưu QR hoặc số tài khoản.</p>
+                  )}
+                  <div>
+                    <p className="text-xs text-slate-500">Số tiền cần chuyển</p>
+                    <p className="text-2xl font-extrabold text-brand-700">{vnd(row.tutorShare)}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Trạng thái đơn: {BOOKING_STATUS[row.bookingStatus] || row.bookingStatus || "—"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {row.tutorBankName && row.tutorAccountNumber
+                        ? `${row.tutorBankName} · ${row.tutorAccountNumber} · ${row.tutorAccountName}`
+                        : "Gia sư chưa lưu số tài khoản."}
+                    </p>
+                    {row.tutorPaidAt ? (
+                      <p className="mt-3 text-sm font-semibold text-emerald-700">
+                        Đã chuyển · đơn hoàn thành · {new Date(row.tutorPaidAt).toLocaleString("vi-VN")}
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy || Number(row.tutorShare) <= 0}
+                        onClick={() => run(() => adminApi.confirmPayout(row.paymentId))}
+                        className="mt-3 h-10 px-4 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50"
+                      >
+                        Xác nhận đã chuyển
+                      </button>
+                    )}
+                  </div>
+                </div>
                 {(row.refunds || []).map((refund) => (
                   <p key={refund.refundId} className="mt-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-amber-900">
                     Hoàn {Number(refund.amount || 0).toLocaleString("vi-VN")} ₫ ({refund.refundPercent}%).
