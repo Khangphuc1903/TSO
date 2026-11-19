@@ -335,6 +335,62 @@ BEGIN
         CONSTRAINT FK_TMS_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId)
     );
 END
+
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','HiringMode') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD HiringMode NVARCHAR(20) NOT NULL CONSTRAINT DF_StudyGroups_HiringMode2 DEFAULT (N''Standard'')');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','BudgetPerSession') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD BudgetPerSession DECIMAL(10, 0) NULL');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','BidDeadline') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD BidDeadline DATETIME NULL');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','TutorRequirements') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD TutorRequirements NVARCHAR(1000) NULL');
+IF OBJECT_ID(N'dbo.StudyGroupMembers', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMembers','JoinMessage') IS NULL
+    EXEC(N'ALTER TABLE StudyGroupMembers ADD JoinMessage NVARCHAR(500) NULL');
+
+IF OBJECT_ID(N'dbo.StudyGroupBids', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupBids (
+        BidId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        GroupId INT NOT NULL,
+        TutorId INT NOT NULL,
+        ProposedPrice DECIMAL(10, 0) NOT NULL,
+        CurriculumNote NVARCHAR(1000) NULL,
+        CertificateNote NVARCHAR(500) NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_SGB_Status DEFAULT (N'Pending'),
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SGB_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_StudyGroupBid UNIQUE (GroupId, TutorId),
+        CONSTRAINT FK_SGB_Group FOREIGN KEY (GroupId) REFERENCES dbo.StudyGroups(GroupId),
+        CONSTRAINT FK_SGB_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.StudyGroupBidVotes', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroupBids', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupBidVotes (
+        VoteId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        BidId INT NOT NULL,
+        VoterUserId INT NOT NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SGBV_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_StudyGroupBidVote UNIQUE (BidId, VoterUserId),
+        CONSTRAINT FK_SGBV_Bid FOREIGN KEY (BidId) REFERENCES dbo.StudyGroupBids(BidId),
+        CONSTRAINT FK_SGBV_Voter FOREIGN KEY (VoterUserId) REFERENCES dbo.Users(UserId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.Subjects', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Toán')
+        UPDATE dbo.Subjects SET SubjectName = N'Toán' WHERE SubjectName = N'Toan';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Tiếng Anh')
+        UPDATE dbo.Subjects SET SubjectName = N'Tiếng Anh' WHERE SubjectName = N'Tieng Anh';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Vật Lý')
+        UPDATE dbo.Subjects SET SubjectName = N'Vật Lý' WHERE SubjectName = N'Vat Ly';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Hóa Học')
+        UPDATE dbo.Subjects SET SubjectName = N'Hóa Học' WHERE SubjectName = N'Hoa Hoc';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Sinh Học')
+        UPDATE dbo.Subjects SET SubjectName = N'Sinh Học' WHERE SubjectName = N'Sinh Hoc';
+    UPDATE dbo.Subjects SET SubjectName = N'Ngữ Văn' WHERE SubjectName = N'Van';
+END
 """);
     }
     catch (Exception ex)
