@@ -70,6 +70,14 @@ public static class DemoTutorSeeder
                 "Sinh học cấp 3, sơ đồ tư duy và ôn chuyên đề di truyền.", "Đại học Khoa học Tự nhiên", "Sư phạm Sinh", 6, 160000, 250000, "Online", 4.80m, 12, new[] { "Sinh Hoc" }),
             Tutor("tutor.giabao@tsg.com", "Đỗ Gia Bảo", "Male", "Hà Nội", "Đống Đa", "40 Tây Sơn", "/uploads/avatars/gia-bao.jpg", "0902000011",
                 "Toán lớp 9 và luyện thi vào 10. Chữa đề theo dạng.", "Đại học Bách khoa Hà Nội", "Toán tin", 3, 170000, 260000, "Both", 4.60m, 6, new[] { "Toan" }),
+            Tutor("tutor.nhatnam@tsg.com", "Nguyễn Nhật Nam", "Male", "TP. Hồ Chí Minh", "Quận 1", "21 Nguyễn Huệ", "/uploads/avatars/nhat-nam.jpg", "0902000012",
+                "Tiếng Anh giao tiếp THPT. Sửa phát âm và viết đoạn theo chủ đề.", "Đại học Ngoại ngữ - ĐHQG Hà Nội", "Sư phạm Tiếng Anh", 5, 200000, 320000, "Online", 4.80m, 13, new[] { "Tieng Anh" }),
+            Tutor("tutor.duckhai@tsg.com", "Trần Đức Khải", "Male", "Hà Nội", "Thanh Xuân", "8 Nguyễn Trãi", "/uploads/avatars/duc-khai.jpg", "0902000013",
+                "Toán THPT, công thức cần nhớ và bài tập vận dụng.", "Đại học Sư phạm Hà Nội", "Sư phạm Toán", 4, 180000, 280000, "Both", 4.70m, 9, new[] { "Toan" }),
+            Tutor("tutor.phuongthao@tsg.com", "Lê Phương Thảo", "Female", "Hà Nội", "Hoàn Kiếm", "5 Hàng Bài", "/uploads/avatars/phuong-thao.jpg", "0902000014",
+                "Tiếng Việt tiểu học. Tập đọc, chính tả và kể chuyện.", "Đại học Sư phạm Hà Nội", "Giáo dục Tiểu học", 6, 140000, 220000, "Offline", 4.90m, 15, new[] { "Tiếng Việt" }),
+            Tutor("tutor.quynhchi@tsg.com", "Phạm Quỳnh Chi", "Female", "Đà Nẵng", "Sơn Trà", "16 Phạm Văn Đồng", "/uploads/avatars/quynh-chi.jpg", "0902000015",
+                "Ngữ văn THPT, đọc hiểu và nghị luận. Chữa bài theo dàn ý.", "Đại học Sư phạm - ĐH Đà Nẵng", "Sư phạm Ngữ văn", 5, 160000, 250000, "Both", 4.80m, 11, new[] { "Van", "Ngữ Văn" }),
         };
 
         var createdTutors = new List<User>();
@@ -80,6 +88,9 @@ public static class DemoTutorSeeder
             createdTutors.Add(user);
             await EnsureTutorProfileAsync(db, user.UserId, item, subjects);
         }
+
+        await ReplaceAvatarAsync(db, "tutor@tutor.com", "/uploads/avatars/minh-hoang.jpg");
+        await ReplaceAvatarAsync(db, "tutor.minh@tsg.com", "/uploads/avatars/gia-minh.jpg");
 
         await EnsureDemoReviewsAsync(db, student.UserId, createdTutors, subjects);
 
@@ -452,6 +463,14 @@ public static class DemoTutorSeeder
             });
             await db.SaveChangesAsync();
         }
+    }
+
+    private static async Task ReplaceAvatarAsync(TutorPlatformDbContext db, string email, string avatarUrl)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null || user.AvatarUrl == avatarUrl) return;
+        user.AvatarUrl = avatarUrl;
+        await db.SaveChangesAsync();
     }
 
     private static async Task RenameLegacyTutorAsync(TutorPlatformDbContext db, string fromEmail, string toEmail)
