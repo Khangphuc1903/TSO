@@ -391,6 +391,77 @@ BEGIN
         UPDATE dbo.Subjects SET SubjectName = N'Sinh Học' WHERE SubjectName = N'Sinh Hoc';
     UPDATE dbo.Subjects SET SubjectName = N'Ngữ Văn' WHERE SubjectName = N'Van';
 END
+
+IF OBJECT_ID(N'dbo.Conversations', N'U') IS NOT NULL AND COL_LENGTH('Conversations','GroupId') IS NULL
+    EXEC(N'ALTER TABLE Conversations ADD GroupId INT NULL');
+
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.SosRequests (
+        RequestId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        SubjectId INT NOT NULL,
+        TopicId INT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        QuestionNote NVARCHAR(1000) NULL,
+        FeeAmount DECIMAL(10, 0) NOT NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_SosReq_Status2 DEFAULT (N'Open'),
+        ClaimedByTutorId INT NULL,
+        ConversationId INT NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SosReq_CreatedAt2 DEFAULT (GETDATE()),
+        ExpiresAt DATETIME NOT NULL,
+        ClaimedAt DATETIME NULL,
+        CONSTRAINT FK_SosReq_Student2 FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_SosReq_Subject2 FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId),
+        CONSTRAINT FK_SosReq_Tutor2 FOREIGN KEY (ClaimedByTutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT FK_SosReq_Conv2 FOREIGN KEY (ConversationId) REFERENCES dbo.Conversations(ConversationId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL AND COL_LENGTH('SosRequests','TopicId') IS NULL
+    EXEC(N'ALTER TABLE SosRequests ADD TopicId INT NULL');
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL AND COL_LENGTH('SosRequests','ExpiresAt') IS NULL
+    EXEC(N'ALTER TABLE SosRequests ADD ExpiresAt DATETIME NULL');
+
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NULL AND OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.SosSessions (
+        SessionId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        RequestId INT NOT NULL,
+        StudentId INT NOT NULL,
+        TutorId INT NOT NULL,
+        ConversationId INT NULL,
+        VideoRoomId NVARCHAR(200) NULL,
+        StartedAt DATETIME NOT NULL,
+        EndsAt DATETIME NOT NULL,
+        EndedAt DATETIME NULL,
+        DurationMinutes INT NOT NULL CONSTRAINT DF_SosSes_Duration2 DEFAULT (15),
+        FeeAmount DECIMAL(10, 0) NOT NULL,
+        PayoutStatus NVARCHAR(20) NOT NULL CONSTRAINT DF_SosSes_Payout2 DEFAULT (N'Held'),
+        BookingId INT NULL,
+        GatewayTransactionId NVARCHAR(100) NULL,
+        CONSTRAINT UQ_SosSes_Request2 UNIQUE (RequestId),
+        CONSTRAINT FK_SosSes_Request2 FOREIGN KEY (RequestId) REFERENCES dbo.SosRequests(RequestId),
+        CONSTRAINT FK_SosSes_Student2 FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_SosSes_Tutor2 FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT FK_SosSes_Conv2 FOREIGN KEY (ConversationId) REFERENCES dbo.Conversations(ConversationId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL AND COL_LENGTH('SosSessions','VideoRoomId') IS NULL
+    EXEC(N'ALTER TABLE SosSessions ADD VideoRoomId NVARCHAR(200) NULL');
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL AND COL_LENGTH('SosSessions','BookingId') IS NULL
+    EXEC(N'ALTER TABLE SosSessions ADD BookingId INT NULL');
+
+IF OBJECT_ID(N'dbo.PlatformSettings', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosFeeAmount')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosFeeAmount', N'25000', N'Phí SOS cứu viện 15 phút (VNĐ)', GETDATE());
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosDurationMinutes')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosDurationMinutes', N'15', N'Thời lượng phiên SOS (phút)', GETDATE());
+END
 """);
     }
     catch (Exception ex)
