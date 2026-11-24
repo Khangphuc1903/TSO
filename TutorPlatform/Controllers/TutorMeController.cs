@@ -232,10 +232,27 @@ public class TutorMeController : ControllerBase
             : StatusCode(result.StatusCode, new { message = result.Message });
     }
 
+    [HttpPost("tests/heartbeat")]
+    public async Task<IActionResult> HeartbeatTest([FromBody] SubmitTutorTestDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        if (dto?.RunId is not int runId || runId <= 0) return BadRequest(new { message = "Thiếu phiên bài test." });
+        await _tests.HeartbeatRunAsync(id, runId, dto.Answers, cancellationToken);
+        return Ok(new { ok = true });
+    }
+
     [HttpPost("tests/submit")]
     public async Task<IActionResult> SubmitTest([FromBody] SubmitTutorTestDto dto, CancellationToken cancellationToken)
     {
         if (UserId is not int id) return Unauthorized();
+        if (dto == null) return BadRequest(new { message = "Dữ liệu bài làm không hợp lệ." });
+
+        if (dto.RunId is int runId && runId > 0)
+        {
+            var saved = await _tests.FinalizeRunAsync(id, runId, dto, dto.Reason, cancellationToken);
+            if (!saved.Success) return StatusCode(saved.Status, new { message = saved.Message });
+            return Ok(saved.Data);
+        }
 
         if (string.Equals(dto.TestType, "IELTS", StringComparison.OrdinalIgnoreCase))
         {

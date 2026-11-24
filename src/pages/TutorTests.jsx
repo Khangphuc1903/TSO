@@ -22,13 +22,30 @@ import {
   getTutorTestHistory,
   getTutorTestQuestions,
   getTutorWorkspace,
+  heartbeatTutorTest,
   registerTutorTest,
   submitTutorTest,
 } from "../api/study";
+import { API_ORIGIN } from "../api/axiosClient";
 import { getSubjects } from "../api/tutorSearch";
 import { invalidateTutorGate, loadTutorGate } from "../tutorGate";
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
+
+function fullscreenNode() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function requestExamFullscreen(node) {
+  const enter = node?.requestFullscreen || node?.webkitRequestFullscreen;
+  if (!enter) return Promise.reject(new Error("Trình duyệt không hỗ trợ toàn màn hình."));
+  return enter.call(node);
+}
+
+function exitExamFullscreen() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (fullscreenNode() && exit) exit.call(document).catch(() => {});
+}
 
 function levelLabel(value) {
   const map = {
@@ -99,11 +116,43 @@ function mergeSubjects(list) {
   });
 }
 
+const EXAM_RUN_KEY = "tutor-exam-run";
+
 function formatClock(totalSeconds) {
   const s = Math.max(0, totalSeconds);
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const r = s % 60;
+  if (h > 0) return `${h} giờ ${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+function examPayload(session, answers, reason) {
+  return {
+    runId: session?.runId || 0,
+    testType: session?.testType || "Professional",
+    subjectId: session?.subjectId || 0,
+    gradeLevel: session?.gradeLevel,
+    startedAt: session?.startedAt,
+    reason,
+    answers: (session?.questions || []).map((question) => ({
+      questionId: question.questionId,
+      selectedOption: answers?.[question.questionId] || null,
+    })),
+  };
+}
+
+function postExamKeepalive(payload) {
+  const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+  fetch(`${API_ORIGIN}/api/tutor/me/tests/submit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 function retryLeft(iso) {
@@ -195,7 +244,28 @@ export default function TutorTests() {
       navigate("/profile");
       return;
     }
-    load()
+    const recover = async () => {
+      const raw = localStorage.getItem(EXAM_RUN_KEY);
+      if (!raw) return;
+      let saved = null;
+      try { saved = JSON.parse(raw); } catch { saved = null; }
+      if (!saved?.runId) {
+        localStorage.removeItem(EXAM_RUN_KEY);
+        return;
+      }
+      try {
+        const data = await submitTutorTest({
+          ...saved,
+          reason: saved.reason || "Mất kết nối hoặc mất nguồn. Hệ thống đã nộp bài đã lưu.",
+        });
+        localStorage.removeItem(EXAM_RUN_KEY);
+        setResult({ ...data, autoSubmitted: true, disconnect: true });
+      } catch {
+        /* Giữ log cục bộ, server vẫn nộp khi hết giờ hoặc im lặng quá 20 giây. */
+      }
+    };
+    recover()
+      .then(() => load())
       .catch(() => setError("Không tải được bài kiểm tra. Kiểm tra backend đang chạy."))
       .finally(() => setLoading(false));
     loadTutorGate().then((gate) => {
@@ -267,23 +337,28 @@ export default function TutorTests() {
     }
   };
 
-  const submitExam = async ({ auto = false } = {}) => {
+  const submitExam = async ({ auto = false, reason } = {}) => {
     if (!session?.questions?.length || submittedRef.current) return;
     submittedRef.current = true;
     setError("");
     setSubmitting(true);
+    exitExamFullscreen();
+    const closeReason = reason === "leave"
+      ? "Rời bài"
+      : reason === "disconnect"
+        ? "Mất kết nối hoặc mất nguồn. Hệ thống đã nộp bài đã lưu."
+        : auto
+          ? "Hết giờ làm bài"
+          : "Nộp bài";
     try {
-      const data = await submitTutorTest({
-        testType: session.testType || "Professional",
-        subjectId: session.subjectId || subjectId || 0,
-        gradeLevel: session.gradeLevel,
-        startedAt: session.startedAt,
-        answers: Object.entries(answers).map(([questionId, option]) => ({
-          questionId: Number(questionId),
-          selectedOption: option,
-        })),
+      const data = await submitTutorTest(examPayload(session, answers, closeReason));
+      localStorage.removeItem(EXAM_RUN_KEY);
+      setResult({
+        ...data,
+        autoSubmitted: auto,
+        leftEarly: reason === "leave",
+        disconnect: reason === "disconnect",
       });
-      setResult({ ...data, autoSubmitted: auto });
       setSession(null);
       await load();
       invalidateTutorGate();
@@ -347,6 +422,11 @@ export default function TutorTests() {
             submitting={submitting}
             onSubmit={() => submitExam({ auto: false })}
             onTimeout={() => submitExam({ auto: true })}
+            onLeave={() => submitExam({ auto: true, reason: "leave" })}
+            onDisconnect={(payload) => {
+              localStorage.setItem(EXAM_RUN_KEY, JSON.stringify(payload));
+              postExamKeepalive(payload);
+            }}
           />
         ) : result ? (
           <ResultView
@@ -392,8 +472,22 @@ export default function TutorTests() {
   );
 }
 
-function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTimeout }) {
+function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTimeout, onLeave, onDisconnect }) {
   const list = questions.questions || [];
+  const roomRef = useRef(null);
+  const finishingRef = useRef(false);
+  const warnedRef = useRef(false);
+  const lastWarnAt = useRef(0);
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
+  const onDisconnectRef = useRef(onDisconnect);
+  onDisconnectRef.current = onDisconnect;
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const [locked, setLocked] = useState(false);
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  const [warnings, setWarnings] = useState(0);
+  const [lockError, setLockError] = useState("");
   const [left, setLeft] = useState(() => {
     const ends = new Date(questions.endsAt).getTime();
     if (Number.isFinite(ends)) return Math.max(0, Math.floor((ends - Date.now()) / 1000));
@@ -404,6 +498,114 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
   timeoutRef.current = onTimeout;
 
   useEffect(() => {
+    if (submitting) finishingRef.current = true;
+  }, [submitting]);
+
+  useEffect(() => {
+    if (!locked) return undefined;
+    const departed = () => {
+      if (finishingRef.current) return;
+      const now = Date.now();
+      if (warnedRef.current && now - lastWarnAt.current > 800) {
+        finishingRef.current = true;
+        setLeaveAsk(false);
+        onLeaveRef.current();
+        return;
+      }
+      if (!warnedRef.current) {
+        warnedRef.current = true;
+        lastWarnAt.current = now;
+        setWarnings(1);
+        setLeaveAsk(true);
+      }
+    };
+    const onFullscreen = () => {
+      if (!fullscreenNode()) departed();
+    };
+    const onVisible = () => {
+      if (document.hidden) departed();
+    };
+    const onKey = (event) => {
+      if (event.key !== "Escape" && event.key !== "F11") return;
+      event.preventDefault();
+      event.stopPropagation();
+      departed();
+    };
+    const onUnload = (event) => {
+      if (finishingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "Nếu thoát, bài làm sẽ bị nộp ngay.";
+    };
+    const onPageHide = () => {
+      if (finishingRef.current) return;
+      const payload = examPayload(questions, answersRef.current, "Mất kết nối hoặc mất nguồn. Hệ thống đã nộp bài đã lưu.");
+      onDisconnectRef.current?.(payload);
+    };
+    window.history.pushState({ examLock: true }, "", window.location.href);
+    const onBack = () => {
+      window.history.pushState({ examLock: true }, "", window.location.href);
+      departed();
+    };
+    document.addEventListener("fullscreenchange", onFullscreen);
+    document.addEventListener("webkitfullscreenchange", onFullscreen);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("beforeunload", onUnload);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("popstate", onBack);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      document.removeEventListener("webkitfullscreenchange", onFullscreen);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("popstate", onBack);
+    };
+  }, [locked]);
+
+  const enterLock = async () => {
+    setLockError("");
+    try {
+      await requestExamFullscreen(roomRef.current);
+      setLocked(true);
+    } catch (err) {
+      setLockError(err?.message || "Hãy cho phép toàn màn hình rồi bấm lại.");
+    }
+  };
+
+  const stayInExam = async () => {
+    lastWarnAt.current = Date.now();
+    setLockError("");
+    try {
+      await requestExamFullscreen(roomRef.current);
+      setLeaveAsk(false);
+      setLocked(true);
+    } catch {
+      setLeaveAsk(true);
+      setLockError("Chưa vào lại được toàn màn hình. Bài vẫn đang mở.");
+    }
+  };
+
+  const quitExam = () => {
+    finishingRef.current = true;
+    setLeaveAsk(false);
+    onLeave();
+  };
+
+  useEffect(() => {
+    if (!locked || !questions.runId) return undefined;
+    const send = () => {
+      const payload = examPayload(questions, answersRef.current, "");
+      localStorage.setItem(EXAM_RUN_KEY, JSON.stringify(payload));
+      heartbeatTutorTest(payload).catch(() => {});
+    };
+    send();
+    const id = setInterval(send, 8000);
+    return () => clearInterval(id);
+  }, [locked, questions]);
+
+  useEffect(() => {
     const ends = new Date(questions.endsAt).getTime();
     const tick = () => {
       const remain = Number.isFinite(ends)
@@ -412,6 +614,7 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
       setLeft(remain);
       if (remain <= 0 && !timedOut.current) {
         timedOut.current = true;
+        finishingRef.current = true;
         timeoutRef.current();
       }
     };
@@ -423,6 +626,35 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
   const urgent = left <= 60;
 
   return (
+    <div ref={roomRef} className={locked ? "fixed inset-0 z-[80] overflow-y-auto bg-[#F4F7FB] p-4 sm:p-8" : ""}>
+    {!locked ? (
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <ShieldCheck size={18} />
+          </span>
+          <div>
+            <p className="font-semibold text-slate-900">{questions.title || questions.subjectName}</p>
+            <p className="text-xs text-slate-500">Còn {formatClock(left)} · bài bắt đầu khi vào toàn màn hình</p>
+          </div>
+        </div>
+        <h2 className="text-lg font-bold text-slate-900">Quy trình làm bài</h2>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-slate-600">
+          <li>Bài test mở toàn màn hình trong suốt thời gian làm.</li>
+          <li>Không chuyển tab, không bấm Esc hoặc F11 để thoát.</li>
+          <li>Nếu thoát, hệ thống hỏi một câu: thoát thì bài làm bị nộp ngay, câu chưa chọn tính sai.</li>
+          <li>Rời bài lần thứ hai thì bài được nộp luôn, không hỏi lại.</li>
+        </ul>
+        {lockError && <p className="mt-3 text-sm text-red-600">{lockError}</p>}
+        <button
+          type="button"
+          onClick={enterLock}
+          className="mt-5 inline-flex h-11 items-center gap-2 rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white"
+        >
+          <Play size={16} /> Vào làm bài toàn màn hình
+        </button>
+      </div>
+    ) : (
     <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
       <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
@@ -437,6 +669,7 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
               </p>
               <p className="text-xs text-slate-500">
                 {list.length} câu · đạt từ {questions.passThreshold}% · nộp sớm vẫn chấm
+                {warnings > 0 ? " · Đã rời bài 1 lần. Lần sau sẽ bị nộp ngay." : " · Đang khóa toàn màn hình"}
               </p>
             </div>
           </div>
@@ -503,7 +736,10 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
           <button
             type="button"
             disabled={submitting}
-            onClick={onSubmit}
+            onClick={() => {
+              finishingRef.current = true;
+              onSubmit();
+            }}
             className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-medium rounded-lg px-6 py-2.5"
           >
             {submitting ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}
@@ -511,6 +747,35 @@ function TakingView({ questions, answers, setAnswers, submitting, onSubmit, onTi
           </button>
         </div>
       </div>
+    </div>
+    )}
+    {leaveAsk && (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 px-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <h2 className="text-lg font-bold text-slate-900">Bạn đang thoát bài test</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            Nếu thoát, bài làm sẽ bị nộp ngay. Câu chưa chọn được tính là sai. Bạn có chắc muốn thoát không?
+          </p>
+          {lockError && <p className="mt-2 text-sm text-red-600">{lockError}</p>}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={stayInExam}
+              className="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white"
+            >
+              Ở lại làm bài
+            </button>
+            <button
+              type="button"
+              onClick={quitExam}
+              className="h-10 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-600"
+            >
+              Thoát và nộp bài
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
@@ -570,7 +835,13 @@ function ResultView({ result, onList, onRetry }) {
         {result.gradeLevel && result.testType === "Professional" ? ` · ${result.gradeLevel}` : ""}
       </h2>
       <p className={`text-sm font-semibold mt-1 ${result.isPassed ? "text-emerald-600" : "text-red-500"}`}>
-        {result.autoSubmitted ? "Hết giờ — đã tự nộp. " : ""}
+        {result.disconnect
+          ? "Mất kết nối hoặc mất nguồn — hệ thống đã nộp bài đã lưu. "
+          : result.leftEarly
+            ? "Bạn đã rời bài — hệ thống đã nộp bài. "
+            : result.autoSubmitted
+              ? "Hết giờ — đã tự nộp. "
+              : ""}
         {result.isPassed ? "Đạt bài kiểm tra" : "Chưa đạt"}
       </p>
       <div className="mx-auto max-w-xs rounded-xl border border-slate-100 bg-slate-50 p-4 mt-5 mb-6">
@@ -581,7 +852,7 @@ function ResultView({ result, onList, onRetry }) {
       </div>
       {!result.isPassed && wait > 0 && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4 inline-block">
-          Thi lại sau 30 phút · còn {formatClock(wait)}
+          Lần này chờ {Math.min(24, Math.max(1, result.attemptNumber || 1))} giờ · còn {formatClock(wait)}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-center gap-3">
@@ -650,6 +921,12 @@ function WizardView({
   common,
   history,
 }) {
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setClock((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const tests = subjectsLocked
     ? chosenSubjects.map((chosen) => ({
         ...chosen,
@@ -744,6 +1021,7 @@ function WizardView({
                     <p className="text-xs text-slate-400">
                       {levelLabel(subj.educationLevel)} · 25 phút
                       {info.grade?.latestScorePercent != null ? ` · lần gần nhất ${info.grade.latestScorePercent}%` : ""}
+                      {blocked ? ` · còn ${formatClock(wait)} mới được thi lại` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -788,7 +1066,10 @@ function WizardView({
               <div key={item.testType} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
                 <div>
                   <p className="font-semibold text-slate-900">{item.title || "Bài test IELTS"}</p>
-                  <p className="text-xs text-slate-400">{item.questionCount || 0} câu · 25 phút</p>
+                  <p className="text-xs text-slate-400">
+                    {item.questionCount || 0} câu · 25 phút
+                    {blocked ? ` · còn ${formatClock(wait)} mới được thi lại` : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={item.status} />
@@ -813,7 +1094,7 @@ function WizardView({
           <ShieldCheck size={18} className="text-brand-600" />
           <div>
             <h2 className="text-sm font-bold text-slate-800">3. Bài an toàn và kỹ năng sư phạm</h2>
-            <p className="text-xs text-slate-500">Làm sau bài chuyên môn. Mỗi bài 25 phút, trượt thì thi lại sau 30 phút.</p>
+            <p className="text-xs text-slate-500">Làm sau bài chuyên môn. Mỗi bài 25 phút. Trượt lần đầu chờ 1 giờ, mỗi lần trượt thêm 1 giờ.</p>
           </div>
         </div>
         <div className="divide-y divide-slate-100">
@@ -827,7 +1108,10 @@ function WizardView({
               <div key={item.testType} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
                 <div>
                   <p className="font-semibold text-slate-900">{item.title}</p>
-                  <p className="text-xs text-slate-400">{item.questionCount || 0} câu · 25 phút</p>
+                  <p className="text-xs text-slate-400">
+                    {item.questionCount || 0} câu · 25 phút
+                    {blocked ? ` · còn ${formatClock(wait)} mới được thi lại` : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={item.status} />

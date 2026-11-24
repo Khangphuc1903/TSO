@@ -30,6 +30,8 @@ export default function Onboarding() {
     getMyProfile()
       .then((p) => {
         if (!p.needsOnboarding && (p.role || "").toLowerCase() !== "pending") {
+          sessionStorage.removeItem("needsOnboarding");
+          localStorage.removeItem("needsOnboarding");
           navigate(homeForRole(p.role), { replace: true });
           return;
         }

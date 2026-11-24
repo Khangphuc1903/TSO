@@ -107,6 +107,7 @@ builder.Services.AddSingleton(new PayOS.PayOSClient(
 
 builder.Services.AddHostedService<LessonReminderService>();
 builder.Services.AddHostedService<SosSessionExpiryService>();
+builder.Services.AddHostedService<TutorTestRunExpiryService>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 10_000_000;
@@ -158,6 +159,25 @@ IF OBJECT_ID(N'dbo.Questions', N'U') IS NOT NULL AND COL_LENGTH('Questions','Gra
     EXEC(N'ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL');
 IF OBJECT_ID(N'dbo.TutorTestAttempts', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempts','GradeLevel') IS NULL
     EXEC(N'ALTER TABLE TutorTestAttempts ADD GradeLevel NVARCHAR(50) NULL');
+IF OBJECT_ID(N'dbo.TutorTestRuns', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.TutorTestRuns (
+        RunId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        TutorId INT NOT NULL,
+        TestType NVARCHAR(20) NOT NULL,
+        SubjectId INT NULL,
+        GradeLevel NVARCHAR(50) NULL,
+        QuestionIds NVARCHAR(MAX) NOT NULL,
+        AnswersJson NVARCHAR(MAX) NOT NULL,
+        StartedAt DATETIME NOT NULL,
+        EndsAt DATETIME NOT NULL,
+        LastSeenAt DATETIME NOT NULL,
+        Status NVARCHAR(20) NOT NULL,
+        CloseReason NVARCHAR(300) NULL,
+        AttemptId INT NULL,
+        ClosedAt DATETIME NULL
+    );
+END
 IF OBJECT_ID(N'dbo.TutorSubjects', N'U') IS NOT NULL AND COL_LENGTH('TutorSubjects','GradeLevel') IS NULL
     EXEC(N'ALTER TABLE TutorSubjects ADD GradeLevel NVARCHAR(50) NULL');
 

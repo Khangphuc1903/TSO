@@ -84,6 +84,8 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<TutorTestAttempt> TutorTestAttempts { get; set; }
 
+    public virtual DbSet<TutorTestRun> TutorTestRuns { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<Wishlist> Wishlists { get; set; }
@@ -827,6 +829,20 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.TutorId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Attempt_Tutor");
+        });
+
+        modelBuilder.Entity<TutorTestRun>(entity =>
+        {
+            entity.ToTable("TutorTestRuns");
+            entity.HasKey(e => e.RunId);
+            entity.Property(e => e.TestType).HasMaxLength(20);
+            entity.Property(e => e.GradeLevel).HasMaxLength(50);
+            entity.Property(e => e.Status).HasMaxLength(20);
+            entity.Property(e => e.CloseReason).HasMaxLength(300);
+            entity.Property(e => e.StartedAt).HasColumnType("datetime");
+            entity.Property(e => e.EndsAt).HasColumnType("datetime");
+            entity.Property(e => e.LastSeenAt).HasColumnType("datetime");
+            entity.Property(e => e.ClosedAt).HasColumnType("datetime");
         });
 
         modelBuilder.Entity<User>(entity =>

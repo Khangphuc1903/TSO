@@ -194,6 +194,11 @@ export async function submitTutorTest(payload) {
   return res.data;
 }
 
+export async function heartbeatTutorTest(payload) {
+  const res = await axiosClient.post("/tutor/me/tests/heartbeat", payload, { timeout: 15000 });
+  return res.data;
+}
+
 export async function getTutorIdentity() {
   const res = await axiosClient.get("/tutor/me/identity");
   return res.data;

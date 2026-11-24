@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TutorPlatform.Datas;
 using TutorPlatform.DTOs;
@@ -221,7 +222,6 @@ public class TutorTestService
 
     public async Task<List<TutorTestCommonDto>> ListCommonTestsAsync(int tutorId, CancellationToken cancellationToken)
     {
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
         var pedQuestionsCount = await _db.Questions.CountAsync(
             q => q.IsActive && q.TestType == PedagogicalTestType && q.SubjectId == null && q.GradeLevel == null, cancellationToken);
 
@@ -232,8 +232,13 @@ public class TutorTestService
             .FirstOrDefaultAsync(cancellationToken);
 
         var status = latestAttempt == null ? "Chưa làm" : latestAttempt.IsPassed ? "Đạt" : "Không đạt";
+        var pedFails = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(a => a.TutorId == tutorId && a.TestType == PedagogicalTestType && !a.IsPassed)
+            .Select(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
         var retryAt = (latestAttempt != null && !latestAttempt.IsPassed)
-            ? (DateTime?)latestAttempt.SubmittedAt.Add(cooldown)
+            ? LaterWait(RetryMoment(latestAttempt.SubmittedAt, latestAttempt.AttemptNumber), pedFails)
             : null;
 
         var ieltsCount = await _db.Questions.CountAsync(
@@ -244,8 +249,13 @@ public class TutorTestService
             .OrderByDescending(a => a.SubmittedAt)
             .FirstOrDefaultAsync(cancellationToken);
         var ieltsStatus = ieltsAttempt == null ? "Chưa làm" : ieltsAttempt.IsPassed ? "Đạt" : "Không đạt";
+        var ieltsFails = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(a => a.TutorId == tutorId && a.TestType == IeltsTestType && !a.IsPassed)
+            .Select(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
         var ieltsRetry = (ieltsAttempt != null && !ieltsAttempt.IsPassed)
-            ? (DateTime?)ieltsAttempt.SubmittedAt.Add(cooldown)
+            ? LaterWait(RetryMoment(ieltsAttempt.SubmittedAt, ieltsAttempt.AttemptNumber), ieltsFails)
             : null;
 
         return new List<TutorTestCommonDto>
@@ -272,7 +282,6 @@ public class TutorTestService
     public async Task<TutorPedagogicalTestStatusDto> GetPedagogicalTestStatusAsync(
         int tutorId, CancellationToken cancellationToken)
     {
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
         var latest = await _db.TutorTestAttempts
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId
@@ -301,7 +310,7 @@ public class TutorTestService
             LatestScorePercent = latest?.ScorePercent,
             LatestIsPassed = latest?.IsPassed,
             LatestAttemptNumber = latest?.AttemptNumber,
-            RetryAvailableAt = (latest != null && !latest.IsPassed) ? (DateTime?)latest.SubmittedAt.Add(cooldown) : null
+            RetryAvailableAt = (latest != null && !latest.IsPassed) ? RetryMoment(latest.SubmittedAt, latest.AttemptNumber) : null
         };
     }
 
@@ -318,8 +327,7 @@ public class TutorTestService
 
         var sampled = SampleQuestions(pool, 25);
         var now = DateTime.UtcNow;
-
-        return (true, 200, string.Empty, new TutorPedagogicalTestQuestionsDto
+        var paper = new TutorPedagogicalTestQuestionsDto
         {
             PassThreshold = await GetPassThresholdAsync(PedagogicalTestType, cancellationToken),
             StartedAt = now,
@@ -335,7 +343,9 @@ public class TutorTestService
                 OptionD = question.OptionD,
                 Difficulty = question.Difficulty
             }).ToList()
-        });
+        };
+        paper.RunId = await OpenRunAsync(tutorId, PedagogicalTestType, null, null, paper.Questions.Select(q => q.QuestionId), paper.StartedAt, paper.EndsAt, cancellationToken);
+        return (true, 200, string.Empty, paper);
     }
 
     public async Task<(bool Success, int StatusCode, string Message, TutorPedagogicalTestResultDto? Data)> SubmitPedagogicalTestAsync(
@@ -387,8 +397,7 @@ public class TutorTestService
             .Select(attempt => (int?)attempt.AttemptNumber)
             .MaxAsync(cancellationToken) ?? 0) + 1;
 
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
-        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)RetryMoment(submittedAt, attemptNumber);
 
         var attempt = new TutorTestAttempt
         {
@@ -447,7 +456,7 @@ public class TutorTestService
 
         var sampled = SampleQuestions(pool, 25);
         var now = DateTime.UtcNow;
-        return (true, 200, string.Empty, new TutorTestQuestionsDto
+        var paper = new TutorTestQuestionsDto
         {
             SubjectId = subjectId ?? 0,
             SubjectName = "IELTS",
@@ -468,7 +477,9 @@ public class TutorTestService
                 OptionD = question.OptionD,
                 Difficulty = question.Difficulty
             }).ToList()
-        });
+        };
+        paper.RunId = await OpenRunAsync(tutorId, IeltsTestType, subjectId, null, paper.Questions.Select(q => q.QuestionId), paper.StartedAt, paper.EndsAt, cancellationToken);
+        return (true, 200, string.Empty, paper);
     }
 
     public async Task<(bool Success, int StatusCode, string Message, TutorTestAttemptDto? Data)> SubmitIeltsTestAsync(
@@ -509,8 +520,7 @@ public class TutorTestService
             .Where(attempt => attempt.TutorId == tutorId && attempt.TestType == IeltsTestType)
             .Select(attempt => (int?)attempt.AttemptNumber)
             .MaxAsync(cancellationToken) ?? 0) + 1;
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
-        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)RetryMoment(submittedAt, attemptNumber);
 
         var attempt = new TutorTestAttempt
         {
@@ -570,7 +580,7 @@ public class TutorTestService
 
     public async Task<List<TutorTestAttemptDto>> ListAttemptsAsync(int tutorId, CancellationToken cancellationToken)
     {
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        await CloseStaleRunsAsync(cancellationToken);
         var attempts = await _db.TutorTestAttempts
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId)
@@ -598,7 +608,7 @@ public class TutorTestService
             })
             .ToListAsync(cancellationToken);
 
-        return attempts.Select(attempt => new TutorTestAttemptDto
+        var rows = attempts.Select(attempt => new TutorTestAttemptDto
         {
             AttemptId = attempt.AttemptId,
             TestType = attempt.TestType,
@@ -614,8 +624,16 @@ public class TutorTestService
             AttemptNumber = attempt.AttemptNumber,
             StartedAt = attempt.StartedAt,
             SubmittedAt = attempt.SubmittedAt,
-            RetryAvailableAt = attempt.IsPassed ? null : (DateTime?)attempt.SubmittedAt.Add(cooldown)
+            RetryAvailableAt = attempt.IsPassed ? null : (DateTime?)RetryMoment(attempt.SubmittedAt, attempt.AttemptNumber)
         }).ToList();
+
+        foreach (var group in rows.GroupBy(row => (row.TestType, row.SubjectId, row.GradeLevel)))
+        {
+            var latest = group.OrderByDescending(row => row.SubmittedAt).First();
+            if (latest.IsPassed) continue;
+            latest.RetryAvailableAt = LaterWait(latest.RetryAvailableAt, group.Select(row => row.SubmittedAt));
+        }
+        return rows;
     }
 
     // ---------------- QUESTION SET ----------------
@@ -651,8 +669,7 @@ public class TutorTestService
 
         var sampled = SampleQuestions(pool, 25);
         var now = DateTime.UtcNow;
-
-        return (true, 200, string.Empty, new TutorTestQuestionsDto
+        var paper = new TutorTestQuestionsDto
         {
             SubjectId = subjectId,
             SubjectName = subject.SubjectName,
@@ -672,7 +689,9 @@ public class TutorTestService
                 OptionD = question.OptionD,
                 Difficulty = question.Difficulty
             }).ToList()
-        });
+        };
+        paper.RunId = await OpenRunAsync(tutorId, ProfessionalTestType, subjectId, normalizedGrade, paper.Questions.Select(q => q.QuestionId), paper.StartedAt, paper.EndsAt, cancellationToken);
+        return (true, 200, string.Empty, paper);
     }
 
     // ---------------- SUBMIT + SCORING ----------------
@@ -741,8 +760,7 @@ public class TutorTestService
             .Select(attempt => (int?)attempt.AttemptNumber)
             .MaxAsync(cancellationToken) ?? 0) + 1;
 
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
-        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)RetryMoment(submittedAt, attemptNumber);
 
         var attempt = new TutorTestAttempt
         {
@@ -931,14 +949,13 @@ public class TutorTestService
             }
         }
 
-        // 3. Cooldown between attempts
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
-        var retryAvailableAt = latest.SubmittedAt.Add(cooldown);
+        var retryAvailableAt = RetryMoment(latest.SubmittedAt, latest.AttemptNumber);
         if (DateTime.UtcNow < retryAvailableAt)
         {
             var remaining = retryAvailableAt - DateTime.UtcNow;
+            var hours = Math.Max(1, latest.AttemptNumber);
             var remainingMinutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
-            return (false, 429, $"Bạn cần đợi thời gian ôn tập trước khi thi lại (còn khoảng {remainingMinutes} phút).", retryAvailableAt);
+            return (false, 429, $"Lần thi này phải chờ {hours} giờ. Còn khoảng {remainingMinutes} phút.", retryAvailableAt);
         }
 
         return (true, 200, string.Empty, null);
@@ -1088,7 +1105,6 @@ public class TutorTestService
     private async Task<Dictionary<string, LatestAttempt>> LoadLatestAttemptsAsync(
         int tutorId, CancellationToken cancellationToken)
     {
-        var cooldown = await GetRetryCooldownAsync(cancellationToken);
         var attempts = await _db.TutorTestAttempts
             .AsNoTracking()
             .Where(attempt => attempt.TutorId == tutorId
@@ -1113,7 +1129,7 @@ public class TutorTestService
             var key = KeyOf(attempt.SubjectId!.Value, attempt.GradeLevel);
             if (!result.ContainsKey(key))
             {
-                var retryAt = attempt.IsPassed ? null : (DateTime?)attempt.SubmittedAt.Add(cooldown);
+                var retryAt = attempt.IsPassed ? null : (DateTime?)RetryMoment(attempt.SubmittedAt, attempt.AttemptNumber);
                 result[key] = new LatestAttempt
                 {
                     ScorePercent = attempt.ScorePercent,
@@ -1166,27 +1182,27 @@ public class TutorTestService
             : (testType == PedagogicalTestType ? 80m : DefaultPassThreshold);
     }
 
-    private async Task<TimeSpan> GetRetryCooldownAsync(CancellationToken cancellationToken)
+    private static DateTime? LaterWait(DateTime? hourWait, IEnumerable<DateTime> submittedAt)
     {
-        var minutesStr = await _db.PlatformSettings
-            .AsNoTracking()
-            .Where(s => s.SettingKey == "TEST_RETRY_WAIT_MINUTES")
-            .Select(s => s.SettingValue)
-            .FirstOrDefaultAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var recent = submittedAt
+            .Select(at => at.Kind == DateTimeKind.Utc ? at : DateTime.SpecifyKind(at, DateTimeKind.Utc))
+            .Where(at => at >= now.AddDays(-30))
+            .OrderBy(at => at)
+            .ToList();
+        if (recent.Count < 3) return hourWait;
+        var lockedUntil = recent[0].AddDays(30);
+        if (hourWait == null || lockedUntil > hourWait.Value) return lockedUntil;
+        return hourWait;
+    }
 
-        if (int.TryParse(minutesStr, out var minutes) && minutes > 0)
-            return TimeSpan.FromMinutes(minutes);
-
-        var daysStr = await _db.PlatformSettings
-            .AsNoTracking()
-            .Where(s => s.SettingKey == "TEST_RETRY_WAIT_DAYS")
-            .Select(s => s.SettingValue)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (double.TryParse(daysStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var days) && days > 0)
-            return TimeSpan.FromDays(days);
-
-        return TimeSpan.FromMinutes(30);
+    private static DateTime RetryMoment(DateTime submittedAt, int attemptNumber)
+    {
+        var hours = Math.Clamp(attemptNumber < 1 ? 1 : attemptNumber, 1, 24);
+        var at = submittedAt.Kind == DateTimeKind.Utc
+            ? submittedAt
+            : DateTime.SpecifyKind(submittedAt, DateTimeKind.Utc);
+        return at.AddHours(hours);
     }
 
     private static IQueryable<Question> WhereGrade(IQueryable<Question> query, string gradeLevel)
@@ -1274,6 +1290,172 @@ public class TutorTestService
         public int AttemptNumber { get; set; }
         public DateTime SubmittedAt { get; set; }
         public DateTime? RetryAvailableAt { get; set; }
+    }
+
+    public async Task HeartbeatRunAsync(int tutorId, int runId, List<TutorTestAnswerSubmissionDto>? answers, CancellationToken cancellationToken)
+    {
+        var run = await _db.TutorTestRuns.FirstOrDefaultAsync(r => r.RunId == runId && r.TutorId == tutorId && r.Status == "Open", cancellationToken);
+        if (run == null) return;
+        if (answers != null)
+            run.AnswersJson = JsonSerializer.Serialize(answers);
+        run.LastSeenAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task CloseStaleRunsAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var silentBefore = now.AddSeconds(-20);
+        var rows = await _db.TutorTestRuns
+            .AsNoTracking()
+            .Where(r => r.Status == "Open" && (r.EndsAt <= now || (r.LastSeenAt < r.EndsAt && r.LastSeenAt <= silentBefore)))
+            .Select(r => new { r.RunId, r.TutorId, r.EndsAt })
+            .ToListAsync(cancellationToken);
+        foreach (var row in rows)
+        {
+            var reason = row.EndsAt <= now
+                ? "Hết giờ làm bài"
+                : "Mất kết nối hoặc mất nguồn. Hệ thống đã nộp bài đã lưu.";
+            await FinalizeRunAsync(row.TutorId, row.RunId, new SubmitTutorTestDto(), reason, cancellationToken);
+        }
+    }
+
+    public async Task<(bool Success, int Status, string Message, object? Data)> FinalizeRunAsync(
+        int tutorId, int runId, SubmitTutorTestDto dto, string? reason, CancellationToken cancellationToken)
+    {
+        var run = await _db.TutorTestRuns.FirstOrDefaultAsync(r => r.RunId == runId && r.TutorId == tutorId, cancellationToken);
+        if (run == null)
+            return (false, 404, "Không thấy phiên bài test.", null);
+        if (run.Status == "Submitted" && run.AttemptId is int doneId)
+            return (true, 200, "Bài đã được nộp.", await MapStoredAttemptAsync(doneId, cancellationToken));
+
+        if (dto.Answers is { Count: > 0 })
+            run.AnswersJson = JsonSerializer.Serialize(dto.Answers);
+        run.CloseReason = string.IsNullOrWhiteSpace(reason) ? "Nộp bài" : reason.Trim();
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var claimed = await _db.TutorTestRuns
+            .Where(r => r.RunId == runId && r.TutorId == tutorId && r.Status == "Open")
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, "Closing"), cancellationToken);
+        if (claimed == 0)
+        {
+            var again = await _db.TutorTestRuns.AsNoTracking().FirstAsync(r => r.RunId == runId, cancellationToken);
+            if (again.AttemptId is int existing)
+                return (true, 200, "Bài đã được nộp.", await MapStoredAttemptAsync(existing, cancellationToken));
+            return (false, 409, "Bài đang được nộp.", null);
+        }
+
+        var questionIds = JsonSerializer.Deserialize<List<int>>(run.QuestionIds) ?? new List<int>();
+        var saved = string.IsNullOrWhiteSpace(run.AnswersJson)
+            ? new List<TutorTestAnswerSubmissionDto>()
+            : JsonSerializer.Deserialize<List<TutorTestAnswerSubmissionDto>>(run.AnswersJson) ?? new List<TutorTestAnswerSubmissionDto>();
+        var byId = saved.GroupBy(a => a.QuestionId).ToDictionary(g => g.Key, g => g.Last().SelectedOption);
+        dto.TestType = run.TestType;
+        dto.SubjectId = run.SubjectId ?? dto.SubjectId;
+        dto.GradeLevel = run.GradeLevel ?? dto.GradeLevel;
+        dto.StartedAt = run.StartedAt.Kind == DateTimeKind.Utc ? run.StartedAt : DateTime.SpecifyKind(run.StartedAt, DateTimeKind.Utc);
+        dto.Answers = questionIds.Select(id => new TutorTestAnswerSubmissionDto
+        {
+            QuestionId = id,
+            SelectedOption = byId.TryGetValue(id, out var option) ? option : null
+        }).ToList();
+
+        (bool Success, int Status, string Message, object? Data, int? AttemptId) result;
+        if (string.Equals(run.TestType, IeltsTestType, StringComparison.OrdinalIgnoreCase))
+        {
+            var ielts = await SubmitIeltsTestAsync(tutorId, dto, cancellationToken);
+            result = (ielts.Success, ielts.StatusCode, ielts.Message, ielts.Data, ielts.Data?.AttemptId);
+        }
+        else if (string.Equals(run.TestType, PedagogicalTestType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(run.TestType, "Safety", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(run.TestType, "Pedagogy", StringComparison.OrdinalIgnoreCase))
+        {
+            var ped = await SubmitPedagogicalTestAsync(tutorId, new SubmitTutorPedagogicalTestDto
+            {
+                StartedAt = dto.StartedAt,
+                Answers = dto.Answers
+            }, cancellationToken);
+            result = (ped.Success, ped.StatusCode, ped.Message, ped.Data, ped.Data?.AttemptNumber > 0 ? null : null);
+            if (ped.Success && ped.Data != null)
+            {
+                var attemptId = await _db.TutorTestAttempts
+                    .Where(a => a.TutorId == tutorId && a.TestType == PedagogicalTestType)
+                    .OrderByDescending(a => a.AttemptId)
+                    .Select(a => (int?)a.AttemptId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                result = (true, ped.StatusCode, ped.Message, ped.Data, attemptId);
+            }
+        }
+        else
+        {
+            var pro = await SubmitAsync(tutorId, dto, cancellationToken);
+            result = (pro.Success, pro.StatusCode, pro.Message, pro.Data, pro.Data?.AttemptId);
+        }
+
+        var tracked = await _db.TutorTestRuns.FirstAsync(r => r.RunId == runId, cancellationToken);
+        if (!result.Success)
+        {
+            tracked.Status = "Open";
+            await _db.SaveChangesAsync(cancellationToken);
+            return (false, result.Status, result.Message, null);
+        }
+
+        tracked.Status = "Submitted";
+        tracked.AttemptId = result.AttemptId;
+        tracked.ClosedAt = DateTime.UtcNow;
+        tracked.CloseReason = run.CloseReason;
+        await _db.SaveChangesAsync(cancellationToken);
+        return (true, 200, result.Message, result.Data);
+    }
+
+    private async Task<int> OpenRunAsync(
+        int tutorId, string testType, int? subjectId, string? gradeLevel,
+        IEnumerable<int> questionIds, DateTime startedAt, DateTime endsAt, CancellationToken cancellationToken)
+    {
+        var ids = questionIds.Distinct().ToList();
+        var run = new TutorTestRun
+        {
+            TutorId = tutorId,
+            TestType = testType,
+            SubjectId = subjectId,
+            GradeLevel = gradeLevel,
+            QuestionIds = JsonSerializer.Serialize(ids),
+            AnswersJson = "[]",
+            StartedAt = startedAt,
+            EndsAt = endsAt,
+            LastSeenAt = endsAt,
+            Status = "Open"
+        };
+        _db.TutorTestRuns.Add(run);
+        await _db.SaveChangesAsync(cancellationToken);
+        return run.RunId;
+    }
+
+    private async Task<TutorTestAttemptDto?> MapStoredAttemptAsync(int attemptId, CancellationToken cancellationToken)
+    {
+        var attempt = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Include(a => a.Subject)
+            .FirstOrDefaultAsync(a => a.AttemptId == attemptId, cancellationToken);
+        if (attempt == null) return null;
+        return new TutorTestAttemptDto
+        {
+            AttemptId = attempt.AttemptId,
+            TestType = attempt.TestType,
+            SubjectId = attempt.SubjectId ?? 0,
+            SubjectName = attempt.Subject?.SubjectName ?? attempt.TestType,
+            EducationLevel = attempt.Subject?.EducationLevel ?? "",
+            GradeLevel = attempt.GradeLevel,
+            TotalQuestions = attempt.TotalQuestions,
+            CorrectCount = attempt.CorrectCount,
+            ScorePercent = attempt.ScorePercent,
+            PassThreshold = attempt.PassThreshold,
+            IsPassed = attempt.IsPassed,
+            AttemptNumber = attempt.AttemptNumber,
+            StartedAt = attempt.StartedAt.Kind == DateTimeKind.Utc ? attempt.StartedAt : DateTime.SpecifyKind(attempt.StartedAt, DateTimeKind.Utc),
+            SubmittedAt = attempt.SubmittedAt.Kind == DateTimeKind.Utc ? attempt.SubmittedAt : DateTime.SpecifyKind(attempt.SubmittedAt, DateTimeKind.Utc),
+            RetryAvailableAt = attempt.IsPassed ? null : (DateTime?)RetryMoment(attempt.SubmittedAt, attempt.AttemptNumber)
+        };
     }
 
     private static string? NormalizeOption(string? option)

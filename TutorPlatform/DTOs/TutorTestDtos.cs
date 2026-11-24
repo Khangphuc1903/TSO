@@ -23,6 +23,7 @@ public class TutorTestQuestionsDto
     public DateTime EndsAt { get; set; }
     public string Title => $"{SubjectName} · {GradeLevel}";
     public string TestType { get; set; } = "Professional";
+    public int RunId { get; set; }
     public List<TutorTestQuestionDto> Questions { get; set; } = new();
 }
 
@@ -32,6 +33,8 @@ public class SubmitTutorTestDto
     public int SubjectId { get; set; }
     public string? GradeLevel { get; set; }
     public DateTime? StartedAt { get; set; }
+    public int? RunId { get; set; }
+    public string? Reason { get; set; }
     public List<TutorTestAnswerSubmissionDto> Answers { get; set; } = new();
 }
 
@@ -108,6 +111,7 @@ public class TutorPedagogicalTestQuestionsDto
     public DateTime EndsAt { get; set; }
     public string Title => "Bài kiểm tra Kỹ năng Sư phạm & An toàn";
     public string TestType => "Pedagogical";
+    public int RunId { get; set; }
     public List<TutorTestQuestionDto> Questions { get; set; } = new();
 }
 

@@ -55,6 +55,7 @@ const SETUP_PATHS = ["/tutor-identity", "/tutor-tests"];
 
 export function tutorPathAllowed(pathname, ready) {
   const path = (pathname || "/").split("?")[0];
+  if (path === "/onboarding") return true;
   if (!ready && SETUP_PATHS.includes(path)) return true;
   if (BASIC_PATHS.includes(path)) return true;
   if (path === "/sos" || path.startsWith("/sos/")) return true;
