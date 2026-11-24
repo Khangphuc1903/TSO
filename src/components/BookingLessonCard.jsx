@@ -1,4 +1,5 @@
 import { Calendar, Clock, MapPin, MessageCircle, Wallet } from "lucide-react";
+import { useState } from "react";
 
 const STATUS = {
   Pending: { label: "Chờ xác nhận", className: "bg-orange-50 text-orange-600" },
@@ -13,6 +14,8 @@ export default function BookingLessonCard({
   counterpartName,
   onChat,
   actions,
+  canWriteReport = false,
+  onSaveReport,
 }) {
   let status = STATUS[booking.status] || {
     label: booking.status,
@@ -105,6 +108,84 @@ export default function BookingLessonCard({
         )}
         {actions}
       </div>
+      {booking.status === "Completed" && booking.learnerIsParent && (
+        <LessonReportPanel booking={booking} canWrite={canWriteReport} onSave={onSaveReport} />
+      )}
     </article>
+  );
+}
+
+function LessonReportPanel({ booking, canWrite, onSave }) {
+  const [content, setContent] = useState(booking.lessonReport || "");
+  const [homework, setHomework] = useState(booking.lessonHomework || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!canWrite) {
+    return (
+      <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+        <p className="text-xs font-semibold text-brand-700">Đánh giá buổi học từ gia sư</p>
+        {booking.lessonReport ? (
+          <>
+            <p className="mt-2 text-sm text-slate-700 whitespace-pre-wrap">{booking.lessonReport}</p>
+            {booking.lessonHomework && (
+              <p className="mt-2 text-sm text-slate-600">
+                <span className="font-medium">Bài về nhà: </span>
+                {booking.lessonHomework}
+              </p>
+            )}
+            {booking.lessonReportAt && (
+              <p className="mt-2 text-[11px] text-slate-400">Gửi lúc {booking.lessonReportAt}</p>
+            )}
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">Gia sư chưa gửi đánh giá. Khi có nhận xét, bạn sẽ thấy con đã học những gì ở đây.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="mt-4 rounded-xl border border-slate-200 p-4 space-y-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!onSave) return;
+        setSaving(true);
+        setError("");
+        try {
+          await onSave({ content, homework });
+        } catch (err) {
+          setError(err.response?.data?.message || "Không gửi được đánh giá.");
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <p className="text-xs font-semibold text-slate-700">Đánh giá buổi học cho phụ huynh</p>
+      <textarea
+        required
+        minLength={10}
+        rows={4}
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Con học những gì, mức độ hiểu bài, điểm cần luyện thêm..."
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      />
+      <input
+        value={homework}
+        onChange={(e) => setHomework(e.target.value)}
+        placeholder="Bài về nhà (không bắt buộc)"
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={saving}
+        className="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium disabled:opacity-60"
+      >
+        {saving ? "Đang gửi..." : booking.lessonReport ? "Cập nhật đánh giá" : "Gửi cho phụ huynh"}
+      </button>
+    </form>
   );
 }

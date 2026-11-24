@@ -555,7 +555,9 @@ export default function Checkout() {
                     <MapPin size={15} className="text-brand-600" /> Hình thức & Địa điểm:
                   </span>
                   <p className="text-sm font-bold text-slate-800">
-                    {booking?.teachingMode === "Online"
+                    {String(booking?.location || "").startsWith("SOS:")
+                      ? "Phiên SOS đã hoàn thành. Quét VietQR để thanh toán phí cứu viện."
+                      : booking?.teachingMode === "Online"
                       ? "Học trực tuyến 1-kèm-1 qua Google Meet (Link lớp học được kích hoạt tự động sau khi gia sư duyệt)"
                       : `Học trực tiếp (${booking?.location || "Tại địa chỉ đã thỏa thuận với gia sư"})`}
                   </p>

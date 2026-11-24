@@ -79,6 +79,11 @@ export async function completeBooking(id) {
   return res.data;
 }
 
+export async function saveLessonReport(id, payload) {
+  const res = await axiosClient.post(`/bookings/${id}/lesson-report`, payload);
+  return res.data;
+}
+
 export async function getMyProfile() {
   const res = await axiosClient.get("/auth/me");
   return res.data;
@@ -161,6 +166,11 @@ export async function getTutorTestHistory() {
   return Array.isArray(res.data) ? res.data : [];
 }
 
+export async function commitTeachingSubjects(subjectIds, gradeLevel) {
+  const res = await axiosClient.post("/tutor/me/tests/commit-subjects", { subjectIds, gradeLevel });
+  return res.data;
+}
+
 export async function registerTutorTest(payload) {
   const res = await axiosClient.post("/tutor/me/tests/register", payload);
   return res.data;
@@ -196,6 +206,19 @@ export async function getEkycConfig() {
 
 export async function applyEkycResult(payload) {
   const res = await axiosClient.post("/tutor/me/identity/ekyc-result", payload, { timeout: 120000 });
+  return res.data;
+}
+
+export async function submitManualIdentity(fields) {
+  const form = new FormData();
+  form.append("front", fields.front);
+  form.append("selfie", fields.selfie);
+  form.append("fullName", fields.fullName || "");
+  form.append("idNumber", fields.idNumber || "");
+  form.append("dateOfBirth", fields.dateOfBirth || "");
+  form.append("gender", fields.gender || "");
+  form.append("address", fields.address || "");
+  const res = await axiosClient.post("/tutor/me/identity/manual", form, { timeout: 60000 });
   return res.data;
 }
 

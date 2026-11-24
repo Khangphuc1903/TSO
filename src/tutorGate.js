@@ -62,6 +62,7 @@ export function tutorPathAllowed(pathname, ready) {
   if (["/bookings", "/study-groups/bids", "/sos", "/payments", "/faq", "/about", "/contact", "/help"].includes(path)) {
     return true;
   }
+  if (/^\/study-groups\/\d+$/.test(path)) return true;
   const ownId = String(getUser()?.userId || "");
   if (ownId && path === `/tutors/${ownId}`) return true;
   return path.startsWith("/sos/");

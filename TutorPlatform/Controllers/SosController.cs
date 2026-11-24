@@ -21,7 +21,7 @@ public sealed class SosController : ControllerBase
                      User.FindFirstValue("sub"), out var id) ? id : null;
 
     [HttpPost("requests")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Student,Parent")]
     [ApiExplorerSettings(IgnoreApi = true)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10_000_000)]
@@ -60,7 +60,7 @@ public sealed class SosController : ControllerBase
     }
 
     [HttpGet("requests/mine")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Student,Parent")]
     public async Task<IActionResult> MyRequests(CancellationToken cancellationToken)
     {
         if (CurrentUserId is not int userId) return Unauthorized();
@@ -68,7 +68,7 @@ public sealed class SosController : ControllerBase
     }
 
     [HttpGet("requests/{requestId:int}")]
-    [Authorize(Roles = "Student,Tutor")]
+    [Authorize(Roles = "Student,Parent,Tutor")]
     public async Task<IActionResult> GetRequest(int requestId, CancellationToken cancellationToken)
     {
         if (CurrentUserId is not int userId) return Unauthorized();
@@ -125,7 +125,7 @@ public sealed class SosController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId:int}/review")]
-    [Authorize(Roles = "Student")]
+    [Authorize(Roles = "Student,Parent")]
     public async Task<IActionResult> ReviewSession(
         int sessionId,
         [FromBody] SosReviewDto dto,
@@ -142,7 +142,7 @@ public sealed class SosController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId:int}/end")]
-    [Authorize(Roles = "Student,Tutor")]
+    [Authorize(Roles = "Student,Parent,Tutor")]
     public async Task<IActionResult> EndSession(int sessionId, CancellationToken cancellationToken)
     {
         if (CurrentUserId is not int userId) return Unauthorized();

@@ -269,7 +269,10 @@ export default function SosSession() {
           <p className="text-3xl font-black tabular-nums text-rose-600">
             {session?.endsAt ? remainLabel(session.endsAt) : "--:--"}
           </p>
-          <p className="text-xs text-slate-500">Phí {formatVnd(session?.feeAmount)} · {session?.payoutStatus === "Held" ? "tạm giữ, chuyển sau khi hết giờ" : session?.payoutStatus}</p>
+          <p className="text-xs text-slate-500">
+            Phí {formatVnd(session?.feeAmount)}
+            {session?.paid ? " · đã thanh toán" : ended ? " · chờ thanh toán" : ""}
+          </p>
           {session?.imageUrl && (
             <a href={fileHref(session.imageUrl, API_ORIGIN)} target="_blank" rel="noreferrer">
               <img src={fileHref(session.imageUrl, API_ORIGIN)} alt="" className="rounded-xl max-h-40 w-full object-cover" />
@@ -281,8 +284,23 @@ export default function SosSession() {
 {ended ? (
   <>
     <p className="text-sm text-verified-700 bg-verified-50 rounded-lg px-3 py-2">
-      Phiên đã kết thúc.
+      Phiên đã hoàn thành. Cuộc trò chuyện đã đóng.
     </p>
+    {myId === session?.studentId && !session?.paid && (
+      <button
+        type="button"
+        disabled={!session?.bookingId}
+        onClick={() => navigate(`/checkout/${session.bookingId}`)}
+        className="w-full h-10 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
+      >
+        Thanh toán {formatVnd(session?.feeAmount)}
+      </button>
+    )}
+    {myId === session?.tutorId && (
+      <p className="text-sm text-slate-600">
+        {session?.paid ? "Học viên đã thanh toán phí SOS." : "Đang chờ học viên thanh toán phí SOS."}
+      </p>
+    )}
 
     {session?.canReview && (
       <form onSubmit={onReview} className="space-y-2">

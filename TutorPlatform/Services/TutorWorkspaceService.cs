@@ -63,6 +63,7 @@ public class TutorWorkspaceService
             HourlyRateMax = tp.HourlyRateMax,
             TeachingMode = tp.TeachingMode,
             IsPublished = tp.IsPublished,
+            SubjectsLocked = tp.SubjectsLocked,
             VerificationStatus = tp.VerificationStatus,
             AverageRating = tp.AverageRating,
             TotalReviews = tp.TotalReviews,
@@ -116,25 +117,36 @@ public class TutorWorkspaceService
         }
 
         var existing = await _db.TutorSubjects.Where(s => s.TutorId == tutorId).ToListAsync(cancellationToken);
-
-        // Đăng ký lại toàn bộ tổ hợp: giữ lại tổ hợp được chọn, xóa những không được chọn.
-        var wantedKeys = wanted.Select(reg => (reg.SubjectId, Grade: reg.gradeLevel)).ToHashSet();
-        var keptRows = existing.Where(row => wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))).ToList();
-        _db.TutorSubjects.RemoveRange(existing.Where(row => !wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))));
-
+        List<TutorSubject> keptRows;
         var newRows = new List<TutorSubject>();
-        foreach (var reg in wanted.Where(reg =>
-            keptRows.All(row => !(row.SubjectId == reg.SubjectId && NormalizeGrade(row.GradeLevel) == reg.gradeLevel))))
+
+        if (profile.SubjectsLocked)
         {
-            var row = new TutorSubject
+            var lockedIds = existing.Select(row => row.SubjectId).Distinct().OrderBy(id => id).ToList();
+            var sentIds = wanted.Select(reg => reg.SubjectId).Distinct().OrderBy(id => id).ToList();
+            if (sentIds.Count > 0 && !sentIds.SequenceEqual(lockedIds))
+                return (false, 400, "Bạn đã chọn môn dạy và không sửa lại được.", null);
+            keptRows = existing;
+        }
+        else
+        {
+            var wantedKeys = wanted.Select(reg => (reg.SubjectId, Grade: reg.gradeLevel)).ToHashSet();
+            keptRows = existing.Where(row => wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))).ToList();
+            _db.TutorSubjects.RemoveRange(existing.Where(row => !wantedKeys.Contains((row.SubjectId, Grade: row.GradeLevel))));
+
+            foreach (var reg in wanted.Where(reg =>
+                keptRows.All(row => !(row.SubjectId == reg.SubjectId && NormalizeGrade(row.GradeLevel) == reg.gradeLevel))))
             {
-                TutorId = tutorId,
-                SubjectId = reg.SubjectId,
-                GradeLevel = reg.gradeLevel,
-                IsVerified = false
-            };
-            newRows.Add(row);
-            _db.TutorSubjects.Add(row);
+                var row = new TutorSubject
+                {
+                    TutorId = tutorId,
+                    SubjectId = reg.SubjectId,
+                    GradeLevel = reg.gradeLevel,
+                    IsVerified = false
+                };
+                newRows.Add(row);
+                _db.TutorSubjects.Add(row);
+            }
         }
 
         // Bắt buộc hoàn thành bài kiểm tra chuyên môn trước khi công bố hồ sơ giảng dạy.

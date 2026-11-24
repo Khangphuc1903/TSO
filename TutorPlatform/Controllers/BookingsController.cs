@@ -79,4 +79,30 @@ public class BookingsController : ControllerBase
             ? Ok(new { message = result.Message })
             : StatusCode(result.StatusCode, new { message = result.Message });
     }
+
+    [Authorize(Roles = "Student,Parent,Tutor")]
+    [HttpPost("{id:int}/complete")]
+    public async Task<IActionResult> Complete(int id, CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized();
+        var result = await _bookingService.CompleteAsync(userId, id, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [Authorize(Roles = "Tutor")]
+    [HttpPost("{id:int}/lesson-report")]
+    public async Task<IActionResult> LessonReport(int id, [FromBody] LessonReportDto dto, CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized();
+        var result = await _bookingService.SaveLessonReportAsync(userId, id, dto, cancellationToken);
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
 }

@@ -154,7 +154,11 @@ public class BookingService
             ? query.Where(b => b.TutorId == userId)
             : query.Where(b => b.StudentId == userId);
 
-        var items = await query.OrderByDescending(b => b.ScheduledDate).ToListAsync(cancellationToken);
+        var items = await query
+            .Include(b => b.Student).ThenInclude(s => s.Role)
+            .Include(b => b.LessonReport)
+            .OrderByDescending(b => b.ScheduledDate)
+            .ToListAsync(cancellationToken);
         return items.Select(b =>
         {
             var successOrRefunded = b.Payments
@@ -178,7 +182,13 @@ public class BookingService
                 Location = b.Location,
                 IsToday = b.ScheduledDate == DateOnly.FromDateTime(DateTime.Today),
                 PaymentStatus = lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
-                PaymentUrl = lastPayment?.PaymentUrl
+                PaymentUrl = lastPayment?.PaymentUrl,
+                TutorCompleted = b.TutorCompleted,
+                StudentCompleted = b.StudentCompleted,
+                LearnerIsParent = b.Student.Role?.RoleName == "Parent",
+                LessonReport = b.LessonReport?.Content,
+                LessonHomework = b.LessonReport?.Homework,
+                LessonReportAt = (b.LessonReport?.UpdatedAt ?? b.LessonReport?.CreatedAt)?.ToString("yyyy-MM-dd HH:mm")
             };
         }).ToList();
     }
@@ -312,6 +322,135 @@ public class BookingService
             cancellationToken);
 
         return (true, 200, "Đã xác nhận buổi học.");
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message)> CompleteAsync(
+        int userId, int bookingId, CancellationToken cancellationToken)
+    {
+        var booking = await _db.Bookings
+            .Include(b => b.Student).ThenInclude(s => s.Role)
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId, cancellationToken);
+        if (booking == null || (booking.StudentId != userId && booking.TutorId != userId))
+            return (false, 404, "Không tìm thấy buổi học.");
+        if (booking.Status == "Completed")
+            return (true, 200, "Buổi học đã hoàn thành.");
+        if (booking.Status != "Confirmed")
+            return (false, 400, "Chỉ hoàn thành được buổi đã được xác nhận.");
+
+        var isTutor = booking.TutorId == userId;
+        if (isTutor)
+        {
+            if (booking.TutorCompleted)
+                return (true, 200, "Bạn đã xác nhận dạy xong. Đang chờ phía bên kia.");
+            booking.TutorCompleted = true;
+        }
+        else
+        {
+            if (booking.StudentCompleted)
+                return (true, 200, "Bạn đã xác nhận học xong. Đang chờ gia sư.");
+            booking.StudentCompleted = true;
+        }
+
+        var finished = booking.TutorCompleted && booking.StudentCompleted;
+        if (finished)
+        {
+            booking.Status = "Completed";
+            booking.CompletedAt = DateTime.Now;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (!finished)
+        {
+            await _notifications.NotifyAsync(
+                isTutor ? booking.StudentId : booking.TutorId,
+                "BookingComplete",
+                isTutor ? "Gia sư đã xác nhận dạy xong" : "Phụ huynh/học viên đã xác nhận học xong",
+                $"Buổi {booking.ScheduledDate:dd/MM/yyyy} đang chờ bạn xác nhận hoàn thành.",
+                "Booking",
+                booking.BookingId,
+                cancellationToken);
+            return (true, 200, isTutor
+                ? "Đã ghi nhận. Buổi học hoàn thành khi học viên hoặc phụ huynh cũng xác nhận."
+                : "Đã ghi nhận. Buổi học hoàn thành khi gia sư cũng xác nhận.");
+        }
+
+        await _notifications.NotifyAsync(
+            booking.StudentId,
+            "BookingComplete",
+            "Buổi học đã hoàn thành",
+            $"Buổi {booking.ScheduledDate:dd/MM/yyyy} đã hoàn thành.",
+            "Booking",
+            booking.BookingId,
+            cancellationToken);
+
+        if (booking.Student.Role?.RoleName == "Parent")
+        {
+            await _notifications.NotifyAsync(
+                booking.TutorId,
+                "LessonReport",
+                "Gửi đánh giá buổi học cho phụ huynh",
+                $"Buổi {booking.ScheduledDate:dd/MM/yyyy} đã xong. Hãy viết nhận xét để phụ huynh biết con học thế nào.",
+                "Booking",
+                booking.BookingId,
+                cancellationToken);
+        }
+
+        return (true, 200, "Buổi học đã hoàn thành.");
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message)> SaveLessonReportAsync(
+        int tutorId, int bookingId, LessonReportDto dto, CancellationToken cancellationToken)
+    {
+        var content = (dto.Content ?? "").Trim();
+        var homework = string.IsNullOrWhiteSpace(dto.Homework) ? null : dto.Homework.Trim();
+        if (content.Length < 10)
+            return (false, 400, "Nhận xét cần ít nhất 10 ký tự.");
+        if (content.Length > 2000)
+            return (false, 400, "Nhận xét tối đa 2000 ký tự.");
+        if (homework != null && homework.Length > 500)
+            return (false, 400, "Bài tập về nhà tối đa 500 ký tự.");
+
+        var booking = await _db.Bookings
+            .Include(b => b.Student).ThenInclude(s => s.Role)
+            .Include(b => b.LessonReport)
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.TutorId == tutorId, cancellationToken);
+        if (booking == null)
+            return (false, 404, "Không tìm thấy buổi học.");
+        if (booking.Status != "Completed")
+            return (false, 400, "Chỉ gửi đánh giá khi buổi học đã hoàn thành.");
+        if (booking.Student.Role?.RoleName != "Parent")
+            return (false, 400, "Đánh giá buổi học gửi cho phụ huynh khi người đặt lịch là phụ huynh.");
+
+        var now = DateTime.Now;
+        if (booking.LessonReport == null)
+        {
+            booking.LessonReport = new LessonReport
+            {
+                BookingId = booking.BookingId,
+                TutorId = tutorId,
+                Content = content,
+                Homework = homework,
+                CreatedAt = now
+            };
+        }
+        else
+        {
+            booking.LessonReport.Content = content;
+            booking.LessonReport.Homework = homework;
+            booking.LessonReport.UpdatedAt = now;
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+
+        await _notifications.NotifyAsync(
+            booking.StudentId,
+            "LessonReport",
+            "Gia sư đã gửi đánh giá buổi học",
+            $"Có nhận xét mới cho buổi {booking.ScheduledDate:dd/MM/yyyy}. Mở lịch học để xem con đã học thế nào.",
+            "Booking",
+            booking.BookingId,
+            cancellationToken);
+
+        return (true, 200, "Đã gửi đánh giá buổi học cho phụ huynh.");
     }
 
     private static bool MatchesDay(byte slotDay, DateOnly date)

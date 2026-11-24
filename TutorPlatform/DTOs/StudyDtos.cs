@@ -210,6 +210,12 @@ public class InviteTutorDto
     public string? InviteMessage { get; set; }
 }
 
+public class LessonReportDto
+{
+    public string Content { get; set; } = null!;
+    public string? Homework { get; set; }
+}
+
 public class BookingListItemDto
 {
     public int BookingId { get; set; }
@@ -228,6 +234,12 @@ public class BookingListItemDto
     public bool IsToday { get; set; }
     public string? PaymentStatus { get; set; }
     public string? PaymentUrl { get; set; }
+    public bool TutorCompleted { get; set; }
+    public bool StudentCompleted { get; set; }
+    public bool LearnerIsParent { get; set; }
+    public string? LessonReport { get; set; }
+    public string? LessonHomework { get; set; }
+    public string? LessonReportAt { get; set; }
 }
 
 public class UserProfileDto

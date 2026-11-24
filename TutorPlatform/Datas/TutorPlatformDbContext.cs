@@ -22,6 +22,8 @@ public partial class TutorPlatformDbContext : DbContext
 
     public virtual DbSet<Booking> Bookings { get; set; }
 
+    public virtual DbSet<LessonReport> LessonReports { get; set; }
+
     public virtual DbSet<BookingReschedule> BookingReschedules { get; set; }
 
     public virtual DbSet<CancellationPolicy> CancellationPolicies { get; set; }
@@ -172,6 +174,19 @@ public partial class TutorPlatformDbContext : DbContext
                 .HasForeignKey(d => d.TutorId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Booking_Tutor");
+
+            entity.HasOne(d => d.LessonReport).WithOne(r => r.Booking)
+                .HasForeignKey<LessonReport>(r => r.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LessonReport>(entity =>
+        {
+            entity.HasKey(e => e.LessonReportId);
+            entity.Property(e => e.Content).HasMaxLength(2000);
+            entity.Property(e => e.Homework).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
         });
 
         modelBuilder.Entity<BookingReschedule>(entity =>

@@ -24,7 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { diagnoseHomework, getMyDiagnoses, getDiagnosisById } from "../api/ai";
-import { isLoggedIn } from "../auth";
+import { isLoggedIn, loginPath, logout } from "../auth";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
 
@@ -115,7 +115,7 @@ export default function AiDiagnosis() {
 
   const handleDiagnose = async () => {
     if (!isLoggedIn()) {
-      navigate("/login");
+      navigate(loginPath("/ai-diagnosis"));
       return;
     }
 
@@ -136,6 +136,12 @@ export default function AiDiagnosis() {
       const data = await diagnoseHomework(selectedFile, studentNote);
       setResult(normalizeDiagnosis(data));
     } catch (err) {
+      if (err.response?.status === 401) {
+        logout();
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục chẩn đoán.");
+        navigate(loginPath("/ai-diagnosis"));
+        return;
+      }
       setError(
         err.response?.data?.message ||
           err.message ||
@@ -561,7 +567,7 @@ export default function AiDiagnosis() {
                               <div className="flex items-center gap-3">
                                 <img
                                   src={
-                                    tutor.avatarUrl ||
+                                    resolveImage(tutor.avatarUrl) ||
                                     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"
                                   }
                                   alt={tutor.fullName}

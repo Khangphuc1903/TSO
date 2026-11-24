@@ -26,7 +26,7 @@ export default function SosRescue() {
   const navigate = useNavigate();
   const user = getUser();
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
-  const isStudent = (user?.role || "").toLowerCase() === "student";
+  const isLearner = ["student", "parent"].includes((user?.role || "").toLowerCase());
 
   const [config, setConfig] = useState({ feeAmount: 25000, durationMinutes: 15 });
   const [subjects, setSubjects] = useState([]);
@@ -58,7 +58,7 @@ export default function SosRescue() {
     }
     getSosConfig().then(setConfig).catch(() => {});
     getSubjects().then(setSubjects).catch(() => setSubjects([]));
-    if (isStudent) loadStudent().catch(() => setError("Không tải được yêu cầu SOS."));
+    if (isLearner) loadStudent().catch(() => setError("Không tải được yêu cầu SOS."));
     if (isTutor) loadTutor().catch(() => setError("Chỉ gia sư đã xác thực và đang hoạt động mới nhận được SOS."));
 
     const hub = createAppHub();
@@ -76,13 +76,13 @@ export default function SosRescue() {
       if (payload?.sessionId) navigate(`/sos/session/${payload.sessionId}`);
     });
     hub.on("SosRequestExpired", () => {
-      if (isStudent) loadStudent().catch(() => {});
+      if (isLearner) loadStudent().catch(() => {});
     });
     hub.start().catch(() => {});
     return () => {
       hub.stop();
     };
-  }, [navigate, isStudent, isTutor]);
+  }, [navigate, isLearner, isTutor]);
 
   const onCreate = async (e) => {
     e.preventDefault();
@@ -163,7 +163,7 @@ export default function SosRescue() {
           </div>
         )}
 
-        {isStudent && (
+        {isLearner && (
           <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-6">
             <form onSubmit={onCreate} className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 space-y-4">
               <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -300,7 +300,7 @@ export default function SosRescue() {
           </div>
         )}
 
-        {!isStudent && !isTutor && (
+        {!isLearner && !isTutor && (
           <div className="bg-white rounded-2xl p-8 text-center text-slate-500">Tài khoản này không dùng SOS.</div>
         )}
       </main>

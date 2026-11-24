@@ -29,6 +29,8 @@ public partial class TutorProfile
 
     public bool IsPublished { get; set; }
 
+    public bool SubjectsLocked { get; set; }
+
     public bool IsSosReady { get; set; }
 
     public DateTime? SosReadyAt { get; set; }

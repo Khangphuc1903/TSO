@@ -275,15 +275,38 @@ public class PaymentService
             payment.GatewayTransactionId = verifiedData.Reference;
             payment.GatewayResponseCode = webhookBody.Code;
 
-            // In escrow model (Giải pháp 1): tiền được tạm giữ (payment.Status = "Success"),
-            // booking.Status giữ nguyên là "Pending" để gia sư duyệt xác nhận hoặc từ chối.
-            // Nếu gia sư bấm duyệt thì chuyển thành "Confirmed", nếu từ chối thì tự động hoàn tiền 100%.
+            var sosSessionId = await MarkSosPaidAsync(payment.Booking, ct);
 
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
-            // Bắn SignalR realtime thông báo tới Payer và Tutor
-            if (payment.Booking != null)
+            if (payment.Booking != null && sosSessionId != null)
+            {
+                await _notifications.NotifyAsync(
+                    payment.PayerUserId,
+                    "SosPaid",
+                    "Đã thanh toán SOS",
+                    $"Đã nhận {payment.Amount:N0} ₫ cho phiên cứu viện. Bạn có thể đánh giá gia sư.",
+                    "SosSession",
+                    sosSessionId,
+                    ct);
+                await _notifications.NotifyAsync(
+                    payment.Booking.TutorId,
+                    "SosPaid",
+                    "Học viên đã thanh toán phí SOS",
+                    $"Học viên đã thanh toán {payment.Amount:N0} ₫ cho phiên cứu viện.",
+                    "SosSession",
+                    sosSessionId,
+                    ct);
+                await _hub.Clients.User(payment.PayerUserId.ToString()).SendAsync("PaymentSucceeded", new
+                {
+                    bookingId = payment.BookingId,
+                    sessionId = sosSessionId,
+                    amount = payment.Amount,
+                    orderCode = verifiedData.OrderCode
+                }, ct);
+            }
+            else if (payment.Booking != null)
             {
                 await _notifications.NotifyAsync(
                     payment.PayerUserId,
@@ -303,7 +326,6 @@ public class PaymentService
                     payment.BookingId,
                     ct);
 
-                // Phát trực tiếp sự kiện PaymentSucceeded cho màn hình Checkout của học viên
                 await _hub.Clients.User(payment.PayerUserId.ToString()).SendAsync("PaymentSucceeded", new
                 {
                     bookingId = payment.BookingId,
@@ -354,29 +376,53 @@ public class PaymentService
                     payment.Status = "Success";
                     payment.PaidAt = DateTime.UtcNow;
                     payment.CallbackReceivedAt = DateTime.UtcNow;
+                    var sosSessionId = await MarkSosPaidAsync(booking, ct);
                     await _db.SaveChangesAsync(ct);
 
-                    await _notifications.NotifyAsync(
-                        payment.PayerUserId,
-                        "PaymentSuccess",
-                        "Thanh toán tạm giữ thành công!",
-                        $"Hệ thống đã nhận tạm giữ học phí {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng chờ gia sư duyệt lịch.",
-                        "Booking",
-                        payment.BookingId,
-                        ct);
+                    if (sosSessionId != null)
+                    {
+                        await _notifications.NotifyAsync(
+                            payment.PayerUserId,
+                            "SosPaid",
+                            "Đã thanh toán SOS",
+                            $"Đã nhận {payment.Amount:N0} ₫ cho phiên cứu viện. Bạn có thể đánh giá gia sư.",
+                            "SosSession",
+                            sosSessionId,
+                            ct);
+                        await _notifications.NotifyAsync(
+                            booking.TutorId,
+                            "SosPaid",
+                            "Học viên đã thanh toán phí SOS",
+                            $"Học viên đã thanh toán {payment.Amount:N0} ₫ cho phiên cứu viện.",
+                            "SosSession",
+                            sosSessionId,
+                            ct);
+                    }
+                    else
+                    {
+                        await _notifications.NotifyAsync(
+                            payment.PayerUserId,
+                            "PaymentSuccess",
+                            "Thanh toán tạm giữ thành công!",
+                            $"Hệ thống đã nhận tạm giữ học phí {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng chờ gia sư duyệt lịch.",
+                            "Booking",
+                            payment.BookingId,
+                            ct);
 
-                    await _notifications.NotifyAsync(
-                        booking.TutorId,
-                        "BookingPaid",
-                        "Học viên đã thanh toán tiền giữ chỗ",
-                        $"Học viên đã hoàn tất thanh toán tạm giữ {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng kiểm tra và xác nhận hoặc từ chối.",
-                        "Booking",
-                        payment.BookingId,
-                        ct);
+                        await _notifications.NotifyAsync(
+                            booking.TutorId,
+                            "BookingPaid",
+                            "Học viên đã thanh toán tiền giữ chỗ",
+                            $"Học viên đã hoàn tất thanh toán tạm giữ {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng kiểm tra và xác nhận hoặc từ chối.",
+                            "Booking",
+                            payment.BookingId,
+                            ct);
+                    }
 
                     await _hub.Clients.User(payment.PayerUserId.ToString()).SendAsync("PaymentSucceeded", new
                     {
                         bookingId = payment.BookingId,
+                        sessionId = sosSessionId,
                         amount = payment.Amount,
                         orderCode = orderCode
                     }, ct);
@@ -399,6 +445,21 @@ public class PaymentService
             PaidAt = payment.PaidAt,
             CreatedAt = payment.CreatedAt
         };
+    }
+
+    private async Task<int?> MarkSosPaidAsync(Booking? booking, CancellationToken ct)
+    {
+        if (booking?.Location == null || !booking.Location.StartsWith("SOS:", StringComparison.Ordinal))
+            return null;
+        booking.Status = "Completed";
+        booking.CompletedAt ??= DateTime.UtcNow;
+        var session = await _db.SosSessions.FirstOrDefaultAsync(s => s.BookingId == booking.BookingId, ct);
+        if (session == null && int.TryParse(booking.Location["SOS:".Length..], out var sessionId))
+            session = await _db.SosSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
+        if (session == null) return null;
+        session.PayoutStatus = "Paid";
+        session.BookingId ??= booking.BookingId;
+        return session.SessionId;
     }
 
     public async Task<RefundPreviewDto?> GetRefundPreviewAsync(int bookingId, int userId, CancellationToken ct = default)

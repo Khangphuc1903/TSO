@@ -41,6 +41,12 @@ public partial class Booking
 
     public DateTime? CancelledAt { get; set; }
 
+    public bool TutorCompleted { get; set; }
+
+    public bool StudentCompleted { get; set; }
+
+    public virtual LessonReport? LessonReport { get; set; }
+
     public virtual ICollection<BookingReschedule> BookingReschedules { get; set; } = new List<BookingReschedule>();
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();

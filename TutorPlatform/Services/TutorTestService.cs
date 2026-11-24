@@ -10,6 +10,7 @@ public class TutorTestService
 {
     private const string ProfessionalTestType = "Professional";
     public const string PedagogicalTestType = "Pedagogical";
+    public const string IeltsTestType = "IELTS";
     private const decimal DefaultPassThreshold = 70m;
     private const string PassThresholdSettingKey = "TutorTestPassThreshold";
     private readonly TutorPlatformDbContext _db;
@@ -34,73 +35,62 @@ public class TutorTestService
 
         var questionCounts = await LoadQuestionCountsByGradeAsync(cancellationToken);
         var latestAttempts = await LoadLatestAttemptsAsync(tutorId, cancellationToken);
-        var result = new List<TutorTestLevelDto>();
-
         var groups = subjects
-            .Select(s => new
+            .GroupBy(s => SubjectKey(s.SubjectName))
+            .Select(group =>
             {
-                s.SubjectId,
-                s.SubjectName,
-                Level = VietnameseText.CanonicalEducationLevel(s.EducationLevel)
-            })
-            .Where(s => s.Level is "THCS" or "THPT")
-            .GroupBy(s => (s.Level, Key: VietnameseText.Fold(s.SubjectName)));
-
-        foreach (var group in groups)
-        {
-            var levelKey = group.Key.Level;
-            var ids = group.Select(s => s.SubjectId).ToHashSet();
-            var displayName = VietnameseText.PreferDisplayName(group.Select(s => s.SubjectName));
-            var entries = questionCounts
-                .Where(item => ids.Contains(item.SubjectId) && item.GradeLevel != null)
-                .GroupBy(item => item.GradeLevel!)
-                .Select(g => new { GradeLevel = g.Key, Count = g.Sum(x => x.Count) })
-                .ToList();
-            if (entries.Count == 0)
-                continue;
-
-            var canonicalId = group
-                .OrderByDescending(s => questionCounts.Where(q => q.SubjectId == s.SubjectId).Sum(q => q.Count))
-                .ThenByDescending(s => VietnameseText.Fold(s.SubjectName) != s.SubjectName)
-                .Select(s => s.SubjectId)
-                .First();
-
-            var levelDto = result.FirstOrDefault(level => level.EducationLevel == levelKey);
-            if (levelDto == null)
-            {
-                levelDto = new TutorTestLevelDto { EducationLevel = levelKey };
-                result.Add(levelDto);
-            }
-
-            var subjectDto = new TutorTestSubjectDto
-            {
-                SubjectId = canonicalId,
-                SubjectName = displayName,
-                QuestionCount = 0,
-                Grades = new List<TutorTestGradeDto>()
-            };
-            foreach (var entry in entries)
-            {
-                var latest = LatestForAny(latestAttempts, ids, entry.GradeLevel);
-                subjectDto.Grades.Add(new TutorTestGradeDto
+                var rows = group.ToList();
+                var display = rows
+                    .OrderByDescending(s => SubjectKey(s.SubjectName) == "ngu van" && VietnameseText.Fold(s.SubjectName) == "ngu van")
+                    .ThenByDescending(s => VietnameseText.Fold(s.SubjectName) != s.SubjectName)
+                    .First();
+                return new
                 {
-                    GradeLevel = entry.GradeLevel,
-                    QuestionCount = entry.Count,
-                    Status = StatusOf(latest),
-                    LatestScorePercent = latest?.ScorePercent,
-                    LatestIsPassed = latest?.IsPassed,
-                    LatestAttemptNumber = latest?.AttemptNumber,
-                    RetryAvailableAt = latest?.RetryAvailableAt
-                });
-                subjectDto.QuestionCount += entry.Count;
-            }
-            subjectDto.Grades.Sort((a, b) => a.GradeLevel.CompareTo(b.GradeLevel));
-            levelDto.Subjects.Add(subjectDto);
-        }
+                    Key = group.Key,
+                    display.SubjectId,
+                    SubjectName = SubjectKey(display.SubjectName) == "ngu van" ? "Ngữ Văn" : display.SubjectName,
+                    Ids = rows.Select(s => s.SubjectId).ToHashSet()
+                };
+            })
+            .OrderBy(s => SubjectOrder(s.Key))
+            .ThenBy(s => s.SubjectName, StringComparer.CurrentCulture)
+            .ToList();
 
-        foreach (var level in result)
-            level.Subjects.Sort((a, b) => string.Compare(a.SubjectName, b.SubjectName, StringComparison.CurrentCulture));
-        result.Sort((a, b) => string.Compare(a.EducationLevel, b.EducationLevel, StringComparison.Ordinal));
+        var result = new List<TutorTestLevelDto>();
+        foreach (var band in new[] { "Tiểu học", "THCS", "THPT" })
+        {
+            var levelDto = new TutorTestLevelDto { EducationLevel = band };
+            foreach (var subject in groups)
+            {
+                var primarySubject = subject.Key is "toan" or "tieng viet";
+                if (band == "Tiểu học" && !primarySubject) continue;
+                if (band != "Tiểu học" && subject.Key == "tieng viet") continue;
+                var count = questionCounts
+                    .Where(item => subject.Ids.Contains(item.SubjectId) && GradeInBand(item.GradeLevel, band))
+                    .Sum(item => item.Count);
+                var latest = LatestFor(latestAttempts, subject.SubjectId, band);
+                levelDto.Subjects.Add(new TutorTestSubjectDto
+                {
+                    SubjectId = subject.SubjectId,
+                    SubjectName = subject.SubjectName,
+                    QuestionCount = count,
+                    Grades = new List<TutorTestGradeDto>
+                    {
+                        new()
+                        {
+                            GradeLevel = band,
+                            QuestionCount = count,
+                            Status = StatusOf(latest),
+                            LatestScorePercent = latest?.ScorePercent,
+                            LatestIsPassed = latest?.IsPassed,
+                            LatestAttemptNumber = latest?.AttemptNumber,
+                            RetryAvailableAt = latest?.RetryAvailableAt
+                        }
+                    }
+                });
+            }
+            result.Add(levelDto);
+        }
         return result;
     }
 
@@ -246,6 +236,18 @@ public class TutorTestService
             ? (DateTime?)latestAttempt.SubmittedAt.Add(cooldown)
             : null;
 
+        var ieltsCount = await _db.Questions.CountAsync(
+            q => q.IsActive && q.TestType == IeltsTestType, cancellationToken);
+        var ieltsAttempt = await _db.TutorTestAttempts
+            .AsNoTracking()
+            .Where(a => a.TutorId == tutorId && a.TestType == IeltsTestType)
+            .OrderByDescending(a => a.SubmittedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        var ieltsStatus = ieltsAttempt == null ? "Chưa làm" : ieltsAttempt.IsPassed ? "Đạt" : "Không đạt";
+        var ieltsRetry = (ieltsAttempt != null && !ieltsAttempt.IsPassed)
+            ? (DateTime?)ieltsAttempt.SubmittedAt.Add(cooldown)
+            : null;
+
         return new List<TutorTestCommonDto>
         {
             new TutorTestCommonDto
@@ -255,6 +257,14 @@ public class TutorTestService
                 QuestionCount = pedQuestionsCount,
                 Status = status,
                 RetryAvailableAt = retryAt
+            },
+            new TutorTestCommonDto
+            {
+                TestType = IeltsTestType,
+                Title = "Bài test IELTS",
+                QuestionCount = ieltsCount,
+                Status = ieltsStatus,
+                RetryAvailableAt = ieltsRetry
             }
         };
     }
@@ -420,6 +430,142 @@ public class TutorTestService
         });
     }
 
+    public async Task<(bool Success, int StatusCode, string Message, TutorTestQuestionsDto? Data)> GetIeltsTestQuestionsAsync(
+        int tutorId, CancellationToken cancellationToken)
+    {
+        var subjectId = await IeltsSubjectIdAsync(cancellationToken);
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, IeltsTestType, subjectId, null, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
+
+        var pool = await _db.Questions
+            .Where(q => q.IsActive && q.TestType == IeltsTestType)
+            .OrderBy(q => q.QuestionId)
+            .ToListAsync(cancellationToken);
+        if (pool.Count == 0)
+            return (false, 404, "Hiện chưa có câu hỏi cho bài test IELTS.", null);
+
+        var sampled = SampleQuestions(pool, 25);
+        var now = DateTime.UtcNow;
+        return (true, 200, string.Empty, new TutorTestQuestionsDto
+        {
+            SubjectId = subjectId ?? 0,
+            SubjectName = "IELTS",
+            EducationLevel = "Ngoại ngữ",
+            GradeLevel = null,
+            TestType = IeltsTestType,
+            PassThreshold = await GetPassThresholdAsync(IeltsTestType, cancellationToken),
+            StartedAt = now,
+            DurationMinutes = 25,
+            EndsAt = now.AddMinutes(25),
+            Questions = sampled.Select(question => new TutorTestQuestionDto
+            {
+                QuestionId = question.QuestionId,
+                Content = question.Content,
+                OptionA = question.OptionA,
+                OptionB = question.OptionB,
+                OptionC = question.OptionC,
+                OptionD = question.OptionD,
+                Difficulty = question.Difficulty
+            }).ToList()
+        });
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message, TutorTestAttemptDto? Data)> SubmitIeltsTestAsync(
+        int tutorId, SubmitTutorTestDto dto, CancellationToken cancellationToken)
+    {
+        var subjectId = await IeltsSubjectIdAsync(cancellationToken);
+        var retakeCheck = await CheckRetakeAllowedAsync(tutorId, IeltsTestType, subjectId, null, cancellationToken);
+        if (!retakeCheck.Allowed)
+            return (false, retakeCheck.StatusCode, retakeCheck.Message, null);
+
+        var submittedAnswers = dto.Answers ?? new List<TutorTestAnswerSubmissionDto>();
+        if (submittedAnswers.Count == 0)
+            return (false, 400, "Bài làm không có câu trả lời nào.", null);
+        if (submittedAnswers.GroupBy(answer => answer.QuestionId).Any(group => group.Count() > 1))
+            return (false, 400, "Không được gửi câu trả lời trùng lặp.", null);
+        if (submittedAnswers.Any(answer =>
+                NormalizeOption(answer.SelectedOption) is { } option && option is not ("A" or "B" or "C" or "D")))
+            return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
+
+        var submittedQuestionIds = submittedAnswers.Select(a => a.QuestionId).Distinct().ToList();
+        var questions = await _db.Questions
+            .Where(q => q.IsActive && q.TestType == IeltsTestType && submittedQuestionIds.Contains(q.QuestionId))
+            .ToListAsync(cancellationToken);
+        if (questions.Count != submittedQuestionIds.Count)
+            return (false, 400, "Bài làm chứa câu hỏi không thuộc bài test IELTS.", null);
+
+        var answers = submittedAnswers.ToDictionary(
+            answer => answer.QuestionId,
+            answer => NormalizeOption(answer.SelectedOption));
+        var passThreshold = await GetPassThresholdAsync(IeltsTestType, cancellationToken);
+        var score = ScoreAnswers(questions, answers, passThreshold);
+        var submittedAt = DateTime.UtcNow;
+        var startedAt = dto.StartedAt?.ToUniversalTime() ?? submittedAt;
+        if (startedAt > submittedAt)
+            return (false, 400, "Thời điểm bắt đầu bài test không hợp lệ.", null);
+
+        var attemptNumber = (await _db.TutorTestAttempts
+            .Where(attempt => attempt.TutorId == tutorId && attempt.TestType == IeltsTestType)
+            .Select(attempt => (int?)attempt.AttemptNumber)
+            .MaxAsync(cancellationToken) ?? 0) + 1;
+        var cooldown = await GetRetryCooldownAsync(cancellationToken);
+        var retryAvailableAt = score.IsPassed ? null : (DateTime?)submittedAt.Add(cooldown);
+
+        var attempt = new TutorTestAttempt
+        {
+            TutorId = tutorId,
+            TestType = IeltsTestType,
+            SubjectId = subjectId,
+            GradeLevel = null,
+            TotalQuestions = questions.Count,
+            CorrectCount = score.CorrectCount,
+            ScorePercent = score.ScorePercent,
+            PassThreshold = passThreshold,
+            IsPassed = score.IsPassed,
+            AttemptNumber = attemptNumber,
+            StartedAt = startedAt,
+            SubmittedAt = submittedAt,
+            TutorTestAnswers = questions.Select(question => new TutorTestAnswer
+            {
+                QuestionId = question.QuestionId,
+                SelectedOption = answers.GetValueOrDefault(question.QuestionId),
+                IsCorrect = answers.TryGetValue(question.QuestionId, out var selected)
+                    && selected == NormalizeOption(question.CorrectAnswer)
+            }).ToList()
+        };
+        _db.TutorTestAttempts.Add(attempt);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return (true, 200, string.Empty, new TutorTestAttemptDto
+        {
+            AttemptId = attempt.AttemptId,
+            TestType = IeltsTestType,
+            SubjectId = subjectId ?? 0,
+            SubjectName = "Bài test IELTS",
+            EducationLevel = "Ngoại ngữ",
+            GradeLevel = null,
+            TotalQuestions = attempt.TotalQuestions,
+            CorrectCount = attempt.CorrectCount,
+            ScorePercent = attempt.ScorePercent,
+            PassThreshold = attempt.PassThreshold,
+            IsPassed = attempt.IsPassed,
+            AttemptNumber = attempt.AttemptNumber,
+            StartedAt = attempt.StartedAt,
+            SubmittedAt = attempt.SubmittedAt,
+            RetryAvailableAt = retryAvailableAt
+        });
+    }
+
+    private async Task<int?> IeltsSubjectIdAsync(CancellationToken cancellationToken)
+    {
+        return await _db.Subjects
+            .AsNoTracking()
+            .Where(s => s.IsActive && s.SubjectName == "IELTS")
+            .Select(s => (int?)s.SubjectId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // ---------------- ATTEMPTS HISTORY ----------------
 
     public async Task<List<TutorTestAttemptDto>> ListAttemptsAsync(int tutorId, CancellationToken cancellationToken)
@@ -434,7 +580,11 @@ public class TutorTestService
                 attempt.AttemptId,
                 attempt.TestType,
                 SubjectId = attempt.SubjectId ?? 0,
-                SubjectName = attempt.Subject == null ? (attempt.TestType == PedagogicalTestType ? "Kỹ năng sư phạm & An toàn" : null) : attempt.Subject.SubjectName,
+                SubjectName = attempt.Subject == null
+                    ? (attempt.TestType == IeltsTestType
+                        ? "Bài test IELTS"
+                        : (attempt.TestType == PedagogicalTestType ? "Kỹ năng sư phạm & An toàn" : null))
+                    : (attempt.TestType == IeltsTestType ? "Bài test IELTS" : attempt.Subject.SubjectName),
                 EducationLevel = attempt.Subject == null ? "" : (attempt.Subject.EducationLevel ?? ""),
                 attempt.GradeLevel,
                 attempt.TotalQuestions,
@@ -451,6 +601,7 @@ public class TutorTestService
         return attempts.Select(attempt => new TutorTestAttemptDto
         {
             AttemptId = attempt.AttemptId,
+            TestType = attempt.TestType,
             SubjectId = attempt.SubjectId,
             SubjectName = attempt.SubjectName,
             EducationLevel = attempt.EducationLevel,
@@ -561,12 +712,12 @@ public class TutorTestService
             return (false, 400, "Đáp án chỉ được chọn A, B, C hoặc D.", null);
 
         var submittedQuestionIds = submittedAnswers.Select(a => a.QuestionId).Distinct().ToList();
-        var questions = await _db.Questions
-            .Where(q => q.IsActive
-                && q.TestType == ProfessionalTestType
-                && q.SubjectId == dto.SubjectId
-                && q.GradeLevel == normalizedGrade
-                && submittedQuestionIds.Contains(q.QuestionId))
+        var questions = await WhereGrade(
+                _db.Questions.Where(q => q.IsActive
+                    && q.TestType == ProfessionalTestType
+                    && q.SubjectId == dto.SubjectId
+                    && submittedQuestionIds.Contains(q.QuestionId)),
+                normalizedGrade)
             .ToListAsync(cancellationToken);
 
         if (questions.Count != submittedQuestionIds.Count)
@@ -644,6 +795,61 @@ public class TutorTestService
 
     // ---------------- REGISTRATION ----------------
 
+    public async Task<(bool Success, int StatusCode, string Message)> CommitTeachingSubjectsAsync(
+        int tutorId, CommitTeachingSubjectsDto? dto, CancellationToken cancellationToken)
+    {
+        var ids = (dto?.SubjectIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+        var band = dto?.GradeLevel?.Trim();
+        if (band is not ("Tiểu học" or "THCS" or "THPT"))
+            return (false, 400, "Chọn cấp 1, THCS hoặc THPT trước.");
+        if (ids.Count is < 1 or > 2)
+            return (false, 400, "Chọn 1 hoặc 2 môn bạn muốn dạy.");
+
+        var subjects = await _db.Subjects
+            .Where(s => ids.Contains(s.SubjectId) && s.IsActive)
+            .ToListAsync(cancellationToken);
+        if (subjects.Count != ids.Count)
+            return (false, 400, "Có môn học không hợp lệ.");
+        foreach (var subject in subjects)
+        {
+            var pool = await LoadQuestionsAsync(subject.SubjectId, band, cancellationToken);
+            if (pool.Count == 0)
+                return (false, 409, $"Chưa có bài test {band} cho {subject.SubjectName}.");
+        }
+
+        var profile = await _db.TutorProfiles.FirstOrDefaultAsync(t => t.TutorId == tutorId, cancellationToken);
+        if (profile == null)
+            return (false, 400, "Hồ sơ gia sư chưa có.");
+
+        var existing = await _db.TutorSubjects.Where(ts => ts.TutorId == tutorId).ToListAsync(cancellationToken);
+        var currentIds = existing.Select(ts => ts.SubjectId).Distinct().OrderBy(id => id).ToList();
+        var wantedIds = ids.OrderBy(id => id).ToList();
+        if (profile.SubjectsLocked)
+        {
+            if (!wantedIds.SequenceEqual(currentIds))
+                return (false, 400, "Bạn đã chọn môn dạy và không sửa lại được.");
+            return (true, 200, "Môn dạy đã được khóa.");
+        }
+
+        _db.TutorSubjects.RemoveRange(existing);
+        await _db.SaveChangesAsync(cancellationToken);
+        foreach (var subject in subjects)
+        {
+            _db.TutorSubjects.Add(new TutorSubject
+            {
+                TutorId = tutorId,
+                SubjectId = subject.SubjectId,
+                GradeLevel = band,
+                IsVerified = false
+            });
+        }
+        profile.SubjectsLocked = true;
+        profile.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        var names = string.Join(", ", subjects.Select(s => s.SubjectName));
+        return (true, 200, $"Đã khóa môn dạy: {names}. Mỗi môn có một bài test chuyên môn.");
+    }
+
     public async Task<(bool Success, int StatusCode, string Message)> RegisterCombinationAsync(
         int tutorId, RegisterTestCombinationDto dto, CancellationToken cancellationToken)
     {
@@ -655,11 +861,18 @@ public class TutorTestService
         if (!subjectOk)
             return (false, 404, "Môn học không tồn tại hoặc chưa được kích hoạt.");
 
-        var testExists = await _db.Questions.AnyAsync(
-            question => question.IsActive && question.TestType == ProfessionalTestType
-                && question.SubjectId == dto.SubjectId && question.GradeLevel == normalizedGrade, cancellationToken);
-        if (!testExists)
-            return (false, 409, "Hiện chưa có bài test cho tổ hợp cấp + môn + lớp này.");
+        var profile = await _db.TutorProfiles.AsNoTracking().FirstOrDefaultAsync(t => t.TutorId == tutorId, cancellationToken);
+        if (profile?.SubjectsLocked == true)
+        {
+            var allowed = await _db.TutorSubjects.AnyAsync(
+                ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId, cancellationToken);
+            if (!allowed)
+                return (false, 403, "Môn này không nằm trong môn bạn đã chọn.");
+        }
+
+        var pool = await LoadQuestionsAsync(dto.SubjectId, normalizedGrade, cancellationToken);
+        if (pool.Count == 0)
+            return (false, 409, "Hiện chưa có bài test cho môn này.");
 
         var existing = await _db.TutorSubjects.FirstOrDefaultAsync(
             ts => ts.TutorId == tutorId && ts.SubjectId == dto.SubjectId && ts.GradeLevel == normalizedGrade, cancellationToken);
@@ -826,11 +1039,11 @@ public class TutorTestService
 
     private async Task<List<Question>> LoadQuestionsAsync(int subjectId, string gradeLevel, CancellationToken cancellationToken)
     {
-        return await _db.Questions
-            .Where(question => question.IsActive
-                && question.TestType == ProfessionalTestType
-                && question.SubjectId == subjectId
-                && question.GradeLevel == gradeLevel)
+        return await WhereGrade(
+                _db.Questions.Where(question => question.IsActive
+                    && question.TestType == ProfessionalTestType
+                    && question.SubjectId == subjectId),
+                gradeLevel)
             .OrderBy(question => question.QuestionId)
             .ToListAsync(cancellationToken);
     }
@@ -974,6 +1187,47 @@ public class TutorTestService
             return TimeSpan.FromDays(days);
 
         return TimeSpan.FromMinutes(30);
+    }
+
+    private static IQueryable<Question> WhereGrade(IQueryable<Question> query, string gradeLevel)
+    {
+        if (gradeLevel == "Tiểu học")
+            return query.Where(q => q.GradeLevel == "Tiểu học"
+                || q.GradeLevel == "Lớp 1" || q.GradeLevel == "Lớp 2"
+                || q.GradeLevel == "Lớp 3" || q.GradeLevel == "Lớp 4"
+                || q.GradeLevel == "Lớp 5");
+        if (gradeLevel == "THCS")
+            return query.Where(q => q.GradeLevel == "THCS"
+                || q.GradeLevel == "Lớp 6" || q.GradeLevel == "Lớp 7"
+                || q.GradeLevel == "Lớp 8" || q.GradeLevel == "Lớp 9");
+        if (gradeLevel == "THPT")
+            return query.Where(q => q.GradeLevel == "THPT"
+                || q.GradeLevel == "Lớp 10" || q.GradeLevel == "Lớp 11"
+                || q.GradeLevel == "Lớp 12");
+        return query.Where(q => q.GradeLevel == gradeLevel);
+    }
+
+    private static string SubjectKey(string? name)
+    {
+        var folded = VietnameseText.Fold(name);
+        return folded is "van" or "ngu van" ? "ngu van" : folded;
+    }
+
+    private static int SubjectOrder(string key)
+    {
+        var order = new[] { "toan", "tieng viet", "ngu van", "tieng anh", "ielts", "vat ly", "hoa hoc", "sinh hoc" };
+        var index = Array.IndexOf(order, key);
+        return index < 0 ? 100 : index;
+    }
+
+    private static bool GradeInBand(string? grade, string band)
+    {
+        if (string.IsNullOrWhiteSpace(grade)) return false;
+        if (string.Equals(grade.Trim(), band, StringComparison.OrdinalIgnoreCase)) return true;
+        var digits = new string(grade.Where(char.IsDigit).ToArray());
+        if (!int.TryParse(digits, out var level)) return false;
+        if (band == "Tiểu học") return level is >= 1 and <= 5;
+        return band == "THCS" ? level is >= 6 and <= 9 : level is >= 10 and <= 12;
     }
 
     private static string? NormalizeGrade(string? grade)

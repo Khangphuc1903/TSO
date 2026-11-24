@@ -333,6 +333,8 @@ public sealed class SosService
             ?? throw new KeyNotFoundException("Không tìm thấy phiên SOS.");
         if (session.StudentId != userId && session.TutorId != userId)
             throw new UnauthorizedAccessException();
+        if (session.EndedAt != null || (session.EndsAt != null && session.EndsAt <= DateTime.UtcNow))
+            await EnsurePayableBookingAsync(session, cancellationToken);
         return await WithReviewAsync(session, userId, cancellationToken);
     }
 
@@ -360,6 +362,7 @@ public sealed class SosService
         if (changed == 1)
             await PublishSessionEndedAsync(updated, cancellationToken);
 
+        await EnsurePayableBookingAsync(updated, cancellationToken);
         return await WithReviewAsync(updated, userId, cancellationToken);
     }
 
@@ -380,6 +383,11 @@ public sealed class SosService
             throw new UnauthorizedAccessException();
         if (session.EndedAt == null && (session.EndsAt == null || session.EndsAt > DateTime.UtcNow))
             throw new InvalidOperationException("Hãy đợi phiên kết thúc rồi mới đánh giá.");
+        var paid = session.PayoutStatus == "Paid"
+            || (session.BookingId != null && await _db.Payments.AnyAsync(
+                p => p.BookingId == session.BookingId && p.Status == "Success", cancellationToken));
+        if (!paid)
+            throw new InvalidOperationException("Hãy thanh toán phí SOS trước khi đánh giá gia sư.");
         if (await _db.Reviews.AnyAsync(r => r.SosSessionId == sessionId, cancellationToken))
             throw new InvalidOperationException("Bạn đã đánh giá phiên này.");
 
@@ -618,9 +626,80 @@ public sealed class SosService
             .Select(r => (byte?)r.Rating)
             .FirstOrDefaultAsync(cancellationToken);
         var ended = session.EndedAt != null || (session.EndsAt != null && session.EndsAt <= DateTime.UtcNow);
+        var paid = session.PayoutStatus == "Paid";
+        if (!paid && session.BookingId != null)
+        {
+            paid = await _db.Payments.AnyAsync(
+                p => p.BookingId == session.BookingId && p.Status == "Success", cancellationToken);
+            if (paid)
+            {
+                await _db.SosSessions
+                    .Where(s => s.SessionId == session.SessionId && s.PayoutStatus != "Paid")
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.PayoutStatus, "Paid"), cancellationToken);
+                session.PayoutStatus = "Paid";
+                dto.PayoutStatus = "Paid";
+            }
+        }
+        dto.BookingId = session.BookingId;
+        dto.Paid = paid;
         dto.MyRating = rating;
-        dto.CanReview = ended && viewerId == session.StudentId && rating == null;
+        dto.CanReview = ended && paid && viewerId == session.StudentId && rating == null;
         return dto;
+    }
+
+    private async Task EnsurePayableBookingAsync(SosSession session, CancellationToken cancellationToken)
+    {
+        if (session.BookingId != null) return;
+        var current = await _db.SosSessions.AsNoTracking()
+            .Where(s => s.SessionId == session.SessionId)
+            .Select(s => s.BookingId)
+            .SingleAsync(cancellationToken);
+        if (current != null)
+        {
+            session.BookingId = current;
+            return;
+        }
+
+        var subjectId = session.Request?.SubjectId
+            ?? await _db.SosRequests.Where(r => r.RequestId == session.RequestId)
+                .Select(r => r.SubjectId)
+                .SingleAsync(cancellationToken);
+        var start = session.StartedAt.Kind == DateTimeKind.Utc
+            ? session.StartedAt
+            : DateTime.SpecifyKind(session.StartedAt, DateTimeKind.Utc);
+        var end = session.EndsAt ?? start.AddMinutes(session.DurationMinutes);
+        var localStart = start.AddHours(7);
+        var localEnd = end.AddHours(7);
+        var booking = new Booking
+        {
+            StudentId = session.StudentId,
+            TutorId = session.TutorId,
+            SubjectId = subjectId,
+            ScheduledDate = DateOnly.FromDateTime(localStart),
+            StartTime = TimeOnly.FromDateTime(localStart),
+            EndTime = TimeOnly.FromDateTime(localEnd),
+            TeachingMode = "Online",
+            Location = $"SOS:{session.SessionId}",
+            Price = session.FeeAmount,
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow
+        };
+        _db.Bookings.Add(booking);
+        await _db.SaveChangesAsync(cancellationToken);
+        var linked = await _db.SosSessions
+            .Where(s => s.SessionId == session.SessionId && s.BookingId == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BookingId, booking.BookingId), cancellationToken);
+        if (linked == 1)
+            session.BookingId = booking.BookingId;
+        else
+        {
+            _db.Bookings.Remove(booking);
+            await _db.SaveChangesAsync(cancellationToken);
+            session.BookingId = await _db.SosSessions.Where(s => s.SessionId == session.SessionId)
+                .Select(s => s.BookingId)
+                .SingleAsync(cancellationToken);
+        }
     }
 
     private async Task RefreshTutorRatingAsync(int tutorId, CancellationToken cancellationToken)
@@ -658,6 +737,6 @@ public sealed class SosService
         StartedAt = AsUtc(session.StartedAt),
         EndsAt = AsUtc(session.EndsAt ?? session.StartedAt.AddMinutes(session.DurationMinutes)),
         EndedAt = AsUtc(session.EndedAt), DurationMinutes = session.DurationMinutes, FeeAmount = session.FeeAmount,
-        PayoutStatus = session.PayoutStatus
+        PayoutStatus = session.PayoutStatus, BookingId = session.BookingId
     };
 }

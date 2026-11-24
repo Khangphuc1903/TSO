@@ -16,6 +16,7 @@ public partial class SosSession
     public DateTime? EndedAt { get; set; }
     public decimal FeeAmount { get; set; }
     public string PayoutStatus { get; set; } = null!;
+    public int? BookingId { get; set; }
     public string? GatewayTransactionId { get; set; }
 
     public virtual SosRequest Request { get; set; } = null!;

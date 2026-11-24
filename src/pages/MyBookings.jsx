@@ -10,6 +10,7 @@ import {
   getMyBookings,
   openConversation,
   rejectBooking,
+  saveLessonReport,
 } from "../api/study";
 import { useCart } from "../context/CartContext";
 import EmptyState from "../components/ui/EmptyState";
@@ -28,6 +29,7 @@ export default function MyBookings() {
   const { refreshCart } = useCart();
   const user = getUser();
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
+  const isParent = (user?.role || "").toLowerCase() === "parent";
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState(isTutor ? "pending" : "all");
   const [error, setError] = useState("");
@@ -68,12 +70,14 @@ export default function MyBookings() {
             Lịch học được xác thực trên TSG
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">
-            Lịch <span className="text-brand-600">{isTutor ? "dạy" : "học"}</span>
+            Lịch <span className="text-brand-600">{isTutor ? "dạy" : isParent ? "của con" : "học"}</span>
           </h1>
           <p className="text-slate-500 mt-2 max-w-xl">
             {isTutor
-              ? "Xác nhận đơn của học viên. Học viên sẽ nhận thông báo ngay khi bạn duyệt."
-              : "Theo dõi các buổi đã đặt với gia sư, đơn chờ xác nhận và lịch hôm nay."}
+              ? "Xác nhận đơn, hoàn thành buổi học và gửi đánh giá cho phụ huynh sau buổi học."
+              : isParent
+                ? "Đặt lịch, thanh toán và theo dõi buổi học như học viên. Khi buổi hoàn thành, gia sư gửi đánh giá để bạn biết con học thế nào."
+                : "Theo dõi các buổi đã đặt với gia sư, đơn chờ xác nhận và lịch hôm nay."}
           </p>
         </div>
       </section>
@@ -135,6 +139,12 @@ export default function MyBookings() {
                 key={b.bookingId}
                 booking={b}
                 counterpartName={teaching ? b.studentName : b.tutorName}
+                canWriteReport={teaching}
+                onSaveReport={async (payload) => {
+                  const res = await saveLessonReport(b.bookingId, payload);
+                  setInfo(res.message);
+                  await load();
+                }}
                 onChat={async () => {
                   const other = teaching ? b.studentId : b.tutorId;
                   const id = await openConversation(other, b.bookingId);

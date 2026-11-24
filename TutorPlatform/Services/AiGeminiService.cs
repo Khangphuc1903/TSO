@@ -18,8 +18,29 @@ public class AiGeminiService
         _logger = logger;
     }
 
-    private string ApiKey => _config["Gemini:ApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "";
-    private string ModelName => _config["Gemini:Model"] ?? "gemini-3.8-flash";
+    private string ApiKey
+    {
+        get
+        {
+            var configured = _config["Gemini:ApiKey"]?.Trim();
+            if (!string.IsNullOrWhiteSpace(configured) &&
+                !configured.Contains("YOUR_GEMINI_API_KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                return configured;
+            }
+
+            return Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Trim() ?? "";
+        }
+    }
+
+    private string ModelName
+    {
+        get
+        {
+            var configured = _config["Gemini:Model"]?.Trim();
+            return string.IsNullOrWhiteSpace(configured) ? "gemini-2.5-flash" : configured;
+        }
+    }
 
     /// <summary>
     /// Chẩn đoán lỗ hổng kiến thức từ ảnh bài tập/đề thi qua Gemini Multimodal Vision
@@ -86,7 +107,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
                         {
                             inlineData = new
                             {
-                                mimeType = string.IsNullOrWhiteSpace(mimeType) ? "image/jpeg" : mimeType,
+                                mimeType = NormalizeImageMimeType(mimeType),
                                 data = base64Image
                             }
                         },
@@ -107,6 +128,9 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
         };
 
         var responseJson = await CallGeminiApiAsync(payload, ct);
+        if (string.IsNullOrWhiteSpace(responseJson))
+            throw new InvalidOperationException("Chưa cấu hình Gemini:ApiKey (hãy điền API key vào appsettings.Local.json, appsettings.json hoặc biến môi trường GEMINI_API_KEY).");
+
         var parsed = CleanAndParseJson<GeminiDiagnosisOutput>(responseJson);
         if (parsed == null)
             throw new InvalidOperationException("Gemini đã trả lời nhưng không đúng dạng chẩn đoán.");
@@ -125,7 +149,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             {
                 inlineData = new
                 {
-                    mimeType = string.IsNullOrWhiteSpace(image.Mime) ? "image/jpeg" : image.Mime,
+                    mimeType = NormalizeImageMimeType(image.Mime),
                     data = Convert.ToBase64String(image.Bytes)
                 }
             });
@@ -141,7 +165,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             generationConfig = new
             {
                 temperature = 0.1,
-                maxOutputTokens = 2048,
+                maxOutputTokens = 8192,
                 responseMimeType = "application/json"
             }
         };
@@ -220,7 +244,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             generationConfig = new
             {
                 temperature = 0.1,
-                maxOutputTokens = 2048,
+                maxOutputTokens = 8192,
                 responseMimeType = "application/json"
             }
         };
@@ -231,10 +255,20 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
         return CleanAndParseJson<GeminiNaturalSearchOutput>(responseJson);
     }
 
+    private static string NormalizeImageMimeType(string? mimeType)
+    {
+        if (!string.IsNullOrWhiteSpace(mimeType) &&
+            mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return mimeType.Trim();
+        }
+        return "image/jpeg";
+    }
+
     private IEnumerable<string> ModelCandidates()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in new[] { ModelName, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest" })
+        foreach (var name in new[] { ModelName, "gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest" })
         {
             if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
                 yield return name;
@@ -251,6 +285,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
 
         var jsonContent = JsonSerializer.Serialize(payload);
         string? lastError = null;
+        string? preferredError = null;
 
         foreach (var model in ModelCandidates())
         {
@@ -258,21 +293,35 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             {
                 var result = await SendOnceAsync(model, jsonContent, ct);
                 if (result.Text != null) return result.Text;
+
                 lastError = result.Error;
+                if (result.Status is 429 or 503 or 0 && string.IsNullOrWhiteSpace(preferredError))
+                    preferredError = result.Error;
+
                 var retryable = result.Status is 0 or 404 or 429 or 503;
                 if (!retryable)
                     throw new InvalidOperationException(result.Error);
-                if (result.Status is 429 or 503 or 0 && attempt == 1)
+
+                // Với 404 (model ngừng hỗ trợ) hoặc 429 (hết quota model này): chuyển ngay sang model dự phòng khác quota pool
+                if (result.Status is 404 or 429)
                 {
-                    await Task.Delay(700, ct);
+                    _logger.LogWarning("Gemini model {Model} lỗi {Status}, chuyển model dự phòng: {Error}", model, result.Status, result.Error);
+                    break;
+                }
+
+                // Với 503 (quá tải tạm thời) hoặc lỗi mạng/timeout: thử lại 1 lần sau 1.5s rồi mới chuyển model
+                if (result.Status is 503 or 0 && attempt == 1)
+                {
+                    await Task.Delay(1500, ct);
                     continue;
                 }
+
                 _logger.LogWarning("Gemini model {Model} lỗi {Status}: {Error}", model, result.Status, result.Error);
                 break;
             }
         }
 
-        throw new InvalidOperationException(lastError ?? "Gemini đang quá tải. Hãy thử lại sau ít giây.");
+        throw new InvalidOperationException(preferredError ?? lastError ?? "Máy chủ Gemini đang bận. Hãy thử lại sau ít giây.");
     }
 
     private async Task<(string? Text, string Error, int Status)> SendOnceAsync(string model, string jsonContent, CancellationToken ct)
@@ -351,15 +400,21 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             return string.IsNullOrWhiteSpace(detail)
                 ? "Google từ chối API key."
                 : $"Google từ chối API key: {detail}";
-        if (status is 429 or 503)
-            return "Gemini đang quá tải tạm thời. Hãy bấm chẩn đoán lại sau vài giây.";
+        if (status == 429)
+            return string.IsNullOrWhiteSpace(detail)
+                ? "API key Gemini đã chạm giới hạn miễn phí (429). Hãy chờ khoảng 1 phút hoặc kiểm tra hạn mức tại Google AI Studio."
+                : $"API key Gemini đã chạm giới hạn miễn phí (429): {detail}";
+        if (status == 503)
+            return "Máy chủ Gemini đang quá tải tạm thời (503). Hãy bấm thử lại sau vài giây.";
         return string.IsNullOrWhiteSpace(detail)
             ? $"Gemini trả về lỗi {status}."
             : $"Gemini trả về lỗi {status}: {detail}";
     }
 
-    private T? CleanAndParseJson<T>(string rawText) where T : class
+    private T? CleanAndParseJson<T>(string? rawText) where T : class
     {
+        if (string.IsNullOrWhiteSpace(rawText)) return null;
+
         try
         {
             var text = rawText.Trim();
@@ -384,6 +439,16 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
             {
                 PropertyNameCaseInsensitive = true
             };
+
+            // Một số model lite có thể bọc object JSON trong mảng 1 phần tử [ { ... } ]
+            if (text.StartsWith("["))
+            {
+                using var doc = JsonDocument.Parse(text);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0)
+                {
+                    return JsonSerializer.Deserialize<T>(doc.RootElement[0].GetRawText(), options);
+                }
+            }
 
             return JsonSerializer.Deserialize<T>(text, options);
         }

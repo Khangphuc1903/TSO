@@ -211,7 +211,7 @@ export default function FindTutors() {
                 <option value="">Tất cả môn học</option>
                 {subjects.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.educationLevel})
+                    {s.name} ({s.educationLevel === "Primary" ? "Cấp 1" : s.educationLevel === "Secondary" ? "THCS" : s.educationLevel === "HighSchool" ? "THPT" : s.educationLevel})
                   </option>
                 ))}
               </select>
