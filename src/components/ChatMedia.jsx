@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Paperclip, Send, X, FileText } from "lucide-react";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
+import MathText from "./MathText";
 
 const PLACEHOLDER = new Set(["[Hình ảnh]", "[Tệp đính kèm]"]);
 
@@ -15,7 +16,7 @@ export function ChatMessageBody({ m, mine }) {
 
   return (
     <>
-      {!hideText && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
+      {!hideText && <MathText text={m.content} />}
       {url && isImage && (
         <a href={url} target="_blank" rel="noreferrer" className="block mt-1">
           <img src={url} alt="" className="max-h-52 rounded-lg object-cover" />
@@ -38,10 +39,15 @@ export function ChatMessageBody({ m, mine }) {
   );
 }
 
-export function ChatComposer({ onSend, placeholder = "Nhắn tin...", disabled = false }) {
+export function ChatComposer({ onSend, placeholder = "Nhắn tin...", disabled = false, mathMode = false }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  const insertSymbol = (symbol) => {
+    setText((current) => `${current}${symbol}`);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -78,13 +84,24 @@ export function ChatComposer({ onSend, placeholder = "Nhắn tin...", disabled =
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </label>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder}
-          disabled={disabled || sending}
-          className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-        />
+        {mathMode ? (
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`${placeholder} Có thể dùng $\\frac{x}{y}$ hoặc $$\\int f(x)dx$$`}
+            disabled={disabled || sending}
+            rows={2}
+            className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+          />
+        ) : (
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={placeholder}
+            disabled={disabled || sending}
+            className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+          />
+        )}
         <button
           type="submit"
           disabled={disabled || sending}
@@ -94,6 +111,56 @@ export function ChatComposer({ onSend, placeholder = "Nhắn tin...", disabled =
           <Send size={15} />
         </button>
       </div>
+      {mathMode && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              ["Phân số", "\\frac{}{}"],
+              ["Căn", "\\sqrt{}"],
+              ["Mũ", "^{2}"],
+              ["Chỉ số", "_{1}"],
+              ["Σ", "\\sum"],
+              ["∫", "\\int"],
+              ["lim", "\\lim"],
+              ["π", "\\pi"],
+              ["∞", "\\infty"],
+            ].map(([label, latex]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => insertSymbol(` $${latex}$ `)}
+                disabled={disabled || sending}
+                className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 hover:bg-slate-50"
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPreview((value) => !value)}
+              disabled={disabled || sending}
+              className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-brand-700"
+            >
+              {preview ? "Đóng xem trước" : "Xem trước"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setText((current) =>
+                `${current}${current ? "\n\n" : ""}1. Phân tích đề bài:\n2. Dữ kiện đã cho:\n3. Yêu cầu cần tìm:\n4. Công thức/định lý áp dụng: $$...$$\n5. Các bước giải:\n6. Giải thích từng bước:\n7. Kết quả cuối cùng:\n8. Kiểm tra lại kết quả:`
+              )}
+              disabled={disabled || sending}
+              className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-brand-700"
+            >
+              Mẫu lời giải
+            </button>
+          </div>
+          {preview && (
+            <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800">
+              {text.trim() ? <MathText text={text} /> : <p className="text-xs text-slate-400">Chưa có nội dung</p>}
+            </div>
+          )}
+        </div>
+      )}
     </form>
   );
 }

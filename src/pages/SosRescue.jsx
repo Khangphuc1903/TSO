@@ -13,6 +13,7 @@ import {
   getOpenSosRequests,
   getSosConfig,
 } from "../api/sos";
+import MathText from "../components/MathText";
 
 function statusLabel(status) {
   if (status === "Open") return "Đang chờ gia sư";
@@ -211,9 +212,15 @@ export default function SosRescue() {
                   rows={3}
                   value={form.questionNote}
                   onChange={(e) => setForm((f) => ({ ...f, questionNote: e.target.value }))}
-                  placeholder="Mình kẹt bước này..."
+                  placeholder="Mình kẹt bước này... Dùng $\\frac{x}{y}$ hoặc $$x^2-4=0$$"
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
                 />
+                {form.questionNote && (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="mb-1 text-xs font-medium text-slate-500">Xem trước công thức</p>
+                    <MathText text={form.questionNote} className="text-sm text-slate-800" />
+                  </div>
+                )}
               </label>
               <button
                 type="submit"

@@ -8,6 +8,7 @@ import { getMessages, sendMessage, sendMessageAttachment } from "../api/study";
 import { endSosSession, getSosSession, reviewSosSession } from "../api/sos";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref, formatVnd } from "../utils/format";
+import MathText from "../components/MathText";
 
 function parseServerTime(value) {
   if (!value) return null;
@@ -274,7 +275,7 @@ export default function SosSession() {
               <img src={fileHref(session.imageUrl, API_ORIGIN)} alt="" className="rounded-xl max-h-40 w-full object-cover" />
             </a>
           )}
-          {session?.questionNote && <p className="text-sm text-slate-600">{session.questionNote}</p>}
+          {session?.questionNote && <MathText text={session.questionNote} className="text-sm text-slate-600" />}
           <audio ref={remoteAudioRef} autoPlay />
           
 {ended ? (
@@ -414,6 +415,7 @@ export default function SosSession() {
           <ChatComposer
             onSend={onSend}
             disabled={ended}
+            mathMode
             placeholder={ended ? "Phiên đã hết" : "Nhắn, gửi ảnh hoặc file hướng dẫn..."}
           />
         </section>
