@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CalendarClock, Sparkles } from "lucide-react";
 import BookingLessonCard from "../components/BookingLessonCard";
 import CancelRefundModal from "../components/CancelRefundModal";
@@ -8,6 +8,7 @@ import {
   completeBooking,
   confirmBooking,
   getMyBookings,
+  getTutorWorkspace,
   openConversation,
   rejectBooking,
   saveLessonReport,
@@ -15,6 +16,8 @@ import {
 import { useCart } from "../context/CartContext";
 import EmptyState from "../components/ui/EmptyState";
 import { Spinner } from "../components/ui/Spinner";
+
+const DAYS = ["", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
 
 const FILTERS = [
   { id: "all", label: "Tất cả" },
@@ -31,7 +34,8 @@ export default function MyBookings() {
   const isTutor = (user?.role || "").toLowerCase() === "tutor";
   const isParent = (user?.role || "").toLowerCase() === "parent";
   const [items, setItems] = useState([]);
-  const [filter, setFilter] = useState(isTutor ? "pending" : "all");
+  const [slots, setSlots] = useState([]);
+  const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [cancelBookingId, setCancelBookingId] = useState(null);
@@ -44,8 +48,15 @@ export default function MyBookings() {
 
   useEffect(() => {
     if (!isLoggedIn()) navigate("/login");
-    else load().catch(() => setError("Không tải được lịch học."));
-  }, [navigate]);
+    else {
+      load().catch(() => setError("Không tải được lịch học."));
+      if (isTutor) {
+        getTutorWorkspace()
+          .then((ws) => setSlots(Array.isArray(ws?.slots) ? ws.slots : []))
+          .catch(() => setSlots([]));
+      }
+    }
+  }, [navigate, isTutor]);
 
   const visible = useMemo(() => {
     if (filter === "today") return items.filter((b) => b.isToday);
@@ -102,6 +113,36 @@ export default function MyBookings() {
           </div>
         </div>
 
+        {isTutor && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Khung giờ đang mở</h2>
+                <p className="text-sm text-slate-500 mt-1">Học viên đặt vào các giờ này. Đơn mới nằm ở mục Tất cả và Chờ xác nhận.</p>
+              </div>
+              <Link to="/tutor" className="h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium inline-flex items-center">
+                Thêm lịch trống
+              </Link>
+            </div>
+            {slots.length === 0 ? (
+              <p className="text-sm text-slate-400 mt-4">Chưa có khung giờ. Thêm lịch trống thì học viên mới đặt được buổi học.</p>
+            ) : (
+              <ul className="mt-4 grid sm:grid-cols-2 gap-2">
+                {slots.map((slot) => (
+                  <li key={slot.slotId} className="rounded-xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
+                    {slot.isRecurring
+                      ? DAYS[slot.dayOfWeek] || "Hàng tuần"
+                      : slot.specificDate || "Một ngày"}
+                    {" · "}
+                    {slot.startTime} – {slot.endTime}
+                    {slot.isBooked ? " · Đã có người đặt" : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
             {error}
@@ -145,6 +186,7 @@ export default function MyBookings() {
                   setInfo(res.message);
                   await load();
                 }}
+                onReviewed={load}
                 onChat={async () => {
                   const other = teaching ? b.studentId : b.tutorId;
                   const id = await openConversation(other, b.bookingId);
@@ -215,7 +257,7 @@ export default function MyBookings() {
                             }
                           }}
                         >
-                          {teaching ? "Đã dạy xong" : "Đã học xong"}
+                          {teaching ? "Xác nhận dạy xong" : "Xác nhận học xong"}
                         </button>
                       )}
                       {!teaching && (

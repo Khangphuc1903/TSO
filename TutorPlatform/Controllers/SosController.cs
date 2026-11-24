@@ -115,6 +115,14 @@ public sealed class SosController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
+    [HttpGet("sessions/mine")]
+    [Authorize(Roles = "Student,Parent,Tutor")]
+    public async Task<IActionResult> MySessions(CancellationToken cancellationToken)
+    {
+        if (CurrentUserId is not int userId) return Unauthorized();
+        return Ok(await _sos.ListHistoryAsync(userId, User.IsInRole("Tutor"), cancellationToken));
+    }
+
     [HttpGet("sessions/{sessionId:int}")]
     public async Task<IActionResult> Session(int sessionId, CancellationToken cancellationToken)
     {

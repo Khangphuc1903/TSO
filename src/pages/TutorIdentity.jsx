@@ -18,6 +18,9 @@ function apiMessage(err, fallback) {
   return d?.message || d?.Message || fallback;
 }
 
+const AI_OVERLOAD =
+  "AI quá tải. Hãy chụp ảnh căn cước và ảnh mặt để admin duyệt. Ảnh chỉ giữ tối đa 24 giờ và bị xóa ngay khi admin duyệt.";
+
 function rawToken(value) {
   const text = String(value || "").trim();
   return text.toLowerCase().startsWith("bearer ") ? text.slice(7).trim() : text;
@@ -42,6 +45,9 @@ export default function TutorIdentity() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [sdkOpen, setSdkOpen] = useState(false);
+  const [waitingAi, setWaitingAi] = useState(false);
+  const scanStarted = useRef(0);
+  const failTimer = useRef(0);
   const formRef = useRef(null);
   const [manual, setManual] = useState({
     fullName: "",
@@ -86,13 +92,8 @@ export default function TutorIdentity() {
         frameRef.current.contentWindow.postMessage({ type: "VNPT_LAUNCH", config: configRef.current }, window.location.origin);
         return;
       }
-      if (data.type === "VNPT_TIMEOUT") {
-        openManual(data.message);
-        return;
-      }
-      if (data.type === "VNPT_ERROR") {
-        setSdkOpen(false);
-        setError(data.message || "Không mở được VNPT eKYC.");
+      if (data.type === "VNPT_TIMEOUT" || data.type === "VNPT_ERROR") {
+        failToManual();
         return;
       }
       if (data.type === "VNPT_RESULT") {
@@ -106,8 +107,9 @@ export default function TutorIdentity() {
 
   const openManual = (message) => {
     setSdkOpen(false);
+    setWaitingAi(false);
     setError("");
-    setInfo(message || "VNPT chưa phản hồi. Chụp ảnh căn cước, ảnh người và điền thông tin để admin đối chiếu.");
+    setInfo(message || AI_OVERLOAD);
     setManual((current) => ({
       ...current,
       fullName: current.fullName || status?.fullName || user?.fullName || "",
@@ -117,11 +119,14 @@ export default function TutorIdentity() {
     window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  useEffect(() => {
-    if (!sdkOpen) return undefined;
-    const timer = setTimeout(() => openManual(), 20000);
-    return () => clearTimeout(timer);
-  }, [sdkOpen]);
+  const failToManual = () => {
+    const elapsed = Date.now() - (scanStarted.current || Date.now());
+    const remain = Math.max(0, 20000 - elapsed);
+    window.clearTimeout(failTimer.current);
+    setWaitingAi(true);
+    setInfo("Đang chờ AI đọc căn cước và đối chiếu khuôn mặt...");
+    failTimer.current = window.setTimeout(() => openManual(AI_OVERLOAD), remain);
+  };
 
   const submitManual = async (e) => {
     e.preventDefault();
@@ -141,6 +146,8 @@ export default function TutorIdentity() {
   };
 
   const submitResult = async (result) => {
+    window.clearTimeout(failTimer.current);
+    setWaitingAi(false);
     setBusy(true);
     setError("");
     setInfo("");
@@ -163,8 +170,9 @@ export default function TutorIdentity() {
     setInfo("");
     try {
       const cfg = await getEkycConfig();
+      scanStarted.current = Date.now();
       if (!cfg.configured) {
-        setError(cfg.message || "Chưa cấu hình VNPT eKYC.");
+        failToManual();
         return;
       }
       configRef.current = {
@@ -180,8 +188,11 @@ export default function TutorIdentity() {
         DEFAULT_LANGUAGE: "vi",
       };
       setSdkOpen(true);
+      window.clearTimeout(failTimer.current);
+      failTimer.current = window.setTimeout(() => openManual(AI_OVERLOAD), 20000);
     } catch (err) {
-      setError(apiMessage(err, "Không lấy được cấu hình VNPT."));
+      scanStarted.current = scanStarted.current || Date.now();
+      failToManual();
     } finally {
       setBusy(false);
     }
@@ -212,7 +223,7 @@ export default function TutorIdentity() {
 
       <main className="max-w-5xl mx-auto px-6 pb-16 space-y-4">
         {info && !error && (
-          <div className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{info}</div>
+          <div className={`text-sm rounded-lg px-3 py-2 border ${info.includes("AI quá tải") ? "text-amber-900 bg-amber-50 border-amber-100" : "text-emerald-800 bg-emerald-50 border-emerald-100"}`}>{info}</div>
         )}
         {error && (
           <div className="text-sm text-red-800 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>
@@ -239,15 +250,22 @@ export default function TutorIdentity() {
                   <CheckCircle2 size={16} /> Đã xác thực{pct != null ? ` · khớp ${pct}%` : ""}. Ảnh CCCD không còn lưu.
                 </p>
               )}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={openVnpt}
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
-              >
-                {busy ? <Loader2 className="animate-spin" size={16} /> : <IdCard size={16} />}
-                Mở máy quét VNPT
-              </button>
+              {waitingAi && (
+                <p className="text-sm text-slate-600 inline-flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={16} /> Đang chờ AI, tối đa 20 giây...
+                </p>
+              )}
+              {!identityDone && !waitingAi && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={openVnpt}
+                  className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-brand-600 text-white text-sm font-medium disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="animate-spin" size={16} /> : <IdCard size={16} />}
+                  Mở máy quét VNPT
+                </button>
+              )}
             </section>
 
             {identityDone ? (
@@ -324,7 +342,7 @@ export default function TutorIdentity() {
       {sdkOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-[#0F294A]">
           <div className="flex items-center justify-between gap-3 px-4 py-2 text-white">
-            <p className="text-sm">Đang quét với VNPT. Sau 20 giây chưa có kết quả, hệ thống chuyển sang chụp ảnh đối chiếu và điền thông tin.</p>
+            <p className="text-sm">Đang quét với AI. Sau 20 giây chưa có kết quả sẽ báo AI quá tải và chuyển sang chụp căn cước với ảnh mặt.</p>
             <button
               type="button"
               onClick={() => setSdkOpen(false)}

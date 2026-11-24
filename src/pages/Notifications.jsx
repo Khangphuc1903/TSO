@@ -54,6 +54,7 @@ export default function Notifications() {
               size="sm"
               onClick={async () => {
                 await markAllNotificationsRead();
+                window.dispatchEvent(new Event("inbox-updated"));
                 await load();
                 success("Đã đánh dấu tất cả thông báo là đã đọc.");
               }}
@@ -100,12 +101,16 @@ export default function Notifications() {
                 type="button"
                 onClick={async () => {
                   await markNotificationRead(n.notificationId);
-                  await load();
-                  if (n.type === "MentorInvite") navigate("/tutor");
-                  else if (n.relatedEntityType === "StudyGroup" && n.relatedEntityId)
-                    navigate(`/study-groups/${n.relatedEntityId}`);
-                  else if (n.relatedEntityType === "Booking" || (n.type || "").includes("Booking"))
+                  window.dispatchEvent(new Event("inbox-updated"));
+                  const id = n.relatedEntityId;
+                  const type = n.type || "";
+                  if (type === "MentorInvite") navigate("/tutor");
+                  else if (type === "GroupJoinRequest" && id) navigate(`/study-groups/mine?duyet=${id}`);
+                  else if (type === "GroupPostReview" && id) navigate(`/study-groups/${id}#bai-cho`);
+                  else if (n.relatedEntityType === "StudyGroup" && id) navigate(`/study-groups/${id}`);
+                  else if (n.relatedEntityType === "Booking" || type.includes("Booking"))
                     navigate("/bookings");
+                  else await load();
                 }}
                 className={`w-full text-left bg-white rounded-2xl border px-5 py-4 hover:shadow-md transition-shadow ${
                   n.isRead ? "border-slate-100" : "border-brand-200 bg-brand-50/40"

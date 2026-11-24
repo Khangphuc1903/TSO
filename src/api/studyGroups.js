@@ -88,6 +88,68 @@ export async function sendStudyGroupAttachment(id, { content, file }) {
   return res.data;
 }
 
+export async function listMyGroupFeed() {
+  const res = await axiosClient.get("/study-groups/feed/home");
+  return res.data;
+}
+
+export async function listGroupFeed(keyword) {
+  const res = await axiosClient.get("/study-groups/feed", { params: keyword ? { keyword } : {} });
+  return res.data;
+}
+
+export async function createGroupFeed(payload) {
+  const res = await axiosClient.post("/study-groups/feed", payload);
+  return res.data;
+}
+
+export async function getGroupFeed(groupId) {
+  const res = await axiosClient.get(`/study-groups/${groupId}/feed`);
+  return res.data;
+}
+
+export async function requestGroupJoin(groupId, message) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/join`, { message: message || "" });
+  return res.data;
+}
+
+export async function moderateGroupJoin(groupId, userId, accept) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/requests/${userId}`, { accept });
+  return res.data;
+}
+
+export async function publishGroupPost(groupId, { body, files }) {
+  const data = new FormData();
+  if (body) data.append("body", body);
+  (files || []).forEach((file) => data.append("files", file));
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/posts`, data);
+  return res.data;
+}
+
+export async function reviewGroupPost(groupId, postId, accept) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/posts/${postId}/review`, { accept });
+  return res.data;
+}
+
+export async function publishGroupComment(groupId, postId, { body, files, parentCommentId }) {
+  const data = new FormData();
+  if (body) data.append("body", body);
+  if (parentCommentId) data.append("parentCommentId", String(parentCommentId));
+  (files || []).forEach((file) => data.append("files", file));
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/posts/${postId}/comments`, data);
+  return res.data;
+}
+
+export async function reportGroupPost(groupId, postId, payload) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/posts/${postId}/report`, payload);
+  return res.data;
+}
+
+export async function reportGroupComment(groupId, commentId, payload) {
+  const res = await axiosClient.post(`/study-groups/${groupId}/feed/comments/${commentId}/report`, payload);
+  return res.data;
+}
+
 export async function removeStudyGroupMember(groupId, userId) {
   const res = await axiosClient.post(`/study-groups/${groupId}/members/${userId}/remove`);
   return res.data;

@@ -48,9 +48,18 @@ public class BookingsController : ControllerBase
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(userIdValue, out var userId))
             return Unauthorized();
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "Student";
+        var role = User.IsInRole("Tutor")
+            ? "Tutor"
+            : User.FindFirstValue(ClaimTypes.Role) ?? "Student";
         var items = await _bookingService.ListMineAsync(userId, role, cancellationToken);
-        await _bookingService.EnsureTodayRemindersAsync(userId, cancellationToken);
+        try
+        {
+            await _bookingService.EnsureTodayRemindersAsync(userId, cancellationToken);
+        }
+        catch
+        {
+            /* nhắc lịch lỗi không được làm trống danh sách buổi học */
+        }
         return Ok(items);
     }
 

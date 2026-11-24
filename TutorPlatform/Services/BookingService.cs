@@ -93,6 +93,7 @@ public class BookingService
             price = sessionMin;
         }
 
+        var payInPerson = string.Equals(dto.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase);
         var booking = new Booking
         {
             StudentId = studentId,
@@ -105,6 +106,7 @@ public class BookingService
             TeachingMode = mode,
             Location = slot.Tutor.Tutor?.City,
             Price = price,
+            PaymentType = payInPerson ? "InPerson" : "Online",
             Status = "Pending",
             CreatedAt = DateTime.Now
         };
@@ -120,7 +122,9 @@ public class BookingService
             dto.TutorId,
             "BookingRequest",
             "Yêu cầu đặt lịch mới",
-            "Một học viên vừa đặt lịch với bạn. Hãy xác nhận buổi học.",
+            payInPerson
+                ? "Một học viên đặt lịch và sẽ trả tiền mặt khi gặp, sau buổi học. Không cần chuyển khoản."
+                : "Một học viên vừa đặt lịch với bạn. Hãy xác nhận buổi học.",
             "Booking",
             booking.BookingId,
             cancellationToken);
@@ -148,9 +152,12 @@ public class BookingService
             .Include(b => b.Tutor).ThenInclude(t => t.Tutor)
             .Include(b => b.Subject)
             .Include(b => b.Payments)
+            .Include(b => b.Review)
             .AsQueryable();
 
-        query = role.Equals("Tutor", StringComparison.OrdinalIgnoreCase)
+        var asTutor = role.Equals("Tutor", StringComparison.OrdinalIgnoreCase)
+            || await _db.TutorProfiles.AsNoTracking().AnyAsync(t => t.TutorId == userId, cancellationToken);
+        query = asTutor
             ? query.Where(b => b.TutorId == userId)
             : query.Where(b => b.StudentId == userId);
 
@@ -181,7 +188,13 @@ public class BookingService
                 TeachingMode = b.TeachingMode,
                 Location = b.Location,
                 IsToday = b.ScheduledDate == DateOnly.FromDateTime(DateTime.Today),
-                PaymentStatus = lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
+                PaymentType = string.IsNullOrWhiteSpace(b.PaymentType) ? "Online" : b.PaymentType,
+                PaymentStatus = string.Equals(b.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase)
+                    ? "Cash"
+                    : lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
+                HasReview = b.Review != null,
+                ReviewRating = b.Review?.Rating,
+                ReviewComment = b.Review?.Comment,
                 PaymentUrl = lastPayment?.PaymentUrl,
                 TutorCompleted = b.TutorCompleted,
                 StudentCompleted = b.StudentCompleted,
@@ -296,8 +309,9 @@ public class BookingService
         if (booking.Status != "Pending")
             return (false, 400, "Booking không ở trạng thái chờ xác nhận.");
 
+        var cash = string.Equals(booking.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase);
         var hasPaid = booking.Payments.Any(p => p.Status == "Success");
-        if (booking.Price > 0 && !hasPaid)
+        if (booking.Price > 0 && !hasPaid && !cash)
         {
             return (false, 400, "Học viên chưa hoàn tất thanh toán tiền giữ chỗ. Vui lòng chờ học viên thanh toán trước khi duyệt.");
         }

@@ -84,6 +84,7 @@ public class AdminReportDto
     public string? Description { get; set; }
     public string EntityType { get; set; } = null!;
     public int EntityId { get; set; }
+    public string? ContentSnippet { get; set; }
     public DateTime CreatedAt { get; set; }
     public string Status { get; set; } = null!;
 }

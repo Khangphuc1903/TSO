@@ -74,6 +74,11 @@ export async function rejectBooking(id) {
   return res.data;
 }
 
+export async function createTutorReview(tutorId, payload) {
+  const res = await axiosClient.post(`/reviews/tutor/${tutorId}`, payload);
+  return res.data;
+}
+
 export async function completeBooking(id) {
   const res = await axiosClient.post(`/bookings/${id}/complete`);
   return res.data;

@@ -1,770 +1,555 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Flag, ImagePlus, MessageCircle, Send, Users } from "lucide-react";
 import {
-  ArrowLeft,
-  MapPin,
-  MessageCircle,
-  Sparkles,
-  Users,
-  BookOpen,
-  GraduationCap,
-  UserCheck,
-  Crown,
-  Send,
-  Check,
-  AlertCircle,
-  CheckCircle2,
-  Globe,
-  Clock,
-  Shield,
-  ChevronRight,
-  Award,
-  Heart,
-  Zap
-} from "lucide-react";
-import GroupChatPane from "../components/GroupChatPane";
-import { avatarUrl, getUser, isLoggedIn } from "../auth";
-import { getStudyGroup, inviteTutorToGroup, joinStudyGroup, placeStudyGroupBid, removeStudyGroupMember, respondJoinRequest, selectStudyGroupBid, voteStudyGroupBid, withdrawStudyGroupBid } from "../api/studyGroups";
-import { formatVnd } from "../utils/format";
-import { getDefaultTutors } from "../api/tutorSearch";
-import { openConversation } from "../api/study";
-import { levelLabel, splitStudyCopy } from "../data/studyLevels";
+  getGroupFeed,
+  getStudyGroup,
+  joinStudyGroup,
+  moderateGroupJoin,
+  publishGroupComment,
+  publishGroupPost,
+  reviewGroupPost,
+  reportGroupComment,
+  reportGroupPost,
+  requestGroupJoin,
+  respondJoinRequest,
+} from "../api/studyGroups";
+import { API_ORIGIN } from "../api/axiosClient";
+import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
+
+const REASONS = [
+  { id: "Spam", label: "Spam" },
+  { id: "Harassment", label: "Quấy rối" },
+  { id: "Inappropriate", label: "Nội dung không phù hợp" },
+  { id: "Other", label: "Khác" },
+];
+
+export function media(path) {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${API_ORIGIN}${path}`;
+}
+
+export function face(person) {
+  return person?.avatarUrl ? media(person.avatarUrl) : avatarUrl(person?.fullName);
+}
+
+function when(value) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("vi-VN") : "";
+}
+
+export function RoleMark({ role }) {
+  if (!role) return null;
+  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{role}</span>;
+}
+
+export function Files({ files }) {
+  const images = (files || []).filter((file) => file.kind === "image");
+  const docs = (files || []).filter((file) => file.kind !== "image");
+  if (!images.length && !docs.length) return null;
+  return (
+    <div className="mt-3 space-y-2">
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {images.map((file) => (
+            <a key={file.fileUrl} href={media(file.fileUrl)} target="_blank" rel="noreferrer">
+              <img src={media(file.fileUrl)} alt={file.fileName} className="h-40 w-full rounded-xl object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
+      {docs.map((file) => (
+        <a key={file.fileUrl} href={media(file.fileUrl)} target="_blank" rel="noreferrer" className="block rounded-lg bg-slate-50 px-3 py-2 text-sm text-brand-700">
+          {file.fileName || "Tệp đính kèm"}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+export function Composer({ placeholder, onSend, onCancel }) {
+  const [text, setText] = useState("");
+  const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const send = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      await onSend({ body: text.trim(), files });
+      setText("");
+      setFiles([]);
+    } catch (err) {
+      setError(err.response?.data?.message || "Không gửi được.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder={placeholder}
+        className="w-full resize-none bg-transparent text-sm outline-none"
+      />
+      {files.length > 0 && (
+        <p className="mb-2 text-xs text-slate-500">{files.map((file) => file.name).join(", ")}</p>
+      )}
+      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      <div className="flex items-center justify-between">
+        <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600">
+          <ImagePlus size={15} /> Ảnh / tệp
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"
+            onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, 6))}
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          {onCancel && (
+            <button type="button" onClick={onCancel} className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:bg-white">
+              Hủy trả lời
+            </button>
+          )}
+          <button type="button" disabled={busy} onClick={send} className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60">
+            <Send size={13} /> {busy ? "Đang gửi" : "Đăng"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ReportBox({ onSubmit, onClose }) {
+  const [reason, setReason] = useState("Spam");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const send = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit({ reason, description });
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không gửi được báo cáo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 p-3">
+      <select value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-xs">
+        {REASONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+      </select>
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Mô tả thêm cho admin" className="mt-2 w-full rounded-lg border border-amber-200 px-2 py-1.5 text-xs" />
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      <div className="mt-2 flex gap-2">
+        <button type="button" disabled={busy} onClick={send} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white">Gửi báo cáo</button>
+        <button type="button" onClick={onClose} className="text-xs text-slate-500">Hủy</button>
+      </div>
+    </div>
+  );
+}
 
 export default function StudyGroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
-  const user = getUser();
-  const isTutor = (user?.role || "").toLowerCase() === "tutor";
   const [group, setGroup] = useState(null);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-  const [tutors, setTutors] = useState([]);
-  const [tutorId, setTutorId] = useState("");
-  const [joinMessage, setJoinMessage] = useState("");
-  const [bidForm, setBidForm] = useState({ proposedPrice: "", curriculumNote: "", certificateNote: "" });
-  const [bidError, setBidError] = useState("");
+  const [note, setNote] = useState("");
+  const [joinNote, setJoinNote] = useState("");
+  const [replyTo, setReplyTo] = useState(null);
+  const [report, setReport] = useState(null);
+  const me = getUser();
+  const mineId = String(me?.userId || "");
 
-  const load = () => getStudyGroup(groupId).then(setGroup);
+  const load = async () => {
+    const [feed, classic] = await Promise.all([
+      getGroupFeed(groupId).catch(() => null),
+      getStudyGroup(groupId).catch(() => null),
+    ]);
+    const requests = (feed?.joinRequests?.length ? feed.joinRequests : (classic?.joinRequests || [])).map((person) => ({
+      userId: person.userId,
+      fullName: person.fullName,
+      avatarUrl: person.avatarUrl,
+      role: person.role || "",
+      message: person.message || person.joinMessage || "",
+    }));
+    if (feed) {
+      setGroup({ ...feed, joinRequests: requests });
+      setError("");
+      return;
+    }
+    if (classic) {
+      const role = (getUser()?.role || "").toLowerCase();
+      setGroup({
+        groupId: classic.groupId,
+        title: classic.title,
+        description: classic.description,
+        subjectName: classic.subjectName,
+        ownerName: classic.creatorName,
+        ownerRole: "",
+        memberCount: classic.memberCount,
+        isOwner: classic.isOwner,
+        isMember: classic.isMember,
+        canModerate: classic.isOwner && role === "tutor",
+        myStatus: classic.myJoinStatus || "None",
+        joinRequests: requests,
+        posts: [],
+      });
+      setError("");
+      return;
+    }
+    setError("Không tải được nhóm.");
+  };
 
   useEffect(() => {
-    load().catch(() => setError("Không tải được nhóm."));
-    getDefaultTutors().then(setTutors).catch(() => []);
+    load();
   }, [groupId]);
 
+  useEffect(() => {
+    if (!group) return;
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [group]);
+
   const join = async () => {
-    if (!isLoggedIn()) return navigate("/login");
-    if (!joinMessage.trim() || joinMessage.trim().length < 10) {
-      setError("Viết lời xin vào nhóm (ít nhất 10 ký tự) để chủ nhóm xét duyệt.");
+    if (!isLoggedIn()) {
+      navigate(loginPath(`/study-groups/${groupId}`));
       return;
     }
+    setError("");
     try {
-      const res = await joinStudyGroup(groupId, joinMessage.trim());
-      setInfo(res.message);
-      setError("");
-      load();
+      let data;
+      try {
+        data = await requestGroupJoin(groupId, joinNote);
+      } catch (err) {
+        if (err.response?.status !== 404) throw err;
+        if ((joinNote || "").trim().length < 10) {
+          setError("Viết lời xin ít nhất 10 ký tự để gia sư nhận được thông báo.");
+          return;
+        }
+        data = await joinStudyGroup(groupId, joinNote.trim());
+      }
+      setNote(data.message || "Đã gửi lời xin. Gia sư sẽ nhận thông báo.");
+      await load();
     } catch (err) {
-      setError(err.response?.data?.message || "Không gửi được lời xin.");
+      setError(err.response?.data?.message || "Không xin vào được.");
     }
   };
 
-  const respondJoin = async (applicantId, accept) => {
+  const reviewPost = async (postId, accept) => {
+    setError("");
     try {
-      const res = await respondJoinRequest(groupId, applicantId, accept);
-      setInfo(res.message);
-      setError("");
-      load();
+      const data = await reviewGroupPost(groupId, postId, accept);
+      setNote(data.message || (accept ? "Đã duyệt bài." : "Đã từ chối bài."));
+      await load();
     } catch (err) {
-      setError(err.response?.data?.message || "Không duyệt được lời xin.");
+      setError(err.response?.data?.message || "Không duyệt được bài.");
     }
   };
 
-  const invite = async () => {
+  const moderate = async (userId, accept) => {
+    setError("");
     try {
-      const res = await inviteTutorToGroup(groupId, Number(tutorId), "Mời bạn mentor nhóm này");
-      setInfo(res.message);
-      load();
+      try {
+        await moderateGroupJoin(groupId, userId, accept);
+      } catch (err) {
+        if (err.response?.status !== 404) throw err;
+        await respondJoinRequest(groupId, userId, accept);
+      }
+      await load();
     } catch (err) {
-      setError(err.response?.data?.message || "Không mời được gia sư.");
+      setError(err.response?.data?.message || "Không duyệt được.");
     }
   };
 
-  const submitBid = async () => {
-    if (!isLoggedIn()) return navigate("/login");
-    const curriculum = bidForm.curriculumNote.trim();
-    const certificate = bidForm.certificateNote.trim();
-    const price = Number(bidForm.proposedPrice);
-    if (!Number.isFinite(price) || price < 50000) {
-      setBidError("Giá đề nghị tối thiểu 50.000đ mỗi buổi.");
-      return;
-    }
-    if (curriculum.length < 10) {
-      setBidError("Mô tả giáo trình ít nhất 10 ký tự. Ví dụ: Ôn ngữ pháp và luyện đề trong 3 buổi.");
-      return;
-    }
-    if (certificate.length < 5) {
-      setBidError("Ghi bằng cấp hoặc chứng chỉ, ít nhất 5 ký tự.");
-      return;
-    }
-    try {
-      const res = await placeStudyGroupBid(groupId, {
-        proposedPrice: price,
-        curriculumNote: curriculum,
-        certificateNote: certificate,
-      });
-      setInfo(res.message);
-      setError("");
-      setBidError("");
-      load();
-    } catch (err) {
-      setBidError(err.response?.data?.message || "Không gửi được hồ sơ.");
-    }
-  };
-
-  const vote = async (bidId) => {
-    try {
-      const res = await voteStudyGroupBid(groupId, bidId);
-      setInfo(res.message);
-      setError("");
-      load();
-    } catch (err) {
-      setError(err.response?.data?.message || "Không bình chọn được.");
-    }
-  };
-
-  const chooseTutor = async (bidId) => {
-    try {
-      const res = await selectStudyGroupBid(groupId, bidId);
-      setInfo(res.message);
-      setError("");
-      load();
-    } catch (err) {
-      setError(err.response?.data?.message || "Không chốt được gia sư.");
-    }
-  };
-
-  const withdrawBid = async () => {
-    try {
-      const res = await withdrawStudyGroupBid(groupId);
-      setInfo(res.message);
-      setError("");
-      load();
-    } catch (err) {
-      setError(err.response?.data?.message || "Không rút được hồ sơ.");
-    }
-  };
-
-  const chatCreator = async () => {
-    if (!isLoggedIn()) return navigate("/login");
-    const id = await openConversation(group.createdByUserId);
-    navigate(`/messages?c=${id}`);
-  };
-
-  // Loading state
   if (!group) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC] flex flex-col">
-        <div className="flex-1 flex flex-col items-center justify-center p-6">
-          {error ? (
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-100">
-                <AlertCircle size={32} />
+    return <div className="px-6 py-16 text-center text-sm text-slate-500">{error || "Đang tải nhóm..."}</div>;
+  }
+
+  const pendingPosts = (group.posts || []).filter((post) => post.status === "Pending");
+  const publishedPosts = (group.posts || []).filter((post) => post.status !== "Pending");
+  const members = [...(group.members || [])].sort((a, b) => {
+    const rank = (person) => (person.fullName === group.ownerName ? 0 : person.role === "Gia sư" ? 1 : 2);
+    return rank(a) - rank(b);
+  });
+
+  return (
+    <div className="min-h-screen bg-[#F4F7FB]">
+      <div className="mx-auto grid max-w-6xl items-start gap-4 px-4 py-8 lg:grid-cols-[240px_minmax(0,1fr)_260px]">
+        <aside className="hidden space-y-3 lg:sticky lg:top-20 lg:block">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <Link to="/study-groups" className="text-xs font-medium text-brand-700">← Tất cả nhóm</Link>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Giới thiệu</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{group.description || "Nhóm hỏi bài do gia sư phụ trách."}</p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-400">Môn</dt>
+                <dd className="font-medium text-slate-800">{group.subjectName || "Tổng hợp"}</dd>
               </div>
-              <h2 className="text-lg font-bold text-slate-900 mb-2">{error}</h2>
-              <Link to="/study-groups" className="text-sm font-semibold text-brand-600 hover:underline">
-                ← Quay lại danh sách nhóm học
-              </Link>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-400">Thành viên</dt>
+                <dd className="font-medium text-slate-800">{group.memberCount}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Trưởng nhóm</dt>
+                <dd className="mt-1 font-medium text-slate-800">{group.ownerName} <RoleMark role={group.ownerRole || "Gia sư"} /></dd>
+              </div>
+            </dl>
+          </div>
+        </aside>
+
+        <div className="min-w-0">
+        <header className="rounded-3xl bg-white p-6 shadow-sm">
+          <p className="text-xs font-medium text-brand-700">{group.subjectName}</p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">{group.title}</h1>
+          <p className="mt-2 text-sm text-slate-600">{group.description || "Nhóm hỏi bài."}</p>
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <Users size={14} /> {group.memberCount} thành viên · Chủ nhóm {group.ownerName}
+            <RoleMark role={group.ownerRole} />
+          </p>
+          {!group.isMember && (
+            <div className="mt-4">
+              {group.myStatus === "Pending" ? (
+                <p className="text-sm text-amber-700">Lời xin đang chờ gia sư duyệt.</p>
+              ) : (
+                <div className="space-y-2">
+                  <input value={joinNote} onChange={(e) => setJoinNote(e.target.value)} placeholder="Lời nhắn cho gia sư (không bắt buộc)" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                  <button type="button" onClick={join} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white">Xin vào nhóm</button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center">
-              <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-sm font-bold text-slate-700">Đang tải thông tin nhóm học...</p>
+          )}
+        </header>
+
+        {(error || note) && <p className={`mt-3 rounded-xl px-3 py-2 text-sm ${error ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>{error || note}</p>}
+
+        {group.canModerate && (
+          <section id="duyet" className="mt-4 scroll-mt-24 rounded-2xl border border-amber-300 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-bold text-slate-800">Duyệt học sinh</h2>
+            {(group.joinRequests || []).length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">Chưa có học sinh chờ duyệt.</p>
+            ) : (
+              <p className="mt-1 text-sm text-amber-800">Có {group.joinRequests.length} người xin vào nhóm.</p>
+            )}
+            {(group.joinRequests || []).length > 0 && (
+            <ul className="mt-3 space-y-3">
+              {group.joinRequests.map((person) => (
+                <li key={person.userId} className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <img src={face(person)} alt="" className="h-9 w-9 rounded-full object-cover" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{person.fullName} <RoleMark role={person.role} /></p>
+                      {person.message && <p className="text-xs text-slate-500">{person.message}</p>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => moderate(person.userId, true)} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white">Duyệt</button>
+                    <button type="button" onClick={() => moderate(person.userId, false)} className="rounded-lg border px-3 py-1.5 text-xs">Từ chối</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            )}
+          </section>
+        )}
+
+        {group.isMember ? (
+          <div className="mt-4 space-y-4">
+            <section className="rounded-2xl bg-white p-4 shadow-sm">
+              <p className="mb-2 text-sm font-semibold text-slate-800">Hỏi bài</p>
+              <Composer
+                placeholder="Đặt câu hỏi. Bài của học sinh hiện sau khi gia sư duyệt."
+                onSend={(payload) => publishGroupPost(groupId, payload).then((data) => {
+                  setNote(data?.message || "Đã gửi bài.");
+                  setError("");
+                  return load();
+                })}
+              />
+            </section>
+            {pendingPosts.length > 0 && (
+              <section id="bai-cho" className="scroll-mt-24 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <h2 className="text-sm font-bold text-amber-950">
+                  {group.canModerate ? `Bài chờ duyệt (${pendingPosts.length})` : "Bài của bạn đang chờ gia sư duyệt"}
+                </h2>
+                <div className="mt-3 space-y-3">
+                  {pendingPosts.map((post) => (
+                    <article key={post.postId} className="rounded-xl bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {post.author?.fullName} <RoleMark role={post.author?.role} />
+                      </p>
+                      {post.body && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{post.body}</p>}
+                      <Files files={post.files} />
+                      {group.canModerate && (
+                        <div className="mt-3 flex gap-2">
+                          <button type="button" onClick={() => reviewPost(post.postId, true)} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white">Duyệt</button>
+                          <button type="button" onClick={() => reviewPost(post.postId, false)} className="rounded-lg border px-3 py-1.5 text-xs">Từ chối</button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            {publishedPosts.length === 0 && <p className="text-center text-sm text-slate-400">Chưa có bài đã duyệt.</p>}
+            {publishedPosts.map((post) => (
+              <article key={post.postId} className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <img src={face(post.author)} alt="" className="h-10 w-10 rounded-full object-cover" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {post.author?.fullName} <RoleMark role={post.author?.role} />
+                      </p>
+                      <p className="text-xs text-slate-400">{when(post.createdAt)} · Hỏi bài</p>
+                    </div>
+                  </div>
+                  {mineId !== String(post.author?.userId || "") && (
+                    <button type="button" onClick={() => setReport({ type: "post", id: post.postId })} className="text-slate-400" title="Báo cáo bài đăng">
+                      <Flag size={15} />
+                    </button>
+                  )}
+                </div>
+                {post.body && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800">{post.body}</p>}
+                <Files files={post.files} />
+                {report?.type === "post" && report.id === post.postId && (
+                  <ReportBox
+                    onClose={() => setReport(null)}
+                    onSubmit={async (payload) => {
+                      const data = await reportGroupPost(groupId, post.postId, payload);
+                      setNote(data.message);
+                    }}
+                  />
+                )}
+
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
+                  {(post.comments || []).map((comment) => (
+                    <div key={comment.commentId}>
+                      <CommentRow
+                        comment={comment}
+                        mine={mineId === String(comment.author?.userId || "")}
+                        onReply={() => setReplyTo(comment.commentId)}
+                        onReport={() => setReport({ type: "comment", id: comment.commentId })}
+                      />
+                      {report?.type === "comment" && report.id === comment.commentId && (
+                        <ReportBox
+                          onClose={() => setReport(null)}
+                          onSubmit={async (payload) => {
+                            const data = await reportGroupComment(groupId, comment.commentId, payload);
+                            setNote(data.message);
+                          }}
+                        />
+                      )}
+                      <div className="ml-10 mt-2 space-y-2">
+                        {(comment.replies || []).map((reply) => (
+                          <div key={reply.commentId}>
+                            <CommentRow
+                              comment={reply}
+                              mine={mineId === String(reply.author?.userId || "")}
+                              onReport={() => setReport({ type: "comment", id: reply.commentId })}
+                            />
+                            {report?.type === "comment" && report.id === reply.commentId && (
+                              <ReportBox
+                                onClose={() => setReport(null)}
+                                onSubmit={async (payload) => {
+                                  const data = await reportGroupComment(groupId, reply.commentId, payload);
+                                  setNote(data.message);
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                        {replyTo === comment.commentId && (
+                          <Composer
+                            placeholder="Trả lời bình luận. Có thể kèm ảnh và tệp."
+                            onCancel={() => setReplyTo(null)}
+                            onSend={(payload) => publishGroupComment(groupId, post.postId, { ...payload, parentCommentId: comment.commentId }).then(() => {
+                              setReplyTo(null);
+                              return load();
+                            })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {!(post.comments || []).some((comment) => comment.commentId === replyTo) && (
+                    <Composer
+                      placeholder="Viết bình luận"
+                      onSend={(payload) => publishGroupComment(groupId, post.postId, payload).then(load)}
+                    />
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-6 rounded-2xl bg-white px-4 py-8 text-center text-sm text-slate-500">Bài đăng chỉ hiện với thành viên đã được gia sư duyệt.</p>
+        )}
+        </div>
+
+        <aside className="hidden lg:sticky lg:top-20 lg:block">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-800">Thành viên</h2>
+              <span className="text-xs text-slate-400">{group.memberCount}</span>
             </div>
+            <ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+              {members.length === 0 && <li className="text-sm text-slate-400">Chưa có danh sách thành viên.</li>}
+              {members.map((person) => (
+                <li key={person.userId} className="flex items-center gap-2">
+                  <img src={face(person)} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-slate-800">{person.fullName}</p>
+                    <p className="text-[11px] text-slate-400">{person.fullName === group.ownerName ? "Trưởng nhóm" : person.role}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+export function CommentRow({ comment, mine, onReply, onReport }) {
+  return (
+    <div className="flex gap-2">
+      <img src={face(comment.author)} alt="" className="h-8 w-8 rounded-full object-cover" />
+      <div className="min-w-0 flex-1 rounded-2xl bg-slate-50 px-3 py-2">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-slate-800">
+            {comment.author?.fullName} <RoleMark role={comment.author?.role} />
+          </p>
+          {!mine && onReport && (
+            <button type="button" onClick={onReport} className="text-slate-400" title="Báo cáo bình luận">
+              <Flag size={13} />
+            </button>
+          )}
+        </div>
+        {comment.body && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>}
+        <Files files={comment.files} />
+        <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-400">
+          <span>{when(comment.createdAt)}</span>
+          {onReply && (
+            <button type="button" onClick={onReply} className="inline-flex items-center gap-1 font-medium text-slate-500">
+              <MessageCircle size={12} /> Trả lời
+            </button>
           )}
         </div>
       </div>
-    );
-  }
-
-  const isOwner = Number(user?.userId) === group.createdByUserId;
-  const isMember = group.isMember || isOwner;
-  const slotsLeft = (group.maxMembers || 10) - (group.memberCount || 0);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#F8FAFC]">
-
-      {/* HERO SECTION */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-hero" />
-        <div className="absolute -right-32 -top-32 w-96 h-96 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 sm:py-10">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 mb-5">
-            <Link to="/study-groups" className="inline-flex items-center gap-1.5 text-xs font-semibold text-white/70 hover:text-white transition">
-              <ArrowLeft size={14} /> Danh sách nhóm học
-            </Link>
-            <span className="text-white/30">/</span>
-            <span className="text-xs text-white/90 font-medium truncate max-w-[200px]">{group.title}</span>
-          </div>
-
-          {/* Group Title & Badges */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span
-                  className={`text-[11px] px-3 py-1 rounded-full font-bold border inline-flex items-center gap-1 ${
-                    group.hasMentor
-                      ? "bg-brand-50/20 text-blue-200 border-blue-300/30"
-                      : "bg-emerald-400/15 text-emerald-200 border-emerald-300/25"
-                  }`}
-                >
-                  {group.hasMentor ? (
-                    <><GraduationCap size={12} /> Có gia sư mentor</>
-                  ) : (
-                    <><UserCheck size={12} /> Peer Study – Học sinh hỗ trợ nhau</>
-                  )}
-                </span>
-                {isMember && (
-                  <span className="text-[11px] px-3 py-1 rounded-full font-bold bg-emerald-400/20 text-emerald-200 border border-emerald-300/25 inline-flex items-center gap-1">
-                    <Check size={12} /> Bạn là thành viên
-                  </span>
-                )}
-                {isOwner && (
-                  <span className="text-[11px] px-3 py-1 rounded-full font-bold bg-amber-400/20 text-amber-200 border border-amber-300/25 inline-flex items-center gap-1">
-                    <Crown size={12} /> Chủ nhóm
-                  </span>
-                )}
-              </div>
-
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
-                {group.title}
-              </h1>
-
-              {/* Meta info bar */}
-              <div className="flex flex-wrap items-center gap-3 mt-4 text-xs sm:text-sm text-white/80">
-                {group.educationLevel && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
-                    <GraduationCap size={14} className="text-amber-200" />
-                    {levelLabel(group.educationLevel)} · {group.educationLevel}
-                  </span>
-                )}
-                {group.subjectName && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
-                    <BookOpen size={14} className="text-blue-200" />
-                    {group.subjectName}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
-                  <MapPin size={14} className="text-blue-200" />
-                  {[group.district, group.city].filter(Boolean).join(", ") || "Online"}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">
-                  <Users size={14} className="text-blue-200" />
-                  {group.memberCount}/{group.maxMembers} thành viên
-                  {slotsLeft <= 2 && slotsLeft > 0 && (
-                    <span className="text-amber-300 font-bold ml-1">(Sắp đầy!)</span>
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* MAIN 2-COLUMN LAYOUT */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 -mt-4 relative z-20 pb-20 grid lg:grid-cols-[1fr_360px] gap-6">
-        <div className="space-y-6">
-          {/* CARD: MÔ TẢ & THÔNG TIN CHI TIẾT */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-sm">
-            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
-                <BookOpen size={17} />
-              </div>
-              <div>
-                <h2 className="font-bold text-slate-900 text-base">Giới thiệu nhóm học</h2>
-                <p className="text-xs text-slate-400">Mã nhóm: #{group.groupId}</p>
-              </div>
-            </div>
-
-            {(() => {
-              const copy = splitStudyCopy(group.description);
-              return (
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Mục tiêu môn học</p>
-                  <p className="mt-2 text-base font-bold italic leading-relaxed text-slate-800">
-                    {copy.goal || "Cùng nhau học đúng trình độ, để mỗi buổi đều chạm đúng chỗ mình đang hổng."}
-                  </p>
-                  {copy.note && (
-                    <p className="mt-3 text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">{copy.note}</p>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Creator & Mentor info */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
-              <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100">
-                <img
-                  src={avatarUrl(group.creatorName || "Chủ nhóm")}
-                  alt=""
-                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-brand-100 shrink-0"
-                />
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Người tạo nhóm</p>
-                  <p className="text-sm font-bold text-slate-900 truncate">{group.creatorName}</p>
-                </div>
-              </div>
-
-              {group.mentorName && (
-                <div className="flex items-center gap-3 p-3 rounded-2xl bg-brand-50/50 border border-brand-100">
-                  <img
-                    src={avatarUrl(group.mentorName)}
-                    alt=""
-                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-brand-100 shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-[11px] uppercase font-bold text-brand-600 tracking-wider flex items-center gap-1">
-                      <GraduationCap size={11} /> Gia sư Mentor
-                    </p>
-                    <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1.5">
-                      {group.mentorName}
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        group.mentorStatus === "Accepted"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-amber-50 text-amber-700 border border-amber-200"
-                      }`}>
-                        {group.mentorStatus === "Accepted" ? "Đã nhận" : group.mentorStatus}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Error & Info alerts */}
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 flex items-start gap-2 font-medium">
-                <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
-                <span>{error}</span>
-              </div>
-            )}
-            {info && (
-              <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-700 flex items-start gap-2 font-medium">
-                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-500" />
-                <span>{info}</span>
-              </div>
-            )}
-
-            {/* ACTION AREA */}
-            <div className="mt-6 pt-4 border-t border-slate-100 space-y-4">
-              {/* Join request form */}
-              {!isTutor && !isMember && group.myJoinStatus !== "Pending" && group.myJoinStatus !== "Accepted" && (
-                <div className="bg-brand-50/50 border border-brand-100 rounded-2xl p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-bold text-brand-800">
-                    <Heart size={16} className="text-brand-600" />
-                    Xin tham gia nhóm học này
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Viết lời giới thiệu bản thân để chủ nhóm xét duyệt. Hãy chia sẻ mục tiêu học tập, lịch rảnh và điểm mạnh của bạn.
-                  </p>
-                  <textarea
-                    rows={3}
-                    value={joinMessage}
-                    onChange={(e) => setJoinMessage(e.target.value)}
-                    placeholder="Ví dụ: Mình đang ôn thi đại học môn Toán, lịch rảnh buổi tối T2-T5. Mong được học cùng mọi người!"
-                    className="w-full rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition placeholder:text-slate-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={join}
-                    className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl px-5 py-2.5 transition shadow-sm inline-flex items-center gap-2 cursor-pointer"
-                  >
-                    <Send size={14} />
-                    Gửi lời xin vào nhóm
-                  </button>
-                </div>
-              )}
-
-              {isTutor && !isMember && group.hiringMode !== "ReverseBid" && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 font-medium">
-                  Gia sư không xin vào nhóm học. Chỉ nhóm đang tìm gia sư mới nhận bài ứng tuyển.
-                </div>
-              )}
-
-              {group.myJoinStatus === "Pending" && !isMember && !isTutor && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 font-medium flex items-center gap-2">
-                  <Clock size={16} className="text-amber-600 shrink-0" />
-                  <span>Bạn đã gửi lời xin vào nhóm. Đang chờ chủ nhóm xét duyệt...</span>
-                </div>
-              )}
-
-              {group.myJoinStatus === "Rejected" && !isMember && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 font-medium">
-                  Lời xin trước đó chưa được chấp nhận. Bạn có thể gửi lại lời xin mới phía trên.
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex flex-wrap gap-2.5">
-                {isMember && (
-                  <Link
-                    to={`/messages?tab=groups&g=${group.groupId}`}
-                    className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl px-5 py-2.5 transition shadow-sm"
-                  >
-                    <MessageCircle size={15} /> Mở chat nhóm
-                  </Link>
-                )}
-                {!isOwner && (
-                  <button
-                    type="button"
-                    onClick={chatCreator}
-                    className="inline-flex items-center gap-2 border border-slate-200 hover:border-brand-200 text-slate-700 hover:text-brand-700 text-xs font-bold rounded-xl px-5 py-2.5 transition bg-white shadow-2xs cursor-pointer"
-                  >
-                    <MessageCircle size={15} /> Nhắn tin chủ nhóm
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* OWNER: QUẢN LÝ NHÓM */}
-            {isOwner && (
-              <div className="mt-6 pt-5 border-t border-slate-100 space-y-6">
-                {/* Duyệt lời xin */}
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mb-3">
-                    <Shield size={15} className="text-brand-600" />
-                    Lời xin vào nhóm
-                    {(group.joinRequests || []).length > 0 && (
-                      <span className="text-[11px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                        {group.joinRequests.length} mới
-                      </span>
-                    )}
-                  </h3>
-
-                  {(group.joinRequests || []).length === 0 ? (
-                    <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">Chưa có lời xin nào đang chờ xét duyệt.</p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {group.joinRequests.map((req) => (
-                        <li key={req.userId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-                          <div className="flex items-center gap-3 mb-2">
-                            <img
-                              src={req.avatarUrl || avatarUrl(req.fullName)}
-                              alt=""
-                              className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-slate-900 truncate">{req.fullName}</p>
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed mb-3">
-                            {req.joinMessage}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition cursor-pointer"
-                              onClick={() => respondJoin(req.userId, true)}
-                            >
-                              <Check size={14} /> Chấp nhận
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition cursor-pointer"
-                              onClick={() => respondJoin(req.userId, false)}
-                            >
-                              Từ chối
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {group.hiringMode !== "ReverseBid" && (
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mb-3">
-                    <GraduationCap size={15} className="text-brand-600" />
-                    Mời gia sư làm Mentor
-                  </h3>
-                  <div className="flex gap-2">
-                    <select
-                      value={tutorId}
-                      onChange={(e) => setTutorId(e.target.value)}
-                      className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                    >
-                      <option value="">Chọn gia sư cần mời</option>
-                      {tutors.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={invite}
-                      disabled={!tutorId}
-                      className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl px-5 py-2.5 transition cursor-pointer"
-                    >
-                      Gửi lời mời
-                    </button>
-                  </div>
-                </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {group.hiringMode === "ReverseBid" && group.restricted && (
-            <div className="bg-white rounded-3xl border border-amber-200 p-6">
-              <h2 className="font-bold text-slate-900">Bài tìm gia sư chỉ giáo viên thấy</h2>
-              <p className="text-sm text-slate-600 mt-2">
-                Yêu cầu, ngân sách và hồ sơ ứng tuyển không hiện với học sinh ngoài nhóm. Nếu chủ nhóm gửi link này cho bạn, hãy xin vào nhóm để cùng xem và chọn gia sư.
-              </p>
-            </div>
-          )}
-
-          {group.hiringMode === "ReverseBid" && !group.restricted && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-5">
-              <div>
-                <h2 className="font-bold text-slate-900 text-base">
-                  {(group.bids || []).some((b) => b.status === "Won") ? "Đã chốt gia sư cho nhóm" : "Đấu thầu ngược — tìm gia sư cho nhóm"}
-                </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  {(group.bids || []).some((b) => b.status === "Won")
-                    ? "Các hồ sơ khác đã được từ chối và không còn hiện ở đây."
-                    : `Ngân sách nhóm đưa ra ${formatVnd(group.budgetPerSession)}/buổi.${group.bidDeadline ? ` Hạn ứng tuyển ${new Date(group.bidDeadline).toLocaleString("vi-VN")}.` : ""} Đã có ${group.bidCount || 0} hồ sơ.`}
-                </p>
-              </div>
-              {group.tutorRequirements && (
-                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Yêu cầu dành cho gia sư</p>
-                  <p className="text-sm text-slate-800 mt-2 whitespace-pre-wrap">{group.tutorRequirements}</p>
-                </div>
-              )}
-
-              {group.canBid && (
-                <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
-                  <p className="text-sm font-bold text-slate-900">{group.myBid ? "Cập nhật hồ sơ ứng tuyển" : "Ứng tuyển dạy nhóm này"}</p>
-                  <input
-                    type="number"
-                    min="50000"
-                    value={bidForm.proposedPrice}
-                    onChange={(e) => setBidForm((p) => ({ ...p, proposedPrice: e.target.value }))}
-                    placeholder="Giá đề nghị / buổi cho cả nhóm"
-                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
-                  />
-                  <textarea
-                    rows={3}
-                    value={bidForm.curriculumNote}
-                    onChange={(e) => setBidForm((p) => ({ ...p, curriculumNote: e.target.value }))}
-                    placeholder="Giáo trình dự kiến: buổi 1 ôn gì, buổi 2 luyện dạng nào..."
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <textarea
-                    rows={2}
-                    value={bidForm.certificateNote}
-                    onChange={(e) => setBidForm((p) => ({ ...p, certificateNote: e.target.value }))}
-                    placeholder="Bằng cấp, chứng chỉ, kinh nghiệm luyện thi"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  {bidError && (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{bidError}</p>
-                  )}
-                  <button type="button" onClick={submitBid} className="h-11 rounded-xl bg-brand-600 px-4 text-sm font-bold text-white">
-                    Gửi hồ sơ
-                  </button>
-                </div>
-              )}
-
-              {group.myBid && !group.isMember && (
-                <div className="rounded-2xl border border-slate-200 p-4 text-sm">
-                  <p className="font-bold text-slate-900">Hồ sơ của bạn · {group.myBid.status === "Won" ? "Được chọn" : group.myBid.status === "Lost" ? "Không được chọn" : "Đang chờ"}</p>
-                  <p className="mt-1 text-slate-600">{formatVnd(group.myBid.proposedPrice)}/buổi</p>
-                  <p className="mt-2 whitespace-pre-wrap text-slate-700">{group.myBid.curriculumNote}</p>
-                  {group.myBid.status === "Pending" && (
-                    <button type="button" onClick={withdrawBid} className="mt-3 text-sm font-semibold text-red-600">
-                      Rút hồ sơ
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {((group.bids || []).some((b) => b.status === "Won")
-                ? (group.bids || []).filter((b) => b.status === "Won")
-                : (group.bids || []).filter((b) => b.status !== "Lost")
-              ).map((bid) => (
-                <article key={bid.bidId} className="rounded-2xl border border-slate-200 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-bold text-slate-900">{bid.tutorName}</p>
-                      <p className="text-xs text-slate-500">
-                        {[bid.university, bid.major, bid.yearsOfExperience ? `${bid.yearsOfExperience} năm kinh nghiệm` : ""]
-                          .filter(Boolean)
-                          .join(" · ") || "Hồ sơ gia sư"}
-                        {bid.averageRating ? ` · ${Number(bid.averageRating).toFixed(1)}★` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-brand-700">{formatVnd(bid.proposedPrice)}/buổi</p>
-                      <p className="text-xs text-slate-500">{bid.voteCount} phiếu · {bid.status === "Won" ? "Đã chọn" : bid.status === "Lost" ? "Không chọn" : "Đang chờ"}</p>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-sm font-semibold italic text-slate-800">Giáo trình</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{bid.curriculumNote}</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">Bằng cấp / chứng chỉ</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{bid.certificateNote}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {group.canVote && bid.status === "Pending" && (
-                      <button type="button" onClick={() => vote(bid.bidId)} className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700">
-                        {bid.votedByMe ? "Đã bình chọn" : "Bình chọn"}
-                      </button>
-                    )}
-                    {group.canSelect && bid.status === "Pending" && (
-                      <button type="button" onClick={() => chooseTutor(bid.bidId)} className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white">
-                        Chọn gia sư này
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {/* CARD: CHAT NHÓM REALTIME */}
-          {isMember ? (
-            <GroupChatPane
-              groupId={Number(groupId)}
-              title={group.title}
-              members={group.members || []}
-              className="h-[520px]"
-            />
-          ) : (
-            <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 sm:p-14 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-4 border border-brand-100">
-                <MessageCircle size={30} />
-              </div>
-              <h3 className="font-extrabold text-slate-900 text-lg mb-1">Chat nhóm realtime</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                Khi trở thành thành viên, bạn có thể nhắn tin realtime với mọi người trong nhóm. {isTutor ? "Gia sư gửi hồ sơ ứng tuyển, không xin vào nhóm." : "Gửi lời xin vào nhóm để tham gia."}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* SIDEBAR: THÀNH VIÊN NHÓM */}
-        <aside className="space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 sticky top-20">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h2 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                <Users size={17} className="text-brand-600" />
-                Thành viên
-              </h2>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-200">
-                {group.memberCount}/{group.maxMembers}
-              </span>
-            </div>
-
-            <ul className="space-y-2">
-              {(group.members || []).map((m) => {
-                const isCreator = m.userId === group.createdByUserId;
-                const isSelf = Number(m.userId) === Number(user?.userId);
-                const canRemove = isOwner && !isCreator;
-
-                return (
-                  <li key={m.userId} className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!isLoggedIn()) return navigate("/login");
-                        if (isSelf) return;
-                        const id = await openConversation(m.userId);
-                        navigate(`/messages?c=${id}`);
-                      }}
-                      className="flex-1 min-w-0 flex items-center gap-3 rounded-2xl hover:bg-slate-50 p-2.5 text-left transition group cursor-pointer"
-                    >
-                      <img
-                        src={m.avatarUrl || avatarUrl(m.fullName)}
-                        alt=""
-                        className="h-10 w-10 rounded-xl object-cover ring-2 ring-slate-100 group-hover:ring-brand-200 transition shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate flex items-center gap-1.5">
-                          {m.fullName}
-                          {isCreator && (
-                            <Crown size={13} className="text-amber-500 shrink-0" />
-                          )}
-                          {isSelf && (
-                            <span className="text-[10px] font-medium text-slate-400">(Bạn)</span>
-                          )}
-                        </p>
-                        <p className="text-[11px] text-slate-400 group-hover:text-brand-600 transition">
-                          {isCreator ? "Chủ nhóm" : isSelf ? "Thành viên" : "Nhắn tin riêng →"}
-                        </p>
-                      </div>
-                    </button>
-                    {canRemove && (
-                      <button
-                        type="button"
-                        className="text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-lg px-2 py-1 shrink-0"
-                        onClick={async () => {
-                          try {
-                            const res = await removeStudyGroupMember(groupId, m.userId);
-                            setInfo(res.message);
-                            setError("");
-                            load();
-                          } catch (err) {
-                            setError(err.response?.data?.message || "Không xóa được thành viên.");
-                          }
-                        }}
-                      >
-                        Xóa
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {slotsLeft > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-                <p className="text-[11px] text-slate-400">
-                  Còn <span className="font-bold text-brand-600">{slotsLeft}</span> chỗ trống
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Quick info sidebar card */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-              <Zap size={15} className="text-amber-500" />
-              Thông tin nhanh
-            </h3>
-            <div className="space-y-2.5 text-xs text-slate-600">
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-500">Hình thức:</span>
-                <span className="font-bold text-slate-800">
-                  {group.hasMentor ? "Có gia sư mentor" : "Peer Study"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-500">Môn học:</span>
-                <span className="font-bold text-brand-700">{group.subjectName || "Đa môn"}</span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-500">Khu vực:</span>
-                <span className="font-bold text-slate-800">
-                  {[group.district, group.city].filter(Boolean).join(", ") || "Online"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-500">Chi phí:</span>
-                <span className="font-bold text-emerald-700">Miễn phí</span>
-              </div>
-            </div>
-          </div>
-        </aside>
-      </main>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import Navbar from "./components/Navbar";
 import Profile from "./pages/Profile";
 import TutorDesk from "./pages/TutorDesk";
 import MyBookings from "./pages/MyBookings";
-import TutorBidBoard from "./pages/TutorBidBoard";
 import SosRescue from "./pages/SosRescue";
 import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
@@ -132,7 +131,7 @@ function App() {
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/study-groups" element={<StudyGroups />} />
             <Route path="/study-groups/new" element={<CreateStudyGroup />} />
-            <Route path="/study-groups/bids" element={<TutorBidBoard />} />
+            <Route path="/study-groups/bids" element={<Navigate to="/study-groups" replace />} />
             <Route path="/study-groups/mine" element={<MyStudyGroups />} />
             <Route path="/study-groups/:groupId" element={<StudyGroupDetail />} />
             <Route path="/bookings" element={<MyBookings />} />

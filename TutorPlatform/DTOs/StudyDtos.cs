@@ -232,7 +232,11 @@ public class BookingListItemDto
     public string TeachingMode { get; set; } = null!;
     public string? Location { get; set; }
     public bool IsToday { get; set; }
+    public string? PaymentType { get; set; }
     public string? PaymentStatus { get; set; }
+    public bool HasReview { get; set; }
+    public byte? ReviewRating { get; set; }
+    public string? ReviewComment { get; set; }
     public string? PaymentUrl { get; set; }
     public bool TutorCompleted { get; set; }
     public bool StudentCompleted { get; set; }

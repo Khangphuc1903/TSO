@@ -45,6 +45,8 @@ public partial class Booking
 
     public bool StudentCompleted { get; set; }
 
+    public string PaymentType { get; set; } = "Online";
+
     public virtual LessonReport? LessonReport { get; set; }
 
     public virtual ICollection<BookingReschedule> BookingReschedules { get; set; } = new List<BookingReschedule>();

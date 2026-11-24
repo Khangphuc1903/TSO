@@ -52,7 +52,7 @@ public class TutorWorkspaceService
             .Include(t => t.AvailabilitySlots)
             .FirstAsync(t => t.TutorId == tutorId, cancellationToken);
 
-        return new TutorWorkspaceDto
+        var dto = new TutorWorkspaceDto
         {
             TutorId = tp.TutorId,
             Bio = tp.Bio,
@@ -65,6 +65,9 @@ public class TutorWorkspaceService
             IsPublished = tp.IsPublished,
             SubjectsLocked = tp.SubjectsLocked,
             VerificationStatus = tp.VerificationStatus,
+            IdentityCompleted = false,
+            PassedTestCount = 0,
+            CanOpenSchedule = false,
             AverageRating = tp.AverageRating,
             TotalReviews = tp.TotalReviews,
             Subjects = tp.TutorSubjects.Select(s => new TutorSubjectItemDto
@@ -86,6 +89,26 @@ public class TutorWorkspaceService
                 .Select(MapSlot)
                 .ToList()
         };
+
+        try
+        {
+            var identityDone = tp.VerificationStatus == "Verified"
+                && await _db.IdentityDocuments.AsNoTracking()
+                    .AnyAsync(d => d.TutorId == tutorId && d.Status == "Approved", cancellationToken);
+            var pedagogyPassed = await _db.TutorTestAttempts.AsNoTracking()
+                .AnyAsync(a => a.TutorId == tutorId && a.IsPassed && a.TestType == "Pedagogical", cancellationToken);
+            var professionalPassed = await _db.TutorTestAttempts.AsNoTracking()
+                .AnyAsync(a => a.TutorId == tutorId && a.IsPassed && a.TestType == "Professional", cancellationToken);
+            dto.IdentityCompleted = identityDone;
+            dto.PassedTestCount = (pedagogyPassed ? 1 : 0) + (professionalPassed ? 1 : 0);
+            dto.CanOpenSchedule = identityDone && pedagogyPassed && professionalPassed;
+        }
+        catch
+        {
+            /* giữ lịch đóng nếu bảng xác thực chưa sẵn sàng */
+        }
+
+        return dto;
     }
 
     public async Task<(bool Success, int Status, string Message, TutorWorkspaceDto? Data)> UpdateProfileAsync(

@@ -59,6 +59,7 @@ export function tutorPathAllowed(pathname, ready) {
   if (!ready && SETUP_PATHS.includes(path)) return true;
   if (BASIC_PATHS.includes(path)) return true;
   if (path === "/sos" || path.startsWith("/sos/")) return true;
+  if (path === "/study-groups" || path.startsWith("/study-groups/")) return true;
   if (!ready) return false;
   if (["/bookings", "/study-groups/bids", "/sos", "/payments", "/faq", "/about", "/contact", "/help"].includes(path)) {
     return true;

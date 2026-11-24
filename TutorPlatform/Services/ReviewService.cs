@@ -78,7 +78,7 @@ public class ReviewService
         return _db.Bookings.Where(b =>
             b.TutorId == tutorId &&
             b.StudentId == userId &&
-            (b.Status == "Confirmed" || b.Status == "Completed") &&
+            b.Status == "Completed" &&
             !reviewedIds.Contains(b.BookingId));
     }
 
@@ -97,7 +97,7 @@ public class ReviewService
         if (eligible.Count == 0)
         {
             return (false, StatusCodes.Status400BadRequest,
-                "Bạn cần có buổi học đã được gia sư xác nhận hoặc hoàn thành mới đánh giá được.", null);
+                "Cả hai bên xác nhận học xong rồi mới đánh giá được.", null);
         }
 
         var booking = dto.BookingId is > 0

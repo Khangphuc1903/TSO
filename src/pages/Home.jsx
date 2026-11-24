@@ -21,6 +21,7 @@ import {
   Siren
 } from "lucide-react";
 import Footer from "../components/Footer";
+import { getUser } from "../auth";
 import Button from "../components/ui/Button";
 import { SkeletonTutorCard } from "../components/ui/Skeleton";
 import { getDefaultTutors } from "../api/tutorSearch";
@@ -389,7 +390,7 @@ export default function Home() {
                 <span className="block text-blue-200 mt-1">& gia sư mentor</span>
               </h2>
               <p className="text-sm text-white/70 mt-3 leading-relaxed max-w-md">
-                Tham gia hoặc tạo nhóm học tập theo môn. Chat realtime, chia sẻ tài liệu, và cùng nhau tiến bộ mỗi ngày. Hoàn toàn miễn phí!
+                Tìm nhóm theo môn và xin vào. Gia sư tạo nhóm và duyệt thành viên.
               </p>
 
               <div className="flex flex-wrap gap-3 mt-6">
@@ -401,12 +402,14 @@ export default function Home() {
                   Tìm nhóm học
                   <ArrowRight size={14} />
                 </Link>
+                {(getUser()?.role || "").toLowerCase() === "tutor" && (
                 <Link
                   to="/study-groups/new"
                   className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-6 py-3 rounded-xl border border-white/20 transition"
                 >
                   Tạo nhóm mới
                 </Link>
+                )}
               </div>
             </div>
 

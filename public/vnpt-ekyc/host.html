@@ -34,7 +34,7 @@
             return res;
           }, function (err) {
             clearTimeout(timer);
-            parent.postMessage({ type: "VNPT_TIMEOUT", message: "VNPT chưa phản hồi sau 20 giây." }, "*");
+            parent.postMessage({ type: "VNPT_TIMEOUT", message: "AI quá tải." }, "*");
             return Promise.reject(err);
           });
         };

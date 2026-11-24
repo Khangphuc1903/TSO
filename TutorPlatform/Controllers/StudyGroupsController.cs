@@ -12,11 +12,13 @@ public class StudyGroupsController : ControllerBase
 {
     private readonly StudyGroupService _service;
     private readonly GroupChatService _groupChat;
+    private readonly GroupFeedService _feed;
 
-    public StudyGroupsController(StudyGroupService service, GroupChatService groupChat)
+    public StudyGroupsController(StudyGroupService service, GroupChatService groupChat, GroupFeedService feed)
     {
         _service = service;
         _groupChat = groupChat;
+        _feed = feed;
     }
 
     private int? UserId
@@ -28,6 +30,105 @@ public class StudyGroupsController : ControllerBase
                 ?? User.FindFirstValue("sub");
             return int.TryParse(raw, out var id) ? id : null;
         }
+    }
+
+    [HttpGet("feed")]
+    public async Task<IActionResult> Feed([FromQuery] string? keyword, CancellationToken cancellationToken)
+    {
+        var items = await _feed.ListAsync(UserId, keyword, cancellationToken);
+        return Ok(new { totalCount = items.Count, items });
+    }
+
+    [Authorize]
+    [HttpGet("feed/home")]
+    public async Task<IActionResult> HomeFeed(CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var items = await _feed.HomeAsync(id, cancellationToken);
+        return Ok(new { totalCount = items.Count, items });
+    }
+
+    [Authorize]
+    [HttpPost("feed")]
+    public async Task<IActionResult> CreateFeed([FromBody] CreateStudyGroupDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int id) return Unauthorized();
+        var result = await _feed.CreateAsync(id, dto.Title, dto.Description, dto.SubjectId, cancellationToken);
+        return result.Success
+            ? StatusCode(result.Status, new { message = result.Message, groupId = result.GroupId })
+            : StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [HttpGet("{id:int}/feed")]
+    public async Task<IActionResult> FeedPage(int id, CancellationToken cancellationToken)
+    {
+        var page = await _feed.GetPageAsync(id, UserId, cancellationToken);
+        return page == null ? NotFound(new { message = "Không tìm thấy nhóm." }) : Ok(page);
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/join")]
+    public async Task<IActionResult> FeedJoin(int id, [FromBody] JoinStudyGroupDto? dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.RequestJoinAsync(userId, id, dto?.Message, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/requests/{applicantId:int}")]
+    public async Task<IActionResult> FeedModerate(int id, int applicantId, [FromBody] RespondJoinRequestDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.ModerateAsync(userId, id, applicantId, dto.Accept, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/posts")]
+    [RequestSizeLimit(20_000_000)]
+    public async Task<IActionResult> FeedPost(int id, [FromForm] string? body, [FromForm] List<IFormFile>? files, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.CreatePostAsync(userId, id, body, files, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/posts/{postId:int}/review")]
+    public async Task<IActionResult> ReviewPost(int id, int postId, [FromBody] RespondJoinRequestDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.ReviewPostAsync(userId, id, postId, dto.Accept, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/posts/{postId:int}/comments")]
+    [RequestSizeLimit(20_000_000)]
+    public async Task<IActionResult> FeedComment(int id, int postId, [FromForm] string? body, [FromForm] int? parentCommentId, [FromForm] List<IFormFile>? files, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.CommentAsync(userId, id, postId, parentCommentId, body, files, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/posts/{postId:int}/report")]
+    public async Task<IActionResult> ReportPost(int id, int postId, [FromBody] GroupReportDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.ReportAsync(userId, id, "GroupPost", postId, dto.Reason, dto.Description, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/feed/comments/{commentId:int}/report")]
+    public async Task<IActionResult> ReportComment(int id, int commentId, [FromBody] GroupReportDto dto, CancellationToken cancellationToken)
+    {
+        if (UserId is not int userId) return Unauthorized();
+        var result = await _feed.ReportAsync(userId, id, "GroupComment", commentId, dto.Reason, dto.Description, cancellationToken);
+        return StatusCode(result.Status, new { message = result.Message });
     }
 
     [HttpGet]

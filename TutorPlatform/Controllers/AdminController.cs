@@ -267,9 +267,13 @@ public class AdminController : ControllerBase
                 platformFee = split.PlatformFee,
                 status = p.Status,
                 paidAt = p.PaidAt,
+                tutorBankCode = tutorBank?.BankCode,
                 tutorBankName = tutorBank?.BankName,
                 tutorAccountNumber = tutorBank?.AccountNumber,
                 tutorAccountName = tutorBank?.AccountHolderName,
+                tutorQrCodeUrl = tutorBank?.QrCodeUrl,
+                bookingStatus = p.Booking.Status,
+                tutorPaidAt = p.TutorPaidAt,
                 refunds = p.Refunds.Select(r => new
                 {
                     r.RefundId,
@@ -285,6 +289,53 @@ public class AdminController : ControllerBase
         });
 
         return Ok(rows);
+    }
+
+    [HttpPost("payouts/{paymentId:int}/confirm")]
+    public async Task<IActionResult> ConfirmPayout(int paymentId, CancellationToken cancellationToken)
+    {
+        var payment = await _db.Payments
+            .Include(p => p.Booking)
+            .FirstOrDefaultAsync(p => p.PaymentId == paymentId, cancellationToken);
+        if (payment == null)
+            return NotFound(new { message = "Không tìm thấy khoản thanh toán." });
+        if (payment.Status != "Success")
+            return BadRequest(new { message = "Chỉ xác nhận chuyển tiền khi học viên đã thanh toán thành công." });
+        if (payment.TutorPaidAt != null)
+            return Ok(new { message = "Khoản này đã được xác nhận chuyển trước đó." });
+
+        payment.TutorPaidAt = DateTime.UtcNow;
+        var booking = payment.Booking;
+        if (booking.Status is not ("Cancelled" or "Rejected"))
+        {
+            booking.Status = "Completed";
+            booking.CompletedAt ??= DateTime.UtcNow;
+        }
+
+        if (CurrentUserId > 0)
+        {
+            _db.AdminActionLogs.Add(new AdminActionLog
+            {
+                AdminId = CurrentUserId,
+                ActionType = "ConfirmTutorPayout",
+                TargetEntityType = "Payment",
+                TargetEntityId = payment.PaymentId,
+                Description = $"Đã chuyển tiền gia sư cho buổi #{booking.BookingId}.",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await _notifications.NotifyAsync(
+            booking.TutorId,
+            "TutorPayout",
+            "Đã nhận học phí",
+            $"Quản trị đã chuyển học phí buổi học #{booking.BookingId}. Đơn được ghi hoàn thành.",
+            "Booking",
+            booking.BookingId,
+            cancellationToken);
+
+        return Ok(new { message = $"Đã xác nhận chuyển tiền. Buổi học #{booking.BookingId} được ghi hoàn thành." });
     }
 
     [HttpGet("revenue")]
@@ -310,9 +361,11 @@ public class AdminController : ControllerBase
                     net = g.Sum(x => x.Split.Net),
                     tutorShare = g.Sum(x => x.Split.TutorShare),
                     platformFee = g.Sum(x => x.Split.PlatformFee),
+                    bankCode = bank?.BankCode,
                     bankName = bank?.BankName,
                     accountNumber = bank?.AccountNumber,
-                    accountName = bank?.AccountHolderName
+                    accountName = bank?.AccountHolderName,
+                    qrCodeUrl = bank?.QrCodeUrl
                 };
             })
             .OrderByDescending(x => x.tutorShare)
@@ -406,7 +459,7 @@ public class AdminController : ControllerBase
         var lowConfidenceFaces = await _db.FaceVerificationLogs.CountAsync(f => f.MatchConfidenceScore < 70, cancellationToken);
         var pendingReports = await _db.Reports.CountAsync(r => r.Status == "Pending", cancellationToken);
         var bookings = await _db.Bookings.CountAsync(cancellationToken);
-        var paidPayments = await _db.Payments.CountAsync(p => p.Status == "Paid" || p.Status == "Completed", cancellationToken);
+        var paidPayments = await _db.Payments.CountAsync(p => p.Status == "Success" || p.Status == "Paid" || p.Status == "Completed", cancellationToken);
         var testsPassed = await _db.TutorTestAttempts.CountAsync(a => a.IsPassed, cancellationToken);
 
         // Monthly growth: past 12 months
@@ -568,6 +621,8 @@ public class AdminController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        await FillGroupReportAuthorsAsync(reports, cancellationToken);
+
         var personIds = reports
             .Where(r => IsPersonReport(r.EntityType))
             .Select(r => r.EntityId)
@@ -605,11 +660,14 @@ public class AdminController : ControllerBase
         var isWarn = action.Equals("Warn", StringComparison.OrdinalIgnoreCase);
         var isBan = action.Equals("Ban", StringComparison.OrdinalIgnoreCase);
         User? target = null;
-        if (IsPersonReport(report.ReportedEntityType))
+        var targetUserId = IsPersonReport(report.ReportedEntityType)
+            ? report.ReportedEntityId
+            : await GroupContentAuthorIdAsync(report.ReportedEntityType, report.ReportedEntityId, cancellationToken);
+        if (targetUserId is int personId)
         {
             target = await _db.Users
                 .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.UserId == report.ReportedEntityId, cancellationToken);
+                .FirstOrDefaultAsync(u => u.UserId == personId, cancellationToken);
         }
 
         if ((isWarn || isBan) && target == null)
@@ -697,6 +755,65 @@ public class AdminController : ControllerBase
         }
 
         return Ok(new { message = isWarn ? "Đã gửi cảnh cáo và thông báo cho hai bên." : isBan ? "Đã khóa tài khoản và báo cho người gửi báo cáo." : "Đã xử lý báo cáo thành công." });
+    }
+
+    private async Task FillGroupReportAuthorsAsync(List<AdminReportDto> reports, CancellationToken cancellationToken)
+    {
+        var postIds = reports.Where(r => string.Equals(r.EntityType, "GroupPost", StringComparison.OrdinalIgnoreCase)).Select(r => r.EntityId).Distinct().ToList();
+        var commentIds = reports.Where(r => string.Equals(r.EntityType, "GroupComment", StringComparison.OrdinalIgnoreCase)).Select(r => r.EntityId).Distinct().ToList();
+        var posts = postIds.Count == 0
+            ? new List<StudyGroupPost>()
+            : await _db.StudyGroupPosts.AsNoTracking().Where(p => postIds.Contains(p.PostId)).ToListAsync(cancellationToken);
+        var comments = commentIds.Count == 0
+            ? new List<StudyGroupComment>()
+            : await _db.StudyGroupComments.AsNoTracking().Where(c => commentIds.Contains(c.CommentId)).ToListAsync(cancellationToken);
+        var authorIds = posts.Select(p => p.AuthorId).Concat(comments.Select(c => c.AuthorId)).Distinct().ToList();
+        var people = authorIds.Count == 0
+            ? new Dictionary<int, (string Name, string Email, string Role)>()
+            : (await _db.Users.AsNoTracking().Where(u => authorIds.Contains(u.UserId))
+                .Select(u => new { u.UserId, u.FullName, u.Email, Role = u.Role.RoleName })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(u => u.UserId, u => (Name: u.FullName, Email: u.Email, Role: u.Role));
+
+        foreach (var report in reports)
+        {
+            string? text = null;
+            int? authorId = null;
+            if (string.Equals(report.EntityType, "GroupPost", StringComparison.OrdinalIgnoreCase))
+            {
+                var post = posts.FirstOrDefault(p => p.PostId == report.EntityId);
+                text = post?.Body;
+                authorId = post?.AuthorId;
+            }
+            else if (string.Equals(report.EntityType, "GroupComment", StringComparison.OrdinalIgnoreCase))
+            {
+                var comment = comments.FirstOrDefault(c => c.CommentId == report.EntityId);
+                text = comment?.Body;
+                authorId = comment?.AuthorId;
+            }
+            else continue;
+
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                var trimmed = text.Trim();
+                report.ContentSnippet = trimmed.Length <= 180 ? trimmed : trimmed[..180] + "…";
+            }
+            if (authorId is int id && people.TryGetValue(id, out var person))
+            {
+                report.ReportedName = person.Name;
+                report.ReportedEmail = person.Email;
+                report.ReportedRole = person.Role;
+            }
+        }
+    }
+
+    private async Task<int?> GroupContentAuthorIdAsync(string? entityType, int entityId, CancellationToken cancellationToken)
+    {
+        if (string.Equals(entityType, "GroupPost", StringComparison.OrdinalIgnoreCase))
+            return await _db.StudyGroupPosts.AsNoTracking().Where(p => p.PostId == entityId).Select(p => (int?)p.AuthorId).FirstOrDefaultAsync(cancellationToken);
+        if (string.Equals(entityType, "GroupComment", StringComparison.OrdinalIgnoreCase))
+            return await _db.StudyGroupComments.AsNoTracking().Where(c => c.CommentId == entityId).Select(c => (int?)c.AuthorId).FirstOrDefaultAsync(cancellationToken);
+        return null;
     }
 
     private static bool IsPersonReport(string? entityType) =>

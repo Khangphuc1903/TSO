@@ -84,7 +84,7 @@ export default function Profile() {
   const load = async () => {
     const [p, b, n] = await Promise.all([
       getMyProfile(),
-      getMyBookings(),
+      getMyBookings().catch(() => []),
       getNotifications().catch(() => ({ items: [] })),
     ]);
     setProfile(p);
@@ -107,7 +107,7 @@ export default function Profile() {
       navigate("/login");
       return;
     }
-    load().catch(() => setError("Không tải được hồ sơ. Hãy đăng nhập lại."));
+    load().catch((err) => setError(err.response?.data?.message || "Không tải được hồ sơ. Hãy đăng nhập lại."));
     if (isTutor) {
       loadTutorGate(true).then((gate) => {
         setTutorReady(Boolean(gate?.ready));
@@ -554,6 +554,7 @@ export default function Profile() {
                         key={b.bookingId}
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
+                        onReviewed={load}
                         onChat={() => chat(b)}
                         canWriteReport={asTutorOn(b)}
                         onSaveReport={async (payload) => {
@@ -585,6 +586,7 @@ export default function Profile() {
                         key={b.bookingId}
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
+                        onReviewed={load}
                         onChat={() => chat(b)}
                         canWriteReport={asTutorOn(b)}
                         onSaveReport={async (payload) => {
@@ -611,6 +613,7 @@ export default function Profile() {
                         key={b.bookingId}
                         booking={b}
                         counterpartName={asTutorOn(b) ? b.studentName : b.tutorName}
+                        onReviewed={load}
                         onChat={() => chat(b)}
                         canWriteReport={asTutorOn(b)}
                         onSaveReport={async (payload) => {

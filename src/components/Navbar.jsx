@@ -130,6 +130,7 @@ export default function Navbar() {
     hub.on("SosRequestCreated", pingSos);
     hub.on("SosRequestClaimedByOther", pingSos);
     hub.on("SosRequestExpired", pingSos);
+    hub.on("SosSessionEnded", pingSos);
     hub.start().catch(() => {});
 
     return () => {
@@ -142,6 +143,7 @@ export default function Navbar() {
       hub.off("SosRequestCreated", pingSos);
       hub.off("SosRequestClaimedByOther", pingSos);
       hub.off("SosRequestExpired", pingSos);
+      hub.off("SosSessionEnded", pingSos);
       hub.stop();
     };
   }, [loggedIn]);
@@ -169,10 +171,11 @@ export default function Navbar() {
                   { label: "Bài test", to: "/tutor-tests" },
                 ]
               : []),
+            { label: "Nhóm", to: "/study-groups" },
+            { label: "Nhóm của tôi", to: "/study-groups/mine" },
             ...(tutorReady
               ? [
                   { label: "Lịch dạy", to: "/bookings" },
-                  { label: "Chào thầu", to: "/study-groups/bids" },
                 ]
               : []),
           ]
@@ -180,7 +183,7 @@ export default function Navbar() {
             { label: "Trang chủ", to: "/" },
             { label: "Tìm gia sư", to: "/tutors" },
             { label: "Chẩn đoán", to: "/ai-diagnosis" },
-            { label: "Nhóm học", to: "/study-groups" },
+            { label: "Nhóm", to: "/study-groups" },
             ...(loggedIn ? [{ label: "Nhóm của tôi", to: "/study-groups/mine" }] : []),
             { label: "SOS", to: "/sos" },
             { label: "Hỏi đáp", to: "/faq" },
@@ -246,7 +249,12 @@ export default function Navbar() {
             >
               <Bell size={20} />
               {notifUnread > 0 && (
-                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500" />
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-80" />
+                  <span className="relative flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0F294A]">
+                    {notifUnread > 9 ? "9+" : notifUnread}
+                  </span>
+                </span>
               )}
             </Link>
 

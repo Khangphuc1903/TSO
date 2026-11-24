@@ -1,5 +1,6 @@
 import { Calendar, Clock, MapPin, MessageCircle, Wallet } from "lucide-react";
 import { useState } from "react";
+import { createTutorReview } from "../api/study";
 
 const STATUS = {
   Pending: { label: "Chờ xác nhận", className: "bg-orange-50 text-orange-600" },
@@ -16,6 +17,7 @@ export default function BookingLessonCard({
   actions,
   canWriteReport = false,
   onSaveReport,
+  onReviewed,
 }) {
   let status = STATUS[booking.status] || {
     label: booking.status,
@@ -46,7 +48,7 @@ export default function BookingLessonCard({
           </span>
           {booking.paymentType === "InPerson" && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-              Trả trực tiếp sau buổi học
+              Tiền mặt khi gặp
             </span>
           )}
           {booking.paymentStatus === "Success" && (
@@ -72,6 +74,14 @@ export default function BookingLessonCard({
         </div>
       </div>
 
+      {booking.paymentType === "InPerson" && (
+        <p className="mb-3 text-xs text-sky-800">Không chuyển khoản. Trả tiền mặt khi gặp, sau khi cả hai xác nhận học xong.</p>
+      )}
+      {booking.status === "Confirmed" && (
+        <p className="mb-3 text-xs text-slate-500">
+          Gia sư {booking.tutorCompleted ? "đã xác nhận dạy xong" : "chưa xác nhận"} · Học sinh {booking.studentCompleted ? "đã xác nhận học xong" : "chưa xác nhận"}
+        </p>
+      )}
       <div className="grid sm:grid-cols-2 gap-2 text-sm text-slate-600 mb-4">
         <p className="flex items-center gap-2">
           <Calendar size={15} className="text-brand-600" />
@@ -108,10 +118,73 @@ export default function BookingLessonCard({
         )}
         {actions}
       </div>
+      {booking.status === "Completed" && (
+        <LessonReview booking={booking} isTutor={canWriteReport} onReviewed={onReviewed} />
+      )}
       {booking.status === "Completed" && booking.learnerIsParent && (
         <LessonReportPanel booking={booking} canWrite={canWriteReport} onSave={onSaveReport} />
       )}
     </article>
+  );
+}
+
+function LessonReview({ booking, isTutor, onReviewed }) {
+  const [rating, setRating] = useState(booking.reviewRating || 5);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+
+  if (booking.hasReview || sent) {
+    const stars = booking.reviewRating || rating;
+    return (
+      <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+        <p className="text-xs font-semibold text-amber-800">Đánh giá buổi học</p>
+        <p className="mt-1 text-amber-500">{ "★".repeat(stars) }{ "☆".repeat(Math.max(0, 5 - stars)) }</p>
+        {(booking.reviewComment || comment) && <p className="mt-1 text-sm text-slate-700">{booking.reviewComment || comment}</p>}
+      </div>
+    );
+  }
+
+  if (isTutor) {
+    return (
+      <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+        Học sinh chưa đánh giá buổi học này.
+      </p>
+    );
+  }
+
+  return (
+    <form
+      className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError("");
+        try {
+          await createTutorReview(booking.tutorId, { bookingId: booking.bookingId, rating, comment });
+          setSent(true);
+          onReviewed?.();
+        } catch (err) {
+          setError(err.response?.data?.message || "Không gửi được đánh giá.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="text-sm font-semibold text-slate-900">Đánh giá gia sư</p>
+      <p className="mt-1 text-xs text-slate-500">Buổi đã hoàn thành. Chọn số sao và viết nhận xét.</p>
+      <div className="mt-2 flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button key={star} type="button" onClick={() => setRating(star)} className={`text-2xl leading-none ${star <= rating ? "text-amber-500" : "text-slate-300"}`}>★</button>
+        ))}
+      </div>
+      <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="Buổi học thế nào, gia sư giải bài có rõ không?" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      <button type="submit" disabled={busy} className="mt-2 h-9 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white disabled:opacity-60">
+        {busy ? "Đang gửi" : "Gửi đánh giá"}
+      </button>
+    </form>
   );
 }
 

@@ -88,6 +88,7 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<StudyGroupService>();
+builder.Services.AddScoped<GroupFeedService>();
 builder.Services.AddScoped<GroupChatService>();
 builder.Services.AddScoped<TutorWorkspaceService>();
 builder.Services.AddScoped<TutorTestService>();
@@ -155,6 +156,45 @@ BEGIN
     CREATE INDEX IX_StudyGroupMessages_Group_SentAt ON dbo.StudyGroupMessages(GroupId, SentAt);
 END
 
+IF OBJECT_ID(N'dbo.StudyGroupPosts', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupPosts (
+        PostId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        GroupId INT NOT NULL,
+        AuthorId INT NOT NULL,
+        PostType NVARCHAR(20) NOT NULL,
+        Body NVARCHAR(4000) NOT NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_StudyGroupPosts_Status DEFAULT N'Pending',
+        CreatedAt DATETIME NOT NULL
+    );
+    CREATE INDEX IX_StudyGroupPosts_Group_Created ON dbo.StudyGroupPosts(GroupId, CreatedAt);
+END
+IF OBJECT_ID(N'dbo.StudyGroupPosts', N'U') IS NOT NULL AND COL_LENGTH('dbo.StudyGroupPosts','Status') IS NULL
+    ALTER TABLE dbo.StudyGroupPosts ADD Status NVARCHAR(20) NOT NULL CONSTRAINT DF_StudyGroupPosts_Status DEFAULT N'Pending';
+IF OBJECT_ID(N'dbo.StudyGroupComments', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroupPosts', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupComments (
+        CommentId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        PostId INT NOT NULL,
+        ParentCommentId INT NULL,
+        AuthorId INT NOT NULL,
+        Body NVARCHAR(2000) NOT NULL,
+        CreatedAt DATETIME NOT NULL
+    );
+    CREATE INDEX IX_StudyGroupComments_Post ON dbo.StudyGroupComments(PostId, CreatedAt);
+END
+IF OBJECT_ID(N'dbo.StudyGroupFeedFiles', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupFeedFiles (
+        FileId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        PostId INT NULL,
+        CommentId INT NULL,
+        FileUrl NVARCHAR(500) NOT NULL,
+        FileName NVARCHAR(260) NOT NULL,
+        Kind NVARCHAR(20) NOT NULL
+    );
+END
+
 IF OBJECT_ID(N'dbo.Questions', N'U') IS NOT NULL AND COL_LENGTH('Questions','GradeLevel') IS NULL
     EXEC(N'ALTER TABLE Questions ADD GradeLevel NVARCHAR(50) NULL');
 IF OBJECT_ID(N'dbo.TutorTestAttempts', N'U') IS NOT NULL AND COL_LENGTH('TutorTestAttempts','GradeLevel') IS NULL
@@ -186,6 +226,24 @@ IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyG
 IF OBJECT_ID(N'dbo.StudyGroupMessages', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMessages','AttachmentType') IS NULL
     EXEC(N'ALTER TABLE StudyGroupMessages ADD AttachmentType NVARCHAR(50) NULL');
 
+IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','AttachmentUrl') IS NULL
+    EXEC(N'ALTER TABLE Messages ADD AttachmentUrl NVARCHAR(500) NULL');
+IF OBJECT_ID(N'dbo.Messages', N'U') IS NOT NULL AND COL_LENGTH('Messages','AttachmentType') IS NULL
+    EXEC(N'ALTER TABLE Messages ADD AttachmentType NVARCHAR(50) NULL');
+
+IF OBJECT_ID(N'dbo.Wishlist', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.Wishlist (
+        WishlistId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        TutorId INT NOT NULL,
+        AddedAt DATETIME NOT NULL CONSTRAINT DF_Wishlist_AddedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_Wishlist_Student FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_Wishlist_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT UQ_Wishlist UNIQUE (StudentId, TutorId)
+    );
+END
+
 IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
     EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked DEFAULT (0)');
 
@@ -193,6 +251,8 @@ IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','Tutor
     EXEC(N'ALTER TABLE Bookings ADD TutorCompleted BIT NOT NULL CONSTRAINT DF_Bookings_TutorCompleted DEFAULT (0)');
 IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','StudentCompleted') IS NULL
     EXEC(N'ALTER TABLE Bookings ADD StudentCompleted BIT NOT NULL CONSTRAINT DF_Bookings_StudentCompleted DEFAULT (0)');
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','PaymentType') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD PaymentType NVARCHAR(20) NOT NULL CONSTRAINT DF_Bookings_PaymentType DEFAULT N''Online''');
 
 IF OBJECT_ID(N'dbo.LessonReports', N'U') IS NULL AND OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL
 BEGIN
@@ -259,15 +319,270 @@ BEGIN
     IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NULL
         EXEC(N'ALTER TABLE dbo.Payments ADD GatewayTransactionId NVARCHAR(100) NULL');
     IF COL_LENGTH('dbo.Payments','GatewayResponseCode') IS NULL
-        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayResponseCode NVARCHAR(50) NULL');
+        EXEC(N'ALTER TABLE dbo.Payments ADD GatewayResponseCode NVARCHAR(1000) NULL');
     IF COL_LENGTH('dbo.Payments','CallbackReceivedAt') IS NULL
         EXEC(N'ALTER TABLE dbo.Payments ADD CallbackReceivedAt DATETIME NULL');
+    IF COL_LENGTH('dbo.Payments','GatewayResponseCode') IS NOT NULL
+       AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Payments') AND name = N'GatewayResponseCode') < 2000
+        ALTER TABLE dbo.Payments ALTER COLUMN GatewayResponseCode NVARCHAR(1000) NULL;
+    IF COL_LENGTH('dbo.Payments','GatewayTransactionId') IS NOT NULL
+       AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.Payments') AND name = N'GatewayTransactionId') < 400
+        ALTER TABLE dbo.Payments ALTER COLUMN GatewayTransactionId NVARCHAR(200) NULL;
+    IF COL_LENGTH('dbo.Payments','TutorPaidAt') IS NULL
+        EXEC(N'ALTER TABLE dbo.Payments ADD TutorPaidAt DATETIME NULL');
 END
 """);
     }
     catch (Exception ex)
     {
         app.Logger.LogWarning(ex, "Bo qua SQL khoi tao schema (cot/bang da co).");
+    }
+
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','IsSosReady') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD IsSosReady BIT NOT NULL CONSTRAINT DF_TutorProfiles_IsSosReady DEFAULT (0)');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SosReadyAt') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD SosReadyAt DATETIME NULL');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','LastSosHeartbeat') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD LastSosHeartbeat DATETIME NULL');
+IF OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL AND COL_LENGTH('TutorProfiles','SubjectsLocked') IS NULL
+    EXEC(N'ALTER TABLE TutorProfiles ADD SubjectsLocked BIT NOT NULL CONSTRAINT DF_TutorProfiles_SubjectsLocked2 DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','TutorCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD TutorCompleted BIT NOT NULL CONSTRAINT DF_Bookings_TutorCompleted2 DEFAULT (0)');
+IF OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL AND COL_LENGTH('Bookings','StudentCompleted') IS NULL
+    EXEC(N'ALTER TABLE Bookings ADD StudentCompleted BIT NOT NULL CONSTRAINT DF_Bookings_StudentCompleted2 DEFAULT (0)');
+
+IF OBJECT_ID(N'dbo.LessonReports', N'U') IS NULL AND OBJECT_ID(N'dbo.Bookings', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.LessonReports (
+        LessonReportId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        BookingId INT NOT NULL,
+        TutorId INT NOT NULL,
+        Content NVARCHAR(2000) NOT NULL,
+        Homework NVARCHAR(500) NULL,
+        CreatedAt DATETIME NOT NULL,
+        UpdatedAt DATETIME NULL,
+        CONSTRAINT FK_LessonReports_Booking2 FOREIGN KEY (BookingId) REFERENCES dbo.Bookings(BookingId),
+        CONSTRAINT UQ_LessonReports_Booking2 UNIQUE (BookingId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.KnowledgeTopics', N'U') IS NULL AND OBJECT_ID(N'dbo.Subjects', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.KnowledgeTopics (
+        TopicId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        SubjectId INT NOT NULL,
+        GradeLevel NVARCHAR(50) NULL,
+        TopicName NVARCHAR(200) NOT NULL,
+        TopicCode NVARCHAR(80) NULL,
+        Description NVARCHAR(500) NULL,
+        IsActive BIT NOT NULL CONSTRAINT DF_KnowledgeTopics_IsActive DEFAULT (1),
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_KnowledgeTopics_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_KnowledgeTopic_Subject FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.KnowledgeGapDiagnoses', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.KnowledgeGapDiagnoses (
+        DiagnosisId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        SubjectId INT NULL,
+        TopicId INT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        OcrText NVARCHAR(MAX) NULL,
+        AiSummary NVARCHAR(1000) NULL,
+        GapDetail NVARCHAR(MAX) NULL,
+        GradeLevel NVARCHAR(50) NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_KGD_Status DEFAULT (N'Pending'),
+        RawAiJson NVARCHAR(MAX) NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_KGD_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT FK_KGD_Student FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_KGD_Subject FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId),
+        CONSTRAINT FK_KGD_Topic FOREIGN KEY (TopicId) REFERENCES dbo.KnowledgeTopics(TopicId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.TutorMatchSuggestions', N'U') IS NULL
+    AND OBJECT_ID(N'dbo.KnowledgeGapDiagnoses', N'U') IS NOT NULL
+    AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.TutorMatchSuggestions (
+        SuggestionId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        DiagnosisId INT NOT NULL,
+        TutorId INT NOT NULL,
+        RankNo TINYINT NOT NULL,
+        MatchScore DECIMAL(5, 2) NOT NULL,
+        Reason NVARCHAR(500) NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_TMS_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_TMS UNIQUE (DiagnosisId, TutorId),
+        CONSTRAINT FK_TMS_Diagnosis FOREIGN KEY (DiagnosisId) REFERENCES dbo.KnowledgeGapDiagnoses(DiagnosisId),
+        CONSTRAINT FK_TMS_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','HiringMode') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD HiringMode NVARCHAR(20) NOT NULL CONSTRAINT DF_StudyGroups_HiringMode2 DEFAULT (N''Standard'')');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','BudgetPerSession') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD BudgetPerSession DECIMAL(10, 0) NULL');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','BidDeadline') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD BidDeadline DATETIME NULL');
+IF OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND COL_LENGTH('StudyGroups','TutorRequirements') IS NULL
+    EXEC(N'ALTER TABLE StudyGroups ADD TutorRequirements NVARCHAR(1000) NULL');
+IF OBJECT_ID(N'dbo.StudyGroupMembers', N'U') IS NOT NULL AND COL_LENGTH('StudyGroupMembers','JoinMessage') IS NULL
+    EXEC(N'ALTER TABLE StudyGroupMembers ADD JoinMessage NVARCHAR(500) NULL');
+
+IF OBJECT_ID(N'dbo.StudyGroupBids', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroups', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.TutorProfiles', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupBids (
+        BidId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        GroupId INT NOT NULL,
+        TutorId INT NOT NULL,
+        ProposedPrice DECIMAL(10, 0) NOT NULL,
+        CurriculumNote NVARCHAR(1000) NULL,
+        CertificateNote NVARCHAR(500) NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_SGB_Status DEFAULT (N'Pending'),
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SGB_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_StudyGroupBid UNIQUE (GroupId, TutorId),
+        CONSTRAINT FK_SGB_Group FOREIGN KEY (GroupId) REFERENCES dbo.StudyGroups(GroupId),
+        CONSTRAINT FK_SGB_Tutor FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.StudyGroupBidVotes', N'U') IS NULL AND OBJECT_ID(N'dbo.StudyGroupBids', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.StudyGroupBidVotes (
+        VoteId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        BidId INT NOT NULL,
+        VoterUserId INT NOT NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SGBV_CreatedAt DEFAULT (GETDATE()),
+        CONSTRAINT UQ_StudyGroupBidVote UNIQUE (BidId, VoterUserId),
+        CONSTRAINT FK_SGBV_Bid FOREIGN KEY (BidId) REFERENCES dbo.StudyGroupBids(BidId),
+        CONSTRAINT FK_SGBV_Voter FOREIGN KEY (VoterUserId) REFERENCES dbo.Users(UserId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.Subjects', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Toán')
+        UPDATE dbo.Subjects SET SubjectName = N'Toán' WHERE SubjectName = N'Toan';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Tiếng Anh')
+        UPDATE dbo.Subjects SET SubjectName = N'Tiếng Anh' WHERE SubjectName = N'Tieng Anh';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Vật Lý')
+        UPDATE dbo.Subjects SET SubjectName = N'Vật Lý' WHERE SubjectName = N'Vat Ly';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Hóa Học')
+        UPDATE dbo.Subjects SET SubjectName = N'Hóa Học' WHERE SubjectName = N'Hoa Hoc';
+    IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE SubjectName = N'Sinh Học')
+        UPDATE dbo.Subjects SET SubjectName = N'Sinh Học' WHERE SubjectName = N'Sinh Hoc';
+    UPDATE dbo.Subjects SET SubjectName = N'Ngữ Văn' WHERE SubjectName = N'Van';
+END
+
+IF OBJECT_ID(N'dbo.Conversations', N'U') IS NOT NULL AND COL_LENGTH('Conversations','GroupId') IS NULL
+    EXEC(N'ALTER TABLE Conversations ADD GroupId INT NULL');
+
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NULL AND OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.SosRequests (
+        RequestId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        SubjectId INT NOT NULL,
+        TopicId INT NULL,
+        ImageUrl NVARCHAR(500) NOT NULL,
+        QuestionNote NVARCHAR(1000) NULL,
+        FeeAmount DECIMAL(10, 0) NOT NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_SosReq_Status2 DEFAULT (N'Open'),
+        ClaimedByTutorId INT NULL,
+        ConversationId INT NULL,
+        CreatedAt DATETIME NOT NULL CONSTRAINT DF_SosReq_CreatedAt2 DEFAULT (GETDATE()),
+        ExpiresAt DATETIME NOT NULL,
+        ClaimedAt DATETIME NULL,
+        CONSTRAINT FK_SosReq_Student2 FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_SosReq_Subject2 FOREIGN KEY (SubjectId) REFERENCES dbo.Subjects(SubjectId),
+        CONSTRAINT FK_SosReq_Tutor2 FOREIGN KEY (ClaimedByTutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT FK_SosReq_Conv2 FOREIGN KEY (ConversationId) REFERENCES dbo.Conversations(ConversationId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL AND COL_LENGTH('SosRequests','TopicId') IS NULL
+    EXEC(N'ALTER TABLE SosRequests ADD TopicId INT NULL');
+IF OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL AND COL_LENGTH('SosRequests','ExpiresAt') IS NULL
+    EXEC(N'ALTER TABLE SosRequests ADD ExpiresAt DATETIME NULL');
+
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NULL AND OBJECT_ID(N'dbo.SosRequests', N'U') IS NOT NULL
+BEGIN
+    CREATE TABLE dbo.SosSessions (
+        SessionId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        RequestId INT NOT NULL,
+        StudentId INT NOT NULL,
+        TutorId INT NOT NULL,
+        ConversationId INT NULL,
+        VideoRoomId NVARCHAR(200) NULL,
+        StartedAt DATETIME NOT NULL,
+        EndsAt DATETIME NOT NULL,
+        EndedAt DATETIME NULL,
+        DurationMinutes INT NOT NULL CONSTRAINT DF_SosSes_Duration2 DEFAULT (15),
+        FeeAmount DECIMAL(10, 0) NOT NULL,
+        PayoutStatus NVARCHAR(20) NOT NULL CONSTRAINT DF_SosSes_Payout2 DEFAULT (N'Held'),
+        BookingId INT NULL,
+        GatewayTransactionId NVARCHAR(100) NULL,
+        CONSTRAINT UQ_SosSes_Request2 UNIQUE (RequestId),
+        CONSTRAINT FK_SosSes_Request2 FOREIGN KEY (RequestId) REFERENCES dbo.SosRequests(RequestId),
+        CONSTRAINT FK_SosSes_Student2 FOREIGN KEY (StudentId) REFERENCES dbo.Users(UserId),
+        CONSTRAINT FK_SosSes_Tutor2 FOREIGN KEY (TutorId) REFERENCES dbo.TutorProfiles(TutorId),
+        CONSTRAINT FK_SosSes_Conv2 FOREIGN KEY (ConversationId) REFERENCES dbo.Conversations(ConversationId)
+    );
+END
+
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL AND COL_LENGTH('SosSessions','VideoRoomId') IS NULL
+    EXEC(N'ALTER TABLE SosSessions ADD VideoRoomId NVARCHAR(200) NULL');
+IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL AND COL_LENGTH('SosSessions','BookingId') IS NULL
+    EXEC(N'ALTER TABLE SosSessions ADD BookingId INT NULL');
+
+IF OBJECT_ID(N'dbo.PlatformSettings', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosFeeAmount')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosFeeAmount', N'25000', N'Phí SOS cứu viện 15 phút (VNĐ)', GETDATE());
+    IF NOT EXISTS (SELECT 1 FROM dbo.PlatformSettings WHERE SettingKey = N'SosDurationMinutes')
+        INSERT INTO dbo.PlatformSettings (SettingKey, SettingValue, Description, UpdatedAt)
+        VALUES (N'SosDurationMinutes', N'15', N'Thời lượng phiên SOS (phút)', GETDATE());
+END
+
+IF OBJECT_ID(N'dbo.Reviews', N'U') IS NOT NULL
+BEGIN
+    DECLARE @dropReview nvarchar(max) = N'';
+    SELECT @dropReview = @dropReview + N'ALTER TABLE dbo.Reviews DROP CONSTRAINT ' + QUOTENAME(kc.name) + N';'
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = OBJECT_ID(N'dbo.Reviews')
+      AND kc.[type] = 'UQ'
+      AND c.name = N'BookingId';
+    IF @dropReview <> N'' EXEC sp_executesql @dropReview;
+
+    IF COL_LENGTH('dbo.Reviews','SosSessionId') IS NULL
+        ALTER TABLE dbo.Reviews ADD SosSessionId INT NULL;
+    IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID(N'dbo.Reviews') AND name = N'BookingId' AND is_nullable = 0)
+        ALTER TABLE dbo.Reviews ALTER COLUMN BookingId INT NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Reviews_Booking' AND object_id = OBJECT_ID(N'dbo.Reviews'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_Reviews_Booking ON dbo.Reviews(BookingId) WHERE BookingId IS NOT NULL');
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Reviews_SosSession' AND object_id = OBJECT_ID(N'dbo.Reviews'))
+        EXEC(N'CREATE UNIQUE INDEX UQ_Reviews_SosSession ON dbo.Reviews(SosSessionId) WHERE SosSessionId IS NOT NULL');
+    IF OBJECT_ID(N'dbo.SosSessions', N'U') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Review_SosSession')
+        ALTER TABLE dbo.Reviews ADD CONSTRAINT FK_Review_SosSession
+            FOREIGN KEY (SosSessionId) REFERENCES dbo.SosSessions(SessionId);
+END
+""");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Bo qua SQL bang chan doan va danh gia buoi hoc.");
     }
 }
 
@@ -277,16 +592,21 @@ if (args.Contains("--seed-demo"))
     return;
 }
 
+try
+{
+    await DemoTutorSeeder.SeedAsync(app.Services);
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Bo qua seed gia su Viet Nam.");
+}
+
 if (app.Environment.IsDevelopment())
 {
     try
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TutorPlatformDbContext>();
-        if (!await db.TutorProfiles.AnyAsync())
-        {
-            await DemoTutorSeeder.SeedAsync(app.Services);
-        }
         await KnowledgeTopicSeeder.SeedTopicsAsync(db);
     }
     catch (Exception ex)
@@ -295,11 +615,8 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors("AllowReactApp");
 if (!app.Environment.IsDevelopment())
@@ -311,4 +628,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<AppHub>("/hubs/app");
+var indexPath = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
+if (File.Exists(indexPath))
+{
+    app.MapFallback(async context =>
+    {
+        var path = context.Request.Path.Value ?? "";
+        if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(indexPath);
+    });
+}
 app.Run();

@@ -60,6 +60,9 @@ public class PaymentService
         if (booking == null)
             return (false, StatusCodes.Status404NotFound, "Không tìm thấy thông tin buổi học.", null);
 
+        if (string.Equals(booking.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase))
+            return (false, StatusCodes.Status400BadRequest, "Buổi này trả tiền mặt khi gặp, sau khi học xong. Không tạo mã chuyển khoản.", null);
+
         if (booking.StudentId != studentId)
             return (false, StatusCodes.Status403Forbidden, $"Bạn không có quyền thanh toán cho buổi học #{booking.BookingId} (đơn thuộc học viên #{booking.StudentId}, bạn đang đăng nhập tài khoản #{studentId}).", null);
 

@@ -70,6 +70,7 @@ public class CreateBookingDto
     public DateOnly? ScheduledDate { get; set; }
     public string? TeachingMode { get; set; }
     public decimal? Price { get; set; }
+    public string? PaymentType { get; set; }
 }
 
 public class UpdateTutorTeachingProfileDto
@@ -108,6 +109,9 @@ public class TutorWorkspaceDto
     public bool IsPublished { get; set; }
     public bool SubjectsLocked { get; set; }
     public string VerificationStatus { get; set; } = "Pending";
+    public bool IdentityCompleted { get; set; }
+    public int PassedTestCount { get; set; }
+    public bool CanOpenSchedule { get; set; }
     public decimal AverageRating { get; set; }
     public int TotalReviews { get; set; }
     public List<TutorSubjectItemDto> Subjects { get; set; } = new();

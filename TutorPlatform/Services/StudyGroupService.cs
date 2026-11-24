@@ -149,7 +149,7 @@ public class StudyGroupService
         var isTutor = currentUserId.HasValue && await IsTutorAsync(currentUserId.Value, cancellationToken);
         var chosen = g.StudyGroupMentor?.Status == "Accepted";
         var biddingOpen = isReverse && !chosen && (g.BidDeadline == null || g.BidDeadline >= DateTime.Now);
-        if (isReverse && !dto.IsMember && !isTutor)
+        if (isReverse && !chosen && !dto.IsMember && !isTutor)
         {
             dto.Restricted = true;
             dto.Description = null;

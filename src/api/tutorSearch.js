@@ -57,7 +57,51 @@ export async function getDefaultTutors() {
   return items.map(mapTutor);
 }
 
+function foldSubject(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const SUBJECT_LABELS = {
+  toan: "Toán",
+  "tieng viet": "Tiếng Việt",
+  "ngu van": "Ngữ Văn",
+  "tieng anh": "Tiếng Anh",
+  ielts: "IELTS",
+  "vat ly": "Vật Lý",
+  "hoa hoc": "Hóa Học",
+  "sinh hoc": "Sinh Học",
+};
+
+function subjectKey(name) {
+  const folded = foldSubject(name);
+  if (folded === "van" || folded === "ngu van") return "ngu van";
+  return folded;
+}
+
+export function displaySubjectName(name) {
+  return SUBJECT_LABELS[subjectKey(name)] || name;
+}
+
 export async function getSubjects() {
   const res = await axiosClient.get("/TutorSearch/subjects");
-  return res.data?.items || [];
+  const items = res.data?.items || [];
+  const map = new Map();
+  for (const item of items) {
+    const key = subjectKey(item.subjectName);
+    const named = { ...item, subjectName: displaySubjectName(item.subjectName) };
+    const prev = map.get(key);
+    if (!prev || foldSubject(item.subjectName) === "ngu van") map.set(key, named);
+  }
+  const order = ["toan", "tieng viet", "ngu van", "tieng anh", "ielts", "vat ly", "hoa hoc", "sinh hoc"];
+  return [...map.values()].sort((a, b) => {
+    const ia = order.indexOf(subjectKey(a.subjectName));
+    const ib = order.indexOf(subjectKey(b.subjectName));
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
 }

@@ -379,6 +379,7 @@ public partial class TutorPlatformDbContext : DbContext
             entity.Property(e => e.GatewayResponseCode).HasMaxLength(1000);
             entity.Property(e => e.GatewayTransactionId).HasMaxLength(200);
             entity.Property(e => e.PaidAt).HasColumnType("datetime");
+            entity.Property(e => e.TutorPaidAt).HasColumnType("datetime");
             entity.Property(e => e.PaymentMethod).HasMaxLength(20);
             entity.Property(e => e.PaymentUrl).HasMaxLength(1000);
             entity.Property(e => e.Status)

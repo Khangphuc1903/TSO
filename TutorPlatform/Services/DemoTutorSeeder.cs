@@ -70,6 +70,14 @@ public static class DemoTutorSeeder
                 "Sinh học cấp 3, sơ đồ tư duy và ôn chuyên đề di truyền.", "Đại học Khoa học Tự nhiên", "Sư phạm Sinh", 6, 160000, 250000, "Online", 4.80m, 12, new[] { "Sinh Hoc" }),
             Tutor("tutor.giabao@tsg.com", "Đỗ Gia Bảo", "Male", "Hà Nội", "Đống Đa", "40 Tây Sơn", "/uploads/avatars/gia-bao.jpg", "0902000011",
                 "Toán lớp 9 và luyện thi vào 10. Chữa đề theo dạng.", "Đại học Bách khoa Hà Nội", "Toán tin", 3, 170000, 260000, "Both", 4.60m, 6, new[] { "Toan" }),
+            Tutor("tutor.nhatnam@tsg.com", "Nguyễn Nhật Nam", "Male", "TP. Hồ Chí Minh", "Quận 1", "21 Nguyễn Huệ", "/uploads/avatars/nhat-nam.jpg", "0902000012",
+                "Tiếng Anh giao tiếp THPT. Sửa phát âm và viết đoạn theo chủ đề.", "Đại học Ngoại ngữ - ĐHQG Hà Nội", "Sư phạm Tiếng Anh", 5, 200000, 320000, "Online", 4.80m, 13, new[] { "Tieng Anh" }),
+            Tutor("tutor.duckhai@tsg.com", "Trần Đức Khải", "Male", "Hà Nội", "Thanh Xuân", "8 Nguyễn Trãi", "/uploads/avatars/duc-khai.jpg", "0902000013",
+                "Toán THPT, công thức cần nhớ và bài tập vận dụng.", "Đại học Sư phạm Hà Nội", "Sư phạm Toán", 4, 180000, 280000, "Both", 4.70m, 9, new[] { "Toan" }),
+            Tutor("tutor.phuongthao@tsg.com", "Lê Phương Thảo", "Female", "Hà Nội", "Hoàn Kiếm", "5 Hàng Bài", "/uploads/avatars/phuong-thao.jpg", "0902000014",
+                "Tiếng Việt tiểu học. Tập đọc, chính tả và kể chuyện.", "Đại học Sư phạm Hà Nội", "Giáo dục Tiểu học", 6, 140000, 220000, "Offline", 4.90m, 15, new[] { "Tiếng Việt" }),
+            Tutor("tutor.quynhchi@tsg.com", "Phạm Quỳnh Chi", "Female", "Đà Nẵng", "Sơn Trà", "16 Phạm Văn Đồng", "/uploads/avatars/quynh-chi.jpg", "0902000015",
+                "Ngữ văn THPT, đọc hiểu và nghị luận. Chữa bài theo dàn ý.", "Đại học Sư phạm - ĐH Đà Nẵng", "Sư phạm Ngữ văn", 5, 160000, 250000, "Both", 4.80m, 11, new[] { "Van", "Ngữ Văn" }),
         };
 
         var createdTutors = new List<User>();
@@ -80,6 +88,9 @@ public static class DemoTutorSeeder
             createdTutors.Add(user);
             await EnsureTutorProfileAsync(db, user.UserId, item, subjects);
         }
+
+        await ReplaceAvatarAsync(db, "tutor@tutor.com", "/uploads/avatars/minh-hoang.jpg");
+        await ReplaceAvatarAsync(db, "tutor.minh@tsg.com", "/uploads/avatars/gia-minh.jpg");
 
         await EnsureDemoReviewsAsync(db, student.UserId, createdTutors, subjects);
 
@@ -105,7 +116,90 @@ public static class DemoTutorSeeder
             await db.SaveChangesAsync();
         }
 
+        await EnsureAdminFinanceDemoAsync(db, student.UserId);
+
         Console.WriteLine("Seed demo tutors xong. Login student: student.demo@tsg.com / Password123!");
+    }
+
+    private static async Task EnsureAdminFinanceDemoAsync(TutorPlatformDbContext db, int fallbackStudentId)
+    {
+        var studentId = await db.Users
+            .Where(u => u.Email == "student@tutor.com")
+            .Select(u => (int?)u.UserId)
+            .FirstOrDefaultAsync() ?? fallbackStudentId;
+
+        var rows = new (string Code, string TutorEmail, decimal Amount, int MonthsAgo, int Day, bool TutorPaid, string BankCode, string BankName, string Account, string Holder)[]
+        {
+            ("DEMO-ADM-01", "tutor.lananh@tsg.com", 280000, 1, 12, true, "MB", "MB Bank", "0902000001", "NGUYEN LAN ANH"),
+            ("DEMO-ADM-02", "tutor.lananh@tsg.com", 240000, 0, 4, true, "MB", "MB Bank", "0902000001", "NGUYEN LAN ANH"),
+            ("DEMO-ADM-03", "tutor.thuha@tsg.com", 320000, 0, 8, false, "VCB", "Vietcombank", "0011002345678", "TRAN THU HA"),
+            ("DEMO-ADM-04", "tutor.minhkhoa@tsg.com", 260000, 0, 11, true, "ACB", "ACB", "12345678901", "LE MINH KHOA"),
+            ("DEMO-ADM-05", "tutor.quochuy@tsg.com", 200000, 1, 18, true, "TCB", "Techcombank", "19034567890123", "PHAM QUOC HUY"),
+            ("DEMO-ADM-06", "tutor.hoanglong@tsg.com", 250000, 0, 15, false, "MB", "MB Bank", "0902000006", "DANG HOANG LONG"),
+        };
+
+        foreach (var row in rows)
+        {
+            if (await db.Payments.AnyAsync(p => p.TransactionCode == row.Code))
+                continue;
+            var tutorId = await db.Users.Where(u => u.Email == row.TutorEmail).Select(u => (int?)u.UserId).FirstOrDefaultAsync();
+            if (tutorId == null) continue;
+            var subjectId = await db.TutorSubjects.Where(ts => ts.TutorId == tutorId).Select(ts => (int?)ts.SubjectId).FirstOrDefaultAsync();
+            if (subjectId == null) continue;
+
+            if (!await db.UserBankAccounts.AnyAsync(b => b.UserId == tutorId))
+            {
+                db.UserBankAccounts.Add(new UserBankAccount
+                {
+                    UserId = tutorId.Value,
+                    BankCode = row.BankCode,
+                    BankName = row.BankName,
+                    AccountNumber = row.Account,
+                    AccountHolderName = row.Holder,
+                    IsDefault = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            var paidAt = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 3, 0, 0, DateTimeKind.Utc)
+                .AddMonths(-row.MonthsAgo)
+                .AddDays(row.Day - 1);
+            if (paidAt > DateTime.UtcNow)
+                paidAt = DateTime.UtcNow.AddHours(-6);
+            var booking = new Booking
+            {
+                StudentId = studentId,
+                TutorId = tutorId.Value,
+                SubjectId = subjectId.Value,
+                ScheduledDate = DateOnly.FromDateTime(paidAt.AddHours(7)),
+                StartTime = new TimeOnly(19, 0),
+                EndTime = new TimeOnly(21, 0),
+                TeachingMode = "Online",
+                Location = "Online",
+                Price = row.Amount,
+                Status = row.TutorPaid ? "Completed" : "Confirmed",
+                CreatedAt = paidAt.AddDays(-1),
+                ConfirmedAt = paidAt.AddHours(-2),
+                CompletedAt = row.TutorPaid ? paidAt.AddDays(1) : null
+            };
+            db.Bookings.Add(booking);
+            await db.SaveChangesAsync();
+
+            db.Payments.Add(new Payment
+            {
+                BookingId = booking.BookingId,
+                PayerUserId = studentId,
+                Amount = row.Amount,
+                PaymentMethod = "VietQR",
+                TransactionCode = row.Code,
+                Status = "Success",
+                PaidAt = paidAt,
+                CreatedAt = paidAt.AddMinutes(-10),
+                CallbackReceivedAt = paidAt,
+                TutorPaidAt = row.TutorPaid ? paidAt.AddDays(1) : null
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task<Role> EnsureRoleAsync(TutorPlatformDbContext db, string roleName)
@@ -216,8 +310,13 @@ public static class DemoTutorSeeder
             profile.HourlyRateMin = item.RateMin;
             profile.HourlyRateMax = item.RateMax;
             profile.TeachingMode = item.Mode;
+            profile.AverageRating = item.Rating;
+            profile.TotalReviews = item.Reviews;
+            profile.SubjectsLocked = true;
             await db.SaveChangesAsync();
         }
+
+        profile.SubjectsLocked = true;
 
         foreach (var subjectName in item.Subjects)
         {
@@ -298,6 +397,101 @@ public static class DemoTutorSeeder
         }
 
         await db.SaveChangesAsync();
+        await EnsureVerifiedAsync(db, tutorId, item);
+    }
+
+    private static async Task EnsureVerifiedAsync(TutorPlatformDbContext db, int tutorId, DemoTutor item)
+    {
+        var now = DateTime.Now;
+        var doc = await db.IdentityDocuments
+            .Where(d => d.TutorId == tutorId)
+            .OrderByDescending(d => d.SubmittedAt)
+            .FirstOrDefaultAsync();
+        if (doc == null)
+        {
+            doc = new IdentityDocument
+            {
+                TutorId = tutorId,
+                IdCardFrontUrl = item.AvatarUrl,
+                IdCardBackUrl = item.AvatarUrl,
+                Status = "Approved",
+                ReviewedAt = now,
+                SubmittedAt = now
+            };
+            db.IdentityDocuments.Add(doc);
+            await db.SaveChangesAsync();
+        }
+        else if (doc.Status != "Approved")
+        {
+            doc.Status = "Approved";
+            doc.ReviewedAt = now;
+            doc.RejectionReason = null;
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.OcrExtractionResults.AnyAsync(o => o.DocumentId == doc.DocumentId))
+        {
+            db.OcrExtractionResults.Add(new OcrExtractionResult
+            {
+                DocumentId = doc.DocumentId,
+                FullName = item.FullName,
+                DateOfBirth = new DateOnly(1998, 5, 12),
+                IdNumber = $"001098{tutorId:D6}",
+                Address = item.Address,
+                ExtractedAt = now
+            });
+        }
+
+        if (!await db.FaceVerificationLogs.AnyAsync(f => f.DocumentId == doc.DocumentId))
+        {
+            db.FaceVerificationLogs.Add(new FaceVerificationLog
+            {
+                TutorId = tutorId,
+                DocumentId = doc.DocumentId,
+                SelfieImageUrl = item.AvatarUrl,
+                MatchConfidenceScore = 98.5m,
+                IsMatch = true,
+                ApiProvider = "Admin",
+                AttemptNumber = 1,
+                Status = "Passed",
+                CreatedAt = now
+            });
+        }
+
+        var subjectId = await db.TutorSubjects
+            .Where(ts => ts.TutorId == tutorId)
+            .Select(ts => (int?)ts.SubjectId)
+            .FirstOrDefaultAsync();
+
+        if (!await db.TutorTestAttempts.AnyAsync(a => a.TutorId == tutorId && a.TestType == "Pedagogical" && a.IsPassed))
+        {
+            db.TutorTestAttempts.Add(PassedAttempt(tutorId, "Pedagogical", null, now));
+        }
+
+        if (!await db.TutorTestAttempts.AnyAsync(a => a.TutorId == tutorId && a.TestType == "Professional" && a.IsPassed))
+        {
+            db.TutorTestAttempts.Add(PassedAttempt(tutorId, "Professional", subjectId, now));
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static TutorTestAttempt PassedAttempt(int tutorId, string testType, int? subjectId, DateTime now)
+    {
+        return new TutorTestAttempt
+        {
+            TutorId = tutorId,
+            TestType = testType,
+            SubjectId = subjectId,
+            TotalQuestions = 10,
+            CorrectCount = 9,
+            ScorePercent = 90,
+            PassThreshold = 70,
+            IsPassed = true,
+            AttemptNumber = 1,
+            StartedAt = now.AddMinutes(-20),
+            SubmittedAt = now
+        };
     }
 
     private static async Task EnsureDemoReviewsAsync(TutorPlatformDbContext db, int studentId, List<User> tutors, List<Subject> subjects)
@@ -345,13 +539,21 @@ public static class DemoTutorSeeder
                 BookingId = booking.BookingId,
                 StudentId = studentId,
                 TutorId = tutorId,
-                Rating = ratings[i],
+                Rating = ratings[i % ratings.Length],
                 Comment = comments[i % comments.Length],
                 IsHidden = false,
                 CreatedAt = DateTime.Now.AddDays(-6)
             });
             await db.SaveChangesAsync();
         }
+    }
+
+    private static async Task ReplaceAvatarAsync(TutorPlatformDbContext db, string email, string avatarUrl)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null || user.AvatarUrl == avatarUrl) return;
+        user.AvatarUrl = avatarUrl;
+        await db.SaveChangesAsync();
     }
 
     private static async Task RenameLegacyTutorAsync(TutorPlatformDbContext db, string fromEmail, string toEmail)

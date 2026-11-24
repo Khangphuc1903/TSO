@@ -138,10 +138,12 @@ export default function Checkout() {
           } else if (found.status === "Confirmed" || found.paymentStatus === "Success") {
             navigate(`/payment/result?bookingId=${bookingId}&status=success`);
             return;
+          } else if (found.paymentType === "InPerson") {
+            setBooking(found);
+            setRefundInfo(null);
           } else {
             setBooking(found);
             setRefundInfo(refund);
-            // Tự động khởi tạo payment link ngay khi mở trang để học sinh quét QR tức thì
             initPayment(found.bookingId);
           }
         }
@@ -356,6 +358,20 @@ export default function Checkout() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (booking?.paymentType === "InPerson") {
+    return (
+      <div className="min-h-screen bg-[#F4F7FA] px-4 py-16">
+        <div className="mx-auto max-w-lg rounded-3xl bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-900">Buổi này trả tiền mặt</h1>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            Không tạo mã chuyển khoản. Học xong, gia sư và học sinh cùng bấm xác nhận trên Lịch học, rồi học sinh viết đánh giá.
+          </p>
+          <Link to="/bookings" className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white">Về lịch học</Link>
         </div>
       </div>
     );

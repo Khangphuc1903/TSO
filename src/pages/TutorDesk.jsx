@@ -15,6 +15,7 @@ import { getSubjects } from "../api/tutorSearch";
 import { API_ORIGIN } from "../api/axiosClient";
 import { fileHref } from "../utils/format";
 import { loadTutorGate } from "../tutorGate";
+import { getMySosSessions } from "../api/sos";
 import {
   createTutorSlot,
   deleteTutorCertificate,
@@ -130,6 +131,7 @@ export default function TutorDesk() {
   const [tab, setTab] = useState("profile");
   const [tutorReady, setTutorReady] = useState(false);
   const [gateKnown, setGateKnown] = useState(false);
+  const [sosHistory, setSosHistory] = useState([]);
   const [ws, setWs] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -193,6 +195,7 @@ export default function TutorDesk() {
       setGateKnown(true);
     });
     load().catch(() => setError("Không tải được bảng gia sư. Kiểm tra backend đang chạy."));
+    getMySosSessions().then((rows) => setSosHistory(Array.isArray(rows) ? rows : [])).catch(() => setSosHistory([]));
   }, [navigate, isTutor]);
 
   const pendingInvites = useMemo(
@@ -356,6 +359,48 @@ export default function TutorDesk() {
           </div>
         </div>
       </section>
+
+      {canOpenSchedule && (
+        <section className="max-w-5xl mx-auto px-6 pb-2">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h2 className="text-lg font-bold text-slate-900">Lịch sử SOS</h2>
+            <p className="text-sm text-slate-500 mt-1">Xem lại hướng dẫn và mở buổi học đã tạo từ phiên cứu viện.</p>
+            {sosHistory.length === 0 ? (
+              <p className="text-sm text-slate-400 mt-4">Chưa có phiên SOS nào.</p>
+            ) : (
+              <ul className="mt-4 divide-y divide-slate-100">
+                {sosHistory.map((item) => (
+                  <li key={item.sessionId} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-800">
+                        {item.subjectName || "SOS"} · {item.studentName || "Học sinh"}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {item.endedAt ? "Đã kết thúc" : "Đang diễn ra"}
+                        {item.questionNote ? ` · ${item.questionNote}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link
+                        to={`/sos/session/${item.sessionId}`}
+                        className="h-9 px-3 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 inline-flex items-center"
+                      >
+                        Xem lại hướng dẫn
+                      </Link>
+                      <Link
+                        to={item.bookingId ? `/bookings` : `/sos/session/${item.sessionId}`}
+                        className="h-9 px-3 rounded-lg bg-brand-600 text-white text-sm font-medium inline-flex items-center"
+                      >
+                        Vào lịch dạy
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
 
       <main className="max-w-5xl mx-auto px-6 pb-16">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-3 mb-6">
