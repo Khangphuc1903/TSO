@@ -44,3 +44,8 @@ export async function uploadQrImage(file) {
   const res = await axiosClient.post("/payments/upload-qr", formData);
   return res.data;
 }
+
+export async function simulatePaymentSuccess(bookingId) {
+  const res = await axiosClient.post(`/payments/booking/${bookingId}/simulate-success`);
+  return res.data;
+}

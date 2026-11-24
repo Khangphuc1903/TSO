@@ -105,6 +105,20 @@ public class PaymentsController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("booking/{bookingId:int}/simulate-success")]
+    public async Task<IActionResult> SimulateSuccess(int bookingId, CancellationToken ct)
+    {
+        var userIdVal = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdVal, out var userId))
+            return Unauthorized();
+
+        var result = await _paymentService.SimulateSuccessAsync(bookingId, userId, ct);
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : StatusCode(result.StatusCode, new { message = result.Message });
+    }
+
+    [Authorize]
     [HttpGet("mine")]
     public async Task<IActionResult> GetMyPayments(CancellationToken ct)
     {

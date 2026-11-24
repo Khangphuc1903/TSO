@@ -117,16 +117,18 @@ public class PaymentService
                 string bin = "";
                 string accNum = "";
                 string accName = "";
+                string savedDesc = desc;
                 if (!string.IsNullOrEmpty(recentPending.GatewayTransactionId))
                 {
                     var parts = recentPending.GatewayTransactionId.Split('|');
                     if (parts.Length > 0) bin = parts[0];
                     if (parts.Length > 1) accNum = parts[1];
                     if (parts.Length > 2) accName = parts[2];
+                    if (parts.Length > 3 && !string.IsNullOrEmpty(parts[3])) savedDesc = parts[3];
                 }
 
                 var qrImg = !string.IsNullOrEmpty(bin) && !string.IsNullOrEmpty(accNum)
-                    ? $"https://img.vietqr.io/image/{bin}-{accNum}-compact2.png?amount={amountInt}&addInfo={Uri.EscapeDataString(desc)}&accountName={Uri.EscapeDataString(accName)}"
+                    ? $"https://img.vietqr.io/image/{bin}-{accNum}-compact2.png?amount={amountInt}&addInfo={Uri.EscapeDataString(savedDesc)}&accountName={Uri.EscapeDataString(accName)}"
                     : string.Empty;
 
                 var recoveredIntent = new PaymentIntentResponse
@@ -139,7 +141,7 @@ public class PaymentService
                     Bin = bin,
                     AccountNumber = accNum,
                     AccountName = accName,
-                    Description = desc,
+                    Description = savedDesc,
                     QrImageUrl = qrImg,
                     Amount = recentPending.Amount,
                     Status = recentPending.Status
@@ -185,6 +187,8 @@ public class PaymentService
             return (false, StatusCodes.Status502BadGateway, $"Lỗi kết nối cổng thanh toán PayOS: {ex.Message}", null);
         }
 
+        var finalDesc = !string.IsNullOrEmpty(result.Description) ? result.Description : desc;
+
         var payment = new Payment
         {
             BookingId = booking.BookingId,
@@ -195,7 +199,7 @@ public class PaymentService
             Status = "Pending",
             PaymentUrl = result.CheckoutUrl,
             GatewayResponseCode = TrimTo(result.QrCode, 1000),
-            GatewayTransactionId = TrimTo($"{result.Bin}|{result.AccountNumber}|{result.AccountName}", 200),
+            GatewayTransactionId = TrimTo($"{result.Bin}|{result.AccountNumber}|{result.AccountName}|{finalDesc}", 200),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -212,7 +216,7 @@ public class PaymentService
         }
 
         var qrImageUrl = !string.IsNullOrEmpty(result.Bin) && !string.IsNullOrEmpty(result.AccountNumber)
-            ? $"https://img.vietqr.io/image/{result.Bin}-{result.AccountNumber}-compact2.png?amount={amountInt}&addInfo={Uri.EscapeDataString(desc)}&accountName={Uri.EscapeDataString(result.AccountName ?? "")}"
+            ? $"https://img.vietqr.io/image/{result.Bin}-{result.AccountNumber}-compact2.png?amount={amountInt}&addInfo={Uri.EscapeDataString(finalDesc)}&accountName={Uri.EscapeDataString(result.AccountName ?? "")}"
             : string.Empty;
 
         var intentResponse = new PaymentIntentResponse
@@ -225,7 +229,7 @@ public class PaymentService
             Bin = result.Bin ?? string.Empty,
             AccountNumber = result.AccountNumber ?? string.Empty,
             AccountName = result.AccountName ?? string.Empty,
-            Description = result.Description ?? desc,
+            Description = finalDesc,
             QrImageUrl = qrImageUrl,
             Amount = amountInt,
             Status = payment.Status
@@ -610,6 +614,79 @@ public class PaymentService
     {
         var res = await _payOS.Webhooks.ConfirmAsync(webhookUrl);
         return res?.WebhookUrl ?? webhookUrl;
+    }
+
+    public async Task<(bool Success, int StatusCode, string Message)> SimulateSuccessAsync(int bookingId, int userId, CancellationToken ct = default)
+    {
+        var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+        if (booking == null || (booking.StudentId != userId && booking.TutorId != userId))
+            return (false, StatusCodes.Status404NotFound, "Không tìm thấy buổi học.");
+
+        var payment = await _db.Payments
+            .Where(p => p.BookingId == bookingId)
+            .OrderByDescending(p => p.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (payment == null)
+            return (false, StatusCodes.Status404NotFound, "Không tìm thấy thông tin thanh toán.");
+
+        payment.Status = "Success";
+        payment.PaidAt = DateTime.UtcNow;
+        payment.CallbackReceivedAt = DateTime.UtcNow;
+        payment.GatewayResponseCode = "00";
+
+        var sosSessionId = await MarkSosPaidAsync(booking, ct);
+        await _db.SaveChangesAsync(ct);
+
+        if (sosSessionId != null)
+        {
+            await _notifications.NotifyAsync(
+                payment.PayerUserId,
+                "SosPaid",
+                "Đã thanh toán SOS",
+                $"Đã nhận {payment.Amount:N0} ₫ cho phiên cứu viện. Bạn có thể đánh giá gia sư.",
+                "SosSession",
+                sosSessionId,
+                ct);
+            await _notifications.NotifyAsync(
+                booking.TutorId,
+                "SosPaid",
+                "Học viên đã thanh toán phí SOS",
+                $"Học viên đã thanh toán {payment.Amount:N0} ₫ cho phiên cứu viện.",
+                "SosSession",
+                sosSessionId,
+                ct);
+        }
+        else
+        {
+            await _notifications.NotifyAsync(
+                payment.PayerUserId,
+                "PaymentSuccess",
+                "Thanh toán tạm giữ thành công!",
+                $"Hệ thống đã nhận tạm giữ học phí {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng chờ gia sư duyệt lịch.",
+                "Booking",
+                payment.BookingId,
+                ct);
+
+            await _notifications.NotifyAsync(
+                booking.TutorId,
+                "BookingPaid",
+                "Học viên đã thanh toán tiền giữ chỗ",
+                $"Học viên đã hoàn tất thanh toán tạm giữ {payment.Amount:N0} ₫ cho buổi học #{payment.BookingId}. Vui lòng kiểm tra và xác nhận hoặc từ chối.",
+                "Booking",
+                payment.BookingId,
+                ct);
+        }
+
+        await _hub.Clients.User(payment.PayerUserId.ToString()).SendAsync("PaymentSucceeded", new
+        {
+            bookingId = payment.BookingId,
+            sessionId = sosSessionId,
+            amount = payment.Amount,
+            orderCode = payment.TransactionCode
+        }, ct);
+
+        return (true, StatusCodes.Status200OK, "Thanh toán thành công!");
     }
 
     public async Task<List<UserPaymentHistoryDto>> GetMyPaymentsAsync(int userId, CancellationToken ct = default)

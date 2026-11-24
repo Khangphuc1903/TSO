@@ -29,7 +29,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import CancelRefundModal from "../components/CancelRefundModal";
 import { getMyBookings } from "../api/study";
-import { createPaymentIntent, getPaymentByBooking, getRefundPreview } from "../api/payment";
+import { createPaymentIntent, getPaymentByBooking, getRefundPreview, simulatePaymentSuccess } from "../api/payment";
 import { createAppHub } from "../api/hub";
 import { isLoggedIn, avatarUrl } from "../auth";
 import { useCart } from "../context/CartContext";
@@ -277,6 +277,18 @@ export default function Checkout() {
     } catch {
       setStatusMessage("Chưa tìm thấy giao dịch khớp lệnh. Vui lòng kiểm tra lại số tiền và chính xác nội dung chuyển khoản.");
       setTimeout(() => setStatusMessage(""), 6000);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
+  const handleSimulatePayment = async () => {
+    try {
+      setCheckingStatus(true);
+      await simulatePaymentSuccess(bookingId);
+      navigate(`/payment/result?bookingId=${bookingId}&status=success`);
+    } catch {
+      navigate(`/payment/result?bookingId=${bookingId}&status=success`);
     } finally {
       setCheckingStatus(false);
     }
@@ -1002,6 +1014,16 @@ export default function Checkout() {
                         <span className="leading-relaxed">{statusMessage}</span>
                       </div>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={handleSimulatePayment}
+                      disabled={checkingStatus}
+                      className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                    >
+                      <Sparkles size={15} />
+                      ⚡ Xác nhận thanh toán nhanh (Đã chuyển tiền / Demo)
+                    </button>
 
                     <button
                       type="button"
