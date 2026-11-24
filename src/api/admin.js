@@ -9,6 +9,9 @@ export const adminApi = {
   ban: (userId, ban, reason) => axiosClient.post(`/admin/users/${userId}/ban`, { ban, reason }).then((r) => r.data),
   reports: (status) => axiosClient.get("/admin/reports", { params: { status } }).then((r) => r.data),
   resolveReport: (id, body) => axiosClient.post(`/admin/reports/${id}/resolve`, body).then((r) => r.data),
+  reviews: (params) => axiosClient.get("/admin/reviews", { params }).then((r) => r.data),
+  deleteReview: (id, reason) => axiosClient.delete(`/admin/reviews/${id}`, { params: { reason } }).then((r) => r.data),
+  restoreReview: (id) => axiosClient.post(`/admin/reviews/${id}/restore`).then((r) => r.data),
   questions: (testType) => axiosClient.get("/admin/questions", { params: { testType } }).then((r) => r.data),
   createQuestion: (body) => axiosClient.post("/admin/questions", body).then((r) => r.data),
   updateQuestion: (id, body) => axiosClient.put(`/admin/questions/${id}`, body).then((r) => r.data),
@@ -23,3 +26,8 @@ export const adminApi = {
 export const getPublicHome = () => axiosClient.get("/public/home").then((r) => r.data);
 export const sendContact = (body) => axiosClient.post("/public/contact", body).then((r) => r.data);
 export const createReport = (body) => axiosClient.post("/reports", body).then((r) => r.data);
+export const uploadReportEvidence = (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return axiosClient.post("/reports/upload-evidence", formData).then((r) => r.data);
+};

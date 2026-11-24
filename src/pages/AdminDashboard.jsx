@@ -1,5 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ban, BarChart3, Check, ClipboardList, Flag, IdCard, Landmark, LayoutDashboard, Loader2, Settings, Shield, Users, X } from "lucide-react";
+import {
+  Ban,
+  BarChart3,
+  Check,
+  ClipboardList,
+  Flag,
+  IdCard,
+  Landmark,
+  LayoutDashboard,
+  Loader2,
+  Settings,
+  Shield,
+  Users,
+  X,
+  Star,
+  Trash2,
+  RotateCcw,
+  ExternalLink,
+  AlertTriangle,
+  Search,
+  MessageSquareDiff,
+  ShieldAlert,
+  FileText,
+  Paperclip,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getUser, isLoggedIn } from "../auth";
 import { adminApi } from "../api/admin";
@@ -11,7 +35,8 @@ const TABS = [
   { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
   { id: "identity", label: "CCCD / AI", icon: IdCard },
   { id: "users", label: "Tài khoản", icon: Users },
-  { id: "reports", label: "Báo cáo", icon: Flag },
+  { id: "reports", label: "Báo cáo vi phạm", icon: Flag },
+  { id: "reviews", label: "Quản lý đánh giá", icon: Star },
   { id: "questions", label: "Ngân hàng câu hỏi", icon: ClipboardList },
   { id: "revenue", label: "Doanh số", icon: BarChart3 },
   { id: "payouts", label: "Chi trả", icon: Landmark },
@@ -19,7 +44,15 @@ const TABS = [
 ];
 
 const REPORT_REASONS = {
-  Harassment: "Quấy rối",
+  FakeReview: "Đánh giá sai sự thật / Bịa đặt",
+  Defamation: "Bôi nhọ danh dự / Xúc phạm",
+  NeverStudied: "Chưa từng học / Nhầm ca dạy",
+  Extortion: "Tống tiền / Đe dọa",
+  Harassment: "Quấy rối / Thiếu văn hóa",
+  Attendance: "Bùng lịch / Không tham gia",
+  Cheating: "Gian lận / Yêu cầu làm bài hộ",
+  Quality: "Chất lượng không đúng cam kết",
+  Absence: "Vắng mặt / Không dạy đúng giờ",
   Fraud: "Gian lận",
   Safety: "An toàn",
   Other: "Khác",
@@ -110,6 +143,16 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [userQ, setUserQ] = useState("");
   const [reports, setReports] = useState([]);
+  const [reportsFilter, setReportsFilter] = useState("all");
+  const [reviewsList, setReviewsList] = useState([]);
+  const [reviewQ, setReviewQ] = useState("");
+  const [reviewStatus, setReviewStatus] = useState("all");
+  const [reviewRating, setReviewRating] = useState("all");
+  const [reviewTutor, setReviewTutor] = useState("all");
+  const [reviewOnlyReported, setReviewOnlyReported] = useState(false);
+  const [tutorsOptions, setTutorsOptions] = useState([]);
+  const [deleteReviewModal, setDeleteReviewModal] = useState(null);
+  const [deleteReviewReason, setDeleteReviewReason] = useState("");
   const [questions, setQuestions] = useState([]);
   const [qType, setQType] = useState("");
   const [qForm, setQForm] = useState(emptyQuestion);
@@ -131,6 +174,15 @@ export default function AdminDashboard() {
     if (tab === "identity") setIdentity(await adminApi.identity(idFilter));
     if (tab === "users") setUsers(await adminApi.users(userQ));
     if (tab === "reports") setReports(await adminApi.reports("Pending"));
+    if (tab === "reviews") {
+      setReviewsList(await adminApi.reviews({
+        search: reviewQ.trim() || undefined,
+        status: reviewStatus !== "all" ? reviewStatus : undefined,
+        onlyReported: reviewOnlyReported ? true : undefined,
+        rating: reviewRating !== "all" ? Number(reviewRating) : undefined,
+        tutorId: reviewTutor !== "all" ? Number(reviewTutor) : undefined,
+      }));
+    }
     if (tab === "questions") {
       setQuestions(await adminApi.questions(qType || undefined));
       setSubjects(await getSubjects().catch(() => []));
@@ -144,7 +196,33 @@ export default function AdminDashboard() {
     if (!isAdmin) return;
     setInfo("");
     loadTab().catch((e) => setError(e.response?.data?.message || "Không tải được dữ liệu admin."));
-  }, [tab, idFilter, qType, isAdmin]);
+  }, [tab, idFilter, qType, reviewStatus, reviewRating, reviewTutor, reviewOnlyReported, isAdmin]);
+
+  useEffect(() => {
+    if (reviewsList.length > 0) {
+      setTutorsOptions((prev) => {
+        const map = new Map(prev.map((t) => [t.id, t]));
+        for (const r of reviewsList) {
+          if (!map.has(r.tutorId)) {
+            map.set(r.tutorId, {
+              id: r.tutorId,
+              name: r.tutorName || `Gia sư #${r.tutorId}`,
+              email: r.tutorEmail,
+            });
+          }
+        }
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+      });
+    }
+  }, [reviewsList]);
+
+  const displayedReviews = useMemo(() => {
+    return reviewsList.filter((rev) => {
+      if (reviewRating !== "all" && rev.rating !== Number(reviewRating)) return false;
+      if (reviewTutor !== "all" && String(rev.tutorId) !== String(reviewTutor)) return false;
+      return true;
+    });
+  }, [reviewsList, reviewRating, reviewTutor]);
 
   useEffect(() => {
     if (!info) return undefined;
@@ -463,28 +541,682 @@ export default function AdminDashboard() {
         )}
 
         {tab === "reports" && (
-          <div className="space-y-3">
-            {reports.map((r) => (
-              <div key={r.reportId} className="bg-white rounded-2xl border p-4">
-                <p className="font-semibold text-sm">
-                  Người bị báo cáo: {r.reportedName || `${r.entityType} #${r.entityId}`}
-                  {r.reportedRole ? ` · ${ROLE_LABELS[r.reportedRole] || r.reportedRole}` : ""}
+          <div className="space-y-4">
+            {/* Thanh lọc loại báo cáo */}
+            <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-slate-200">
+              <button
+                type="button"
+                onClick={() => setReportsFilter("all")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  reportsFilter === "all" ? "bg-slate-900 text-white" : "bg-white border text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                Tất cả ({reports.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportsFilter("Review")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  reportsFilter === "Review" ? "bg-amber-600 text-white" : "bg-white border text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                📝 Báo cáo Đánh giá ({reports.filter((r) => r.entityType === "Review").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportsFilter("Student")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  reportsFilter === "Student" ? "bg-blue-600 text-white" : "bg-white border text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                🎓 Báo cáo Học viên ({reports.filter((r) => r.entityType === "Student" || r.reportedRole === "Student").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportsFilter("Tutor")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                  reportsFilter === "Tutor" ? "bg-purple-600 text-white" : "bg-white border text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                👨‍🏫 Báo cáo Gia sư ({reports.filter((r) => r.entityType === "Tutor" || r.reportedRole === "Tutor").length})
+              </button>
+            </div>
+
+            {/* Danh sách các báo cáo */}
+            {reports
+              .filter((r) => {
+                if (reportsFilter === "Review") return r.entityType === "Review";
+                if (reportsFilter === "Student") return r.entityType === "Student" || r.reportedRole === "Student";
+                if (reportsFilter === "Tutor") return r.entityType === "Tutor" || r.reportedRole === "Tutor";
+                return true;
+              })
+              .map((r) => {
+                const isReview = r.entityType === "Review";
+                const isStudent = r.entityType === "Student" || r.reportedRole === "Student";
+
+                return (
+                  <div key={r.reportId} className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs hover:border-slate-300 transition">
+                    <div className="flex flex-wrap items-start justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                            isReview
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : isStudent
+                              ? "bg-blue-50 text-blue-800 border-blue-200"
+                              : "bg-purple-50 text-purple-800 border-purple-200"
+                          }`}
+                        >
+                          {isReview ? "📝 Báo cáo Đánh giá sai sự thật" : isStudent ? "🎓 Báo cáo Học viên vi phạm" : "👨‍🏫 Báo cáo Gia sư"}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-400">#{r.reportId}</span>
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        {new Date(r.createdAt).toLocaleString("vi-VN")}
+                      </span>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3 text-xs mb-3">
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Người gửi báo cáo:
+                        </span>
+                        <p className="font-bold text-slate-900 text-sm">{r.reporterName}</p>
+                        <p className="text-slate-500">{r.reporterEmail}</p>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Đối tượng bị khiếu nại:
+                        </span>
+                        <p className="font-bold text-slate-900 text-sm">
+                          {r.reportedName || `${r.entityType} #${r.entityId}`}
+                          {r.reportedRole ? ` (${ROLE_LABELS[r.reportedRole] || r.reportedRole})` : ""}
+                        </p>
+                        {r.reportedEmail && <p className="text-slate-500">{r.reportedEmail}</p>}
+                      </div>
+                    </div>
+
+                    {/* Lý do báo cáo */}
+                    <div className="mb-2">
+                      <span className="font-bold text-xs text-slate-700">Lý do: </span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">
+                        {REPORT_REASONS[r.reason] || r.reason}
+                      </span>
+                    </div>
+
+                    {/* Nội dung đánh giá / bài viết bị khiếu nại */}
+                    {r.contentSnippet && (
+                      <div className="p-3 rounded-2xl bg-amber-50/50 border border-amber-200/80 mb-3 text-xs">
+                        <span className="font-bold text-amber-900 block mb-1">Nội dung đánh giá đang bị khiếu nại:</span>
+                        <p className="text-slate-800 italic">{r.contentSnippet}</p>
+                      </div>
+                    )}
+
+                    {/* Mô tả sự việc */}
+                    {r.description && (
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 mb-3 text-xs">
+                        <span className="font-bold text-slate-700 block mb-1">Mô tả sự việc từ người báo cáo:</span>
+                        <p className="text-slate-800 leading-relaxed">{r.description}</p>
+                      </div>
+                    )}
+
+                    {/* Bằng chứng xác thực */}
+                    {r.evidence && (() => {
+                      const isRelative = r.evidence.startsWith("/");
+                      const isUrl = r.evidence.startsWith("http://") || r.evidence.startsWith("https://") || isRelative;
+                      const fullUrl = isRelative ? `${API_ORIGIN}${r.evidence}` : r.evidence;
+                      const lower = r.evidence.toLowerCase();
+                      const isImg = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp");
+                      const isDoc = lower.endsWith(".pdf") || lower.endsWith(".docx") || lower.endsWith(".doc") || lower.endsWith(".xlsx") || lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".mp4");
+
+                      return (
+                        <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-200 mb-4 text-xs space-y-2">
+                          <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                            <Check size={14} className="text-emerald-600" />
+                            Bằng chứng xác thực đính kèm:
+                          </span>
+
+                          {isImg ? (
+                            <div className="space-y-1.5 pt-1">
+                              <a href={fullUrl} target="_blank" rel="noreferrer" className="block w-fit group">
+                                <img
+                                  src={fullUrl}
+                                  alt="Bằng chứng"
+                                  className="max-h-56 max-w-full rounded-xl object-contain border border-emerald-300 bg-white group-hover:opacity-90 transition shadow-2xs"
+                                />
+                                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 group-hover:text-emerald-900 font-bold underline mt-1.5">
+                                  <ExternalLink size={11} /> Nhấn để xem ảnh gốc kích thước đầy đủ
+                                </span>
+                              </a>
+                            </div>
+                          ) : isDoc ? (
+                            <div className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-emerald-200">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                <FileText size={16} />
+                              </div>
+                              <span className="font-mono text-[11px] text-slate-800 truncate flex-1">{r.evidence.split("/").pop()}</span>
+                              <a
+                                href={fullUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition shrink-0"
+                              >
+                                <ExternalLink size={11} /> Xem / Tải về
+                              </a>
+                            </div>
+                          ) : isUrl ? (
+                            <a
+                              href={fullUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-bold underline"
+                            >
+                              <ExternalLink size={12} />
+                              Mở liên kết tài liệu / bằng chứng ngoài
+                            </a>
+                          ) : (
+                            <p className="text-slate-700 leading-relaxed font-mono text-[11px] bg-white p-2 rounded-xl border border-emerald-100">
+                              {r.evidence}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Nút hành động giải quyết báo cáo */}
+                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+                      {isReview ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(() =>
+                                adminApi.resolveReport(r.reportId, {
+                                  action: "DeleteReview",
+                                  note: "Xóa đánh giá sai sự thật sau khi kiểm tra bằng chứng",
+                                })
+                              )
+                            }
+                            className="h-8 px-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Trash2 size={13} />
+                            Xóa đánh giá này
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(() =>
+                                adminApi.resolveReport(r.reportId, {
+                                  action: "Warn",
+                                  note: "Cảnh cáo học viên viết đánh giá sai lệch",
+                                })
+                              )
+                            }
+                            className="h-8 px-3 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 font-bold text-xs"
+                          >
+                            Cảnh cáo học viên
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(() =>
+                                adminApi.resolveReport(r.reportId, {
+                                  action: "Warn",
+                                  note: `Cảnh cáo vi phạm theo báo cáo #${r.reportId}`,
+                                })
+                              )
+                            }
+                            className="h-8 px-3 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 font-bold text-xs"
+                          >
+                            Cảnh cáo {isStudent ? "học viên" : "người dùng"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(() =>
+                                adminApi.resolveReport(r.reportId, {
+                                  action: "Ban",
+                                  note: `Khóa tài khoản theo báo cáo #${r.reportId}`,
+                                })
+                              )
+                            }
+                            className="h-8 px-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Ban size={13} />
+                            Khóa tài khoản
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          run(() =>
+                            adminApi.resolveReport(r.reportId, {
+                              action: "Dismiss",
+                              note: "Bác bỏ - Bằng chứng chưa đủ căn cứ vi phạm",
+                            })
+                          )
+                        }
+                        className="h-8 px-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-xs ml-auto"
+                      >
+                        Bác bỏ báo cáo
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {reports.length === 0 && (
+              <div className="p-8 text-center bg-white rounded-3xl border border-slate-200/80 text-slate-500 text-sm">
+                Hiện không có báo cáo nào đang chờ xử lý.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 5: QUẢN LÝ ĐÁNH GIÁ (REVIEWS) */}
+        {tab === "reviews" && (
+          <div className="space-y-4">
+            {/* Header Thống kê Đánh giá */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="bg-white rounded-2xl border p-4 shadow-2xs">
+                <span className="text-xs text-slate-400 font-semibold uppercase">Tổng đánh giá</span>
+                <p className="text-2xl font-black text-slate-900 mt-1">{reviewsList.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl border p-4 shadow-2xs">
+                <span className="text-xs text-emerald-600 font-semibold uppercase">Đang hiển thị</span>
+                <p className="text-2xl font-black text-emerald-700 mt-1">
+                  {reviewsList.filter((r) => !r.isHidden).length}
                 </p>
-                {r.reportedEmail && <p className="text-xs text-slate-500">{r.reportedEmail}</p>}
-                <p className="text-xs text-slate-600 mt-1">
-                  Người báo cáo: {r.reporterName} ({r.reporterEmail}) · {new Date(r.createdAt).toLocaleString("vi-VN")}
+              </div>
+              <div className="bg-white rounded-2xl border p-4 shadow-2xs">
+                <span className="text-xs text-red-500 font-semibold uppercase">Đã xóa / Ẩn</span>
+                <p className="text-2xl font-black text-red-600 mt-1">
+                  {reviewsList.filter((r) => r.isHidden).length}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Lý do: {REPORT_REASONS[r.reason] || r.reason}</p>
-                {r.contentSnippet && <p className="text-sm mt-2 text-slate-700">Nội dung: {r.contentSnippet}</p>}
-                {r.description && <p className="text-sm mt-2">{r.description}</p>}
-                <div className="flex gap-2 mt-3">
-                  <button type="button" disabled={busy} onClick={() => run(() => adminApi.resolveReport(r.reportId, { action: "Dismiss", note: "Không vi phạm" }))} className="h-8 px-3 rounded-lg border text-xs">Bỏ qua</button>
-                  <button type="button" disabled={busy} onClick={() => run(() => adminApi.resolveReport(r.reportId, { action: "Warn", note: "Cảnh cáo" }))} className="h-8 px-3 rounded-lg border text-xs">Cảnh cáo</button>
-                  <button type="button" disabled={busy} onClick={() => run(() => adminApi.resolveReport(r.reportId, { action: "Ban", note: "Khóa theo báo cáo" }))} className="h-8 px-3 rounded-lg bg-red-600 text-white text-xs">Khóa user</button>
+              </div>
+              <div className="bg-white rounded-2xl border p-4 shadow-2xs">
+                <span className="text-xs text-amber-600 font-semibold uppercase">Có khiếu nại từ gia sư</span>
+                <p className="text-2xl font-black text-amber-600 mt-1">
+                  {reviewsList.filter((r) => r.reportCount > 0).length}
+                </p>
+              </div>
+            </div>
+
+            {/* Thanh tìm kiếm & bộ lọc đánh giá */}
+            <div className="bg-white rounded-2xl border p-4 shadow-2xs space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+                {/* Tìm kiếm từ khóa */}
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo nội dung, tên gia sư, học viên..."
+                    value={reviewQ}
+                    onChange={(e) => setReviewQ(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadTab()}
+                    className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                {/* Lọc theo Giáo viên / Gia sư */}
+                <select
+                  value={reviewTutor}
+                  onChange={(e) => setReviewTutor(e.target.value)}
+                  className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white max-w-full md:max-w-[210px]"
+                >
+                  <option value="all">👨‍🏫 Tất cả giáo viên</option>
+                  {tutorsOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Lọc theo Số sao */}
+                <select
+                  value={reviewRating}
+                  onChange={(e) => setReviewRating(e.target.value)}
+                  className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white"
+                >
+                  <option value="all">⭐ Tất cả số sao</option>
+                  <option value="5">⭐⭐⭐⭐⭐ 5 sao</option>
+                  <option value="4">⭐⭐⭐⭐ 4 sao</option>
+                  <option value="3">⭐⭐⭐ 3 sao</option>
+                  <option value="2">⭐⭐ 2 sao</option>
+                  <option value="1">⭐ 1 sao</option>
+                </select>
+
+                {/* Lọc theo Trạng thái */}
+                <select
+                  value={reviewStatus}
+                  onChange={(e) => setReviewStatus(e.target.value)}
+                  className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white"
+                >
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="visible">Đang hiển thị</option>
+                  <option value="hidden">Đã ẩn / Đã xóa</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={loadTab}
+                  className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  <Search size={14} />
+                  Tìm
+                </button>
+
+                {(reviewQ || reviewStatus !== "all" || reviewRating !== "all" || reviewTutor !== "all" || reviewOnlyReported) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewQ("");
+                      setReviewStatus("all");
+                      setReviewRating("all");
+                      setReviewTutor("all");
+                      setReviewOnlyReported(false);
+                    }}
+                    className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition shrink-0"
+                    title="Đặt lại tất cả bộ lọc"
+                  >
+                    Đặt lại
+                  </button>
+                )}
+              </div>
+
+              {/* Dòng bổ trợ: Nút chọn nhanh sao & Checkbox khiếu nại */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-0.5">
+                  <span className="text-slate-400 font-semibold text-[11px] mr-1 shrink-0">Lọc nhanh sao:</span>
+                  {[
+                    { label: "Tất cả", val: "all" },
+                    { label: "5 ★", val: "5", count: reviewsList.filter((r) => r.rating === 5).length },
+                    { label: "4 ★", val: "4", count: reviewsList.filter((r) => r.rating === 4).length },
+                    { label: "3 ★", val: "3", count: reviewsList.filter((r) => r.rating === 3).length },
+                    { label: "2 ★", val: "2", count: reviewsList.filter((r) => r.rating === 2).length },
+                    { label: "1 ★", val: "1", count: reviewsList.filter((r) => r.rating === 1).length },
+                  ].map((pill) => {
+                    const active = reviewRating === pill.val;
+                    return (
+                      <button
+                        key={pill.val}
+                        type="button"
+                        onClick={() => setReviewRating(pill.val)}
+                        className={`h-7 px-2.5 rounded-lg font-bold text-xs transition flex items-center gap-1.5 shrink-0 ${
+                          active
+                            ? "bg-amber-500 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        <span>{pill.label}</span>
+                        {pill.count !== undefined && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                              active ? "bg-white/25 text-white" : "bg-white text-slate-700 shadow-2xs"
+                            }`}
+                          >
+                            {pill.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={reviewOnlyReported}
+                    onChange={(e) => setReviewOnlyReported(e.target.checked)}
+                    className="rounded text-brand-600"
+                  />
+                  <span>Chỉ xem các đánh giá có khiếu nại / báo cáo từ gia sư</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Bảng danh sách đánh giá */}
+            <div className="bg-white rounded-2xl border overflow-x-auto shadow-2xs">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-left text-[11px] text-slate-500 uppercase tracking-wider font-bold">
+                  <tr>
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Gia sư</th>
+                    <th className="p-3">Học viên</th>
+                    <th className="p-3">Số sao</th>
+                    <th className="p-3">Nội dung đánh giá</th>
+                    <th className="p-3">Khiếu nại</th>
+                    <th className="p-3">Trạng thái</th>
+                    <th className="p-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {displayedReviews.map((rev) => (
+                    <tr key={rev.reviewId} className="hover:bg-slate-50/50 transition">
+                      <td className="p-3 font-mono font-bold text-slate-400">#{rev.reviewId}</td>
+                      <td className="p-3">
+                        <button
+                          type="button"
+                          onClick={() => setReviewTutor(String(rev.tutorId))}
+                          className="text-left group"
+                          title="Click để chỉ lọc đánh giá của gia sư này"
+                        >
+                          <p className="font-bold text-slate-900 group-hover:text-brand-600 transition flex items-center gap-1">
+                            {rev.tutorName}
+                            {reviewTutor === String(rev.tutorId) && (
+                              <span className="text-[10px] text-brand-600 font-normal">(đang lọc)</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-400">{rev.tutorEmail}</p>
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <p className="font-bold text-slate-900">{rev.studentName}</p>
+                        <p className="text-[11px] text-slate-400">{rev.studentEmail}</p>
+                      </td>
+                      <td className="p-3">
+                        <span className="font-black text-amber-500 text-sm">
+                          {"★".repeat(rev.rating)}
+                        </span>
+                        <span className="text-slate-300">{"☆".repeat(Math.max(0, 5 - rev.rating))}</span>
+                      </td>
+                      <td className="p-3 max-w-xs">
+                        <p className="text-slate-800 line-clamp-2">{rev.comment || "Không có nhận xét văn bản"}</p>
+                        {rev.tutorReply && (
+                          <p className="text-[11px] text-brand-700 bg-brand-50/60 rounded-md p-1 mt-1 line-clamp-1">
+                            ↳ Gia sư: {rev.tutorReply}
+                          </p>
+                        )}
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {new Date(rev.createdAt).toLocaleDateString("vi-VN")}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {rev.reportCount > 0 ? (
+                          <div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 inline-flex items-center gap-1">
+                              <Flag size={10} /> {rev.reportCount} khiếu nại
+                            </span>
+                            {rev.latestReportReason && (
+                              <p className="text-[10px] text-slate-500 mt-1 max-w-[140px] truncate" title={rev.latestReportReason}>
+                                {REPORT_REASONS[rev.latestReportReason] || rev.latestReportReason}
+                              </p>
+                            )}
+                            {rev.latestReportEvidence && (() => {
+                              const isRel = rev.latestReportEvidence.startsWith("/");
+                              const full = isRel ? `${API_ORIGIN}${rev.latestReportEvidence}` : rev.latestReportEvidence;
+                              return (
+                                <a
+                                  href={full}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline mt-0.5"
+                                >
+                                  <Paperclip size={10} /> Xem bằng chứng
+                                </a>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Bình thường</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {rev.isHidden ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                            Đã ẩn / Đã xóa
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Hiển thị
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        {!rev.isHidden ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteReviewModal(rev);
+                              setDeleteReviewReason("Đánh giá sai sự thật / Bịa đặt");
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs transition"
+                            title="Xóa đánh giá khỏi trang gia sư"
+                          >
+                            <Trash2 size={12} />
+                            Xóa
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(async () => {
+                                const res = await adminApi.restoreReview(rev.reviewId);
+                                setReviewsList(
+                                  await adminApi.reviews({
+                                    search: reviewQ.trim() || undefined,
+                                    status: reviewStatus !== "all" ? reviewStatus : undefined,
+                                    onlyReported: reviewOnlyReported ? true : undefined,
+                                    rating: reviewRating !== "all" ? Number(reviewRating) : undefined,
+                                    tutorId: reviewTutor !== "all" ? Number(reviewTutor) : undefined,
+                                  })
+                                );
+                                return res;
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs transition"
+                          >
+                            <RotateCcw size={12} />
+                            Khôi phục
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {displayedReviews.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        Không tìm thấy đánh giá nào phù hợp với bộ lọc hiện tại.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal xác nhận xóa đánh giá */}
+            {deleteReviewModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+                <div className="bg-white rounded-3xl max-w-md w-full border p-6 shadow-2xl relative space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteReviewModal(null)}
+                    className="absolute top-5 right-5 p-1 rounded-full text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={18} />
+                  </button>
+
+                  <div className="flex items-center gap-2.5 text-red-600">
+                    <Trash2 size={22} />
+                    <h3 className="font-bold text-slate-900 text-base">Xóa đánh giá khỏi hồ sơ gia sư</h3>
+                  </div>
+
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Đánh giá này sẽ bị ẩn khỏi hồ sơ gia sư và hệ thống sẽ tự động tính toán lại điểm đánh giá trung bình.
+                  </p>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 border text-xs space-y-1">
+                    <p><span className="font-bold text-slate-700">Gia sư: </span>{deleteReviewModal.tutorName}</p>
+                    <p><span className="font-bold text-slate-700">Học viên: </span>{deleteReviewModal.studentName}</p>
+                    <p><span className="font-bold text-slate-700">Đánh giá: </span>{deleteReviewModal.rating} sao</p>
+                    <p><span className="font-bold text-slate-700">Nhận xét: </span>"{deleteReviewModal.comment}"</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Lý do xóa đánh giá <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={deleteReviewReason}
+                      onChange={(e) => setDeleteReviewReason(e.target.value)}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white"
+                    >
+                      <option value="Đánh giá sai sự thật / Bịa đặt">Đánh giá sai sự thật / Bịa đặt</option>
+                      <option value="Bôi nhọ danh dự / Xúc phạm gia sư">Bôi nhọ danh dự / Xúc phạm gia sư</option>
+                      <option value="Học viên chưa từng học hoặc nhầm ca">Học viên chưa từng học hoặc nhầm ca</option>
+                      <option value="Tống tiền / Đe dọa đánh giá xấu">Tống tiền / Đe dọa đánh giá xấu</option>
+                      <option value="Ngôn từ độc hại / Vi phạm quy tắc">Ngôn từ độc hại / Vi phạm quy tắc</option>
+                      <option value="Khác">Lý do khác</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteReviewModal(null)}
+                      className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          const res = await adminApi.deleteReview(deleteReviewModal.reviewId, deleteReviewReason);
+                          setDeleteReviewModal(null);
+                          setReviewsList(
+                            await adminApi.reviews({
+                              search: reviewQ.trim() || undefined,
+                              status: reviewStatus !== "all" ? reviewStatus : undefined,
+                              onlyReported: reviewOnlyReported ? true : undefined,
+                            })
+                          );
+                          return res;
+                        })
+                      }
+                      className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs flex items-center gap-1.5"
+                    >
+                      <Trash2 size={13} />
+                      Xác nhận xóa đánh giá
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))}
-            {reports.length === 0 && <p className="text-sm text-slate-500">Không có báo cáo chờ.</p>}
+            )}
           </div>
         )}
 

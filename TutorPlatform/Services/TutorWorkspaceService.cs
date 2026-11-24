@@ -300,24 +300,17 @@ public class TutorWorkspaceService
         if (end <= start)
             return (false, 400, "Giờ kết thúc phải sau giờ bắt đầu.", null);
 
-        if (dto.IsRecurring)
-        {
-            if (dto.DayOfWeek is not byte day || day is < 1 or > 7)
-                return (false, 400, "Chọn thứ trong tuần (1–7, thứ Hai đến Chủ nhật).", null);
-        }
-        else if (!dto.SpecificDate.HasValue)
-        {
-            return (false, 400, "Chọn ngày cụ thể cho lịch một lần.", null);
-        }
+        if (dto.DayOfWeek is not byte day || day is < 1 or > 7)
+            return (false, 400, "Chọn thứ trong tuần (1–7, thứ Hai đến Chủ nhật).", null);
 
         var slot = new AvailabilitySlot
         {
             TutorId = tutorId,
-            DayOfWeek = dto.IsRecurring ? dto.DayOfWeek : null,
-            SpecificDate = dto.IsRecurring ? null : dto.SpecificDate,
+            DayOfWeek = day,
+            SpecificDate = null,
             StartTime = start,
             EndTime = end,
-            IsRecurring = dto.IsRecurring,
+            IsRecurring = true,
             IsBooked = false
         };
         _db.AvailabilitySlots.Add(slot);
@@ -372,14 +365,24 @@ public class TutorWorkspaceService
         FileUrl = c.FileUrl
     };
 
-    private static AvailabilitySlotDto MapSlot(AvailabilitySlot s) => new()
+    private static AvailabilitySlotDto MapSlot(AvailabilitySlot s)
     {
-        SlotId = s.SlotId,
-        DayOfWeek = s.DayOfWeek,
-        SpecificDate = s.SpecificDate,
-        StartTime = s.StartTime.ToString("HH:mm"),
-        EndTime = s.EndTime.ToString("HH:mm"),
-        IsRecurring = s.IsRecurring,
-        IsBooked = s.IsBooked
-    };
+        byte? dayOfWeek = s.DayOfWeek;
+        if ((!dayOfWeek.HasValue || dayOfWeek < 1 || dayOfWeek > 7) && s.SpecificDate.HasValue)
+        {
+            var dow = (int)s.SpecificDate.Value.DayOfWeek; // 0 = Sunday, 1 = Monday
+            dayOfWeek = (byte)(dow == 0 ? 7 : dow);
+        }
+
+        return new()
+        {
+            SlotId = s.SlotId,
+            DayOfWeek = dayOfWeek,
+            SpecificDate = null, // Khung giờ là lịch cố định theo thứ + giờ
+            StartTime = s.StartTime.ToString("HH:mm"),
+            EndTime = s.EndTime.ToString("HH:mm"),
+            IsRecurring = true,
+            IsBooked = s.IsBooked
+        };
+    }
 }

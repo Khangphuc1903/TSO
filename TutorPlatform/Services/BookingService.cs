@@ -93,7 +93,6 @@ public class BookingService
             price = sessionMin;
         }
 
-        var payInPerson = string.Equals(dto.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase);
         var booking = new Booking
         {
             StudentId = studentId,
@@ -106,7 +105,7 @@ public class BookingService
             TeachingMode = mode,
             Location = slot.Tutor.Tutor?.City,
             Price = price,
-            PaymentType = payInPerson ? "InPerson" : "Online",
+            PaymentType = "Online",
             Status = "Pending",
             CreatedAt = DateTime.Now
         };
@@ -122,9 +121,7 @@ public class BookingService
             dto.TutorId,
             "BookingRequest",
             "Yêu cầu đặt lịch mới",
-            payInPerson
-                ? "Một học viên đặt lịch và sẽ trả tiền mặt khi gặp, sau buổi học. Không cần chuyển khoản."
-                : "Một học viên vừa đặt lịch với bạn. Hãy xác nhận buổi học.",
+            "Một học viên vừa đặt lịch với bạn. Vui lòng kiểm tra và xác nhận buổi học sau khi học viên thanh toán.",
             "Booking",
             booking.BookingId,
             cancellationToken);
@@ -188,10 +185,8 @@ public class BookingService
                 TeachingMode = b.TeachingMode,
                 Location = b.Location,
                 IsToday = b.ScheduledDate == DateOnly.FromDateTime(DateTime.Today),
-                PaymentType = string.IsNullOrWhiteSpace(b.PaymentType) ? "Online" : b.PaymentType,
-                PaymentStatus = string.Equals(b.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase)
-                    ? "Cash"
-                    : lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
+                PaymentType = "Online",
+                PaymentStatus = lastPayment?.Status ?? (b.Status == "Confirmed" ? "Success" : "Unpaid"),
                 HasReview = b.Review != null,
                 ReviewRating = b.Review?.Rating,
                 ReviewComment = b.Review?.Comment,
@@ -309,9 +304,8 @@ public class BookingService
         if (booking.Status != "Pending")
             return (false, 400, "Booking không ở trạng thái chờ xác nhận.");
 
-        var cash = string.Equals(booking.PaymentType, "InPerson", StringComparison.OrdinalIgnoreCase);
         var hasPaid = booking.Payments.Any(p => p.Status == "Success");
-        if (booking.Price > 0 && !hasPaid && !cash)
+        if (booking.Price > 0 && !hasPaid)
         {
             return (false, 400, "Học viên chưa hoàn tất thanh toán tiền giữ chỗ. Vui lòng chờ học viên thanh toán trước khi duyệt.");
         }

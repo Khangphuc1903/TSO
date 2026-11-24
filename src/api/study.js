@@ -146,6 +146,20 @@ export async function createTutorSlot(payload) {
   return res.data;
 }
 
+export async function updateTutorSlot(id, payload) {
+  try {
+    const res = await axiosClient.put(`/tutor/me/slots/${id}`, payload);
+    return res.data;
+  } catch (err) {
+    // Nếu backend chưa hỗ trợ trực tiếp PUT, tự động thay thế bằng xóa và tạo lại slot mới
+    if (err.response?.status === 404 || err.response?.status === 405) {
+      await deleteTutorSlot(id);
+      return await createTutorSlot(payload);
+    }
+    throw err;
+  }
+}
+
 export async function deleteTutorSlot(id) {
   const res = await axiosClient.delete(`/tutor/me/slots/${id}`);
   return res.data;

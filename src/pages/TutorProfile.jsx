@@ -14,7 +14,10 @@ import {
   Wallet,
   ShoppingCart,
   CheckCircle2,
+  ShieldCheck,
+  Flag,
 } from "lucide-react";
+import ReportModal from "../components/ReportModal";
 import StarRating from "../components/StarRating";
 import { avatarUrl, getUser, isLoggedIn, loginPath } from "../auth";
 import { getSubjects, getTutorDetail } from "../api/tutorSearch";
@@ -137,6 +140,7 @@ export default function TutorProfile() {
   const [addedToCartModal, setAddedToCartModal] = useState(false);
   const [lastAddedBooking, setLastAddedBooking] = useState(null);
   const [paymentType, setPaymentType] = useState("Online");
+  const [reportModal, setReportModal] = useState({ open: false, type: "Review", id: null, name: "", subInfo: "" });
 
   const loadAll = async () => {
     const [detail, reviews, sysSubjects] = await Promise.all([
@@ -305,10 +309,7 @@ export default function TutorProfile() {
       const res = await createBooking(payload);
       await refreshCart();
 
-      if (paymentType === "InPerson") {
-        setBookingOk("Đặt lịch thành công. Thanh toán trực tiếp cho gia sư sau buổi học. Chờ gia sư xác nhận lịch.");
-        setTimeout(() => navigate("/bookings"), 800);
-      } else if (isDirectCheckout) {
+      if (isDirectCheckout) {
         setBookingOk(`${res.message || "Đặt lịch thành công!"} Đang chuyển đến trang thanh toán...`);
         setForm((p) => ({ ...p, bookingId: String(res.booking?.bookingId || p.bookingId) }));
         if (res.booking?.bookingId) {
@@ -427,45 +428,22 @@ export default function TutorProfile() {
                         type="button"
                         onClick={() => {
                           if (!isLoggedIn()) return navigate("/login");
-                          setFlagOpen((v) => !v);
+                          setReportModal({
+                            open: true,
+                            type: "Tutor",
+                            id: tutorId,
+                            name: tutor.name,
+                            subInfo: locationText,
+                          });
                         }}
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:underline"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 hover:underline"
                       >
+                        <Flag size={14} />
                         Báo cáo
                       </button>
                       </div>
                     )}
                   </div>
-                  {flagOpen && !isOwnProfile && (
-                    <form
-                      className="mt-3 flex flex-col sm:flex-row gap-2"
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        try {
-                          const res = await createReport({
-                            entityType: "Tutor",
-                            entityId: Number(tutorId),
-                            reason: flagReason,
-                            description: flagNote,
-                          });
-                          setFlagMsg(res.message);
-                          setFlagOpen(false);
-                        } catch (err) {
-                          setFlagMsg(err.response?.data?.message || "Không gửi được báo cáo.");
-                        }
-                      }}
-                    >
-                      <select className="h-9 border rounded-lg px-2 text-sm" value={flagReason} onChange={(e) => setFlagReason(e.target.value)}>
-                        <option value="Harassment">Quấy rối</option>
-                        <option value="Fraud">Gian lận</option>
-                        <option value="Safety">An toàn</option>
-                        <option value="Other">Khác</option>
-                      </select>
-                      <input className="flex-1 h-9 border rounded-lg px-2 text-sm" placeholder="Mô tả" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} />
-                      <button className="h-9 px-3 rounded-lg bg-red-600 text-white text-xs">Gửi</button>
-                    </form>
-                  )}
-                  {flagMsg && <p className="text-xs text-slate-500 mt-2">{flagMsg}</p>}
                   <div className="flex flex-wrap gap-2 mt-4">
                     {(tutor.tags || []).map((tag) => (
                       <span key={tag} className="text-xs bg-brand-50 text-brand-700 px-2 py-1 rounded-md">
@@ -542,9 +520,29 @@ export default function TutorProfile() {
                         <li key={item.reviewId} className="border-b border-slate-100 last:border-0 pb-4 last:pb-0">
                           <div className="flex items-center justify-between gap-3">
                             <p className="font-medium text-slate-900">{item.reviewerName}</p>
-                            <span className="text-xs text-slate-400">
-                              {item.createdAt ? new Date(item.createdAt).toLocaleDateString("vi-VN") : ""}
-                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-slate-400">
+                                {item.createdAt ? new Date(item.createdAt).toLocaleDateString("vi-VN") : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!isLoggedIn()) return navigate("/login");
+                                  setReportModal({
+                                    open: true,
+                                    type: "Review",
+                                    id: item.reviewId,
+                                    name: `Đánh giá của ${item.reviewerName}`,
+                                    subInfo: item.comment || `Đánh giá ${item.rating} sao`,
+                                  });
+                                }}
+                                className="text-[11px] text-slate-400 hover:text-red-600 font-semibold flex items-center gap-1 transition-colors hover:underline"
+                                title="Báo cáo đánh giá này sai sự thật cho Admin"
+                              >
+                                <Flag size={11} />
+                                Báo cáo sai sự thật
+                              </button>
+                            </div>
                           </div>
                           <div className="mt-1">
                             <StarRating value={item.rating} readOnly size={16} />
@@ -731,62 +729,41 @@ export default function TutorProfile() {
                         </div>
                       )}
 
-                      <div className="space-y-2 pt-1">
-                        <p className="text-sm font-medium text-slate-700">Hình thức thanh toán</p>
-                        <label className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm cursor-pointer">
-                          <input type="radio" name="paymentType" className="mt-0.5" checked={paymentType === "Online"} onChange={() => setPaymentType("Online")} />
-                          <span>
-                            <span className="font-semibold text-slate-900">Thanh toán online ngay</span>
-                            <span className="block text-xs text-slate-500">Giữ chỗ qua PayOS trước buổi học.</span>
-                          </span>
-                        </label>
-                        <label className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm cursor-pointer">
-                          <input type="radio" name="paymentType" className="mt-0.5" checked={paymentType === "InPerson"} onChange={() => setPaymentType("InPerson")} />
-                          <span>
-                            <span className="font-semibold text-slate-900">Trả trực tiếp cho gia sư sau buổi học</span>
-                            <span className="block text-xs text-slate-500">Không qua PayOS. Thanh toán mặt sau khi học xong.</span>
-                          </span>
-                        </label>
+                      <div className="rounded-2xl border border-emerald-200/90 bg-emerald-50/60 p-3 text-xs text-emerald-950 flex items-start gap-2.5">
+                        <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-slate-900">Thanh toán bảo đảm qua PayOS (VietQR)</p>
+                          <p className="text-slate-600 mt-0.5 text-[11px] leading-relaxed">
+                            Học phí được giữ an toàn trên hệ thống Escrow và chỉ giải ngân sau khi buổi học hoàn thành.
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-                        {paymentType === "Online" ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => handleBook(e, true)}
-                              disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
-                              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm flex items-center justify-center gap-1.5"
-                            >
-                              {bookingLoading ? (
-                                "Đang xử lý..."
-                              ) : (
-                                <>
-                                  <Wallet size={16} />
-                                  Thanh toán ngay
-                                </>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleBook(e, false)}
-                              disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
-                              className="flex-1 border border-brand-200 text-brand-700 bg-brand-50/60 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl py-3 px-3 transition flex items-center justify-center gap-1.5"
-                            >
-                              <ShoppingCart size={16} />
-                              Thêm vào giỏ
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => handleBook(e, true)}
-                            disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
-                            className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm"
-                          >
-                            {bookingLoading ? "Đang xử lý..." : "Đặt lịch, trả sau buổi học"}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleBook(e, true)}
+                          disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
+                          className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl py-3 px-3 transition shadow-sm flex items-center justify-center gap-1.5"
+                        >
+                          {bookingLoading ? (
+                            "Đang xử lý..."
+                          ) : (
+                            <>
+                              <Wallet size={16} />
+                              Thanh toán ngay
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleBook(e, false)}
+                          disabled={bookingLoading || slots.length === 0 || !dateValidation.valid}
+                          className="flex-1 border border-brand-200 text-brand-700 bg-brand-50/60 hover:bg-brand-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl py-3 px-3 transition flex items-center justify-center gap-1.5"
+                        >
+                          <ShoppingCart size={16} />
+                          Thêm vào giỏ
+                        </button>
                       </div>
                     </form>
                   )}
@@ -949,6 +926,19 @@ export default function TutorProfile() {
             </div>
           </div>
         )}
+
+        {/* Modal báo cáo vi phạm có bằng chứng & lý do */}
+        <ReportModal
+          isOpen={reportModal.open}
+          onClose={() => setReportModal((p) => ({ ...p, open: false }))}
+          targetType={reportModal.type}
+          targetId={reportModal.id}
+          targetName={reportModal.name}
+          subInfo={reportModal.subInfo}
+          onSuccess={() => {
+            // refresh data if needed
+          }}
+        />
       </main>
     </div>
   );

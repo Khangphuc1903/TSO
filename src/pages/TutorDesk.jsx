@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import TutorSetupSteps from "../components/TutorSetupSteps";
+import WeeklyScheduleManager from "../components/WeeklyScheduleManager";
 import { getUser, isLoggedIn } from "../auth";
 import { getSubjects } from "../api/tutorSearch";
 import { API_ORIGIN } from "../api/axiosClient";
@@ -157,9 +158,7 @@ export default function TutorDesk() {
     file: null,
   });
   const [slotForm, setSlotForm] = useState({
-    isRecurring: true,
     dayOfWeek: 1,
-    specificDate: "",
     startTime: "18:00",
     endTime: "20:00",
   });
@@ -202,6 +201,33 @@ export default function TutorDesk() {
     () => invites.filter((i) => i.status === "Pending"),
     [invites]
   );
+
+  const normalizedSlots = useMemo(() => {
+    return (ws?.slots || [])
+      .map((s) => {
+        let dow = s.dayOfWeek;
+        if ((dow == null || dow < 1 || dow > 7) && s.specificDate) {
+          const parts = s.specificDate.split("-");
+          if (parts.length === 3) {
+            const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            const jsDay = d.getDay();
+            dow = jsDay === 0 ? 7 : jsDay;
+          }
+        }
+        const safeDow = dow >= 1 && dow <= 7 ? dow : 1;
+        return {
+          ...s,
+          resolvedDayOfWeek: safeDow,
+          dayLabel: dayLabel(safeDow),
+        };
+      })
+      .sort((a, b) => {
+        if (a.resolvedDayOfWeek !== b.resolvedDayOfWeek) {
+          return a.resolvedDayOfWeek - b.resolvedDayOfWeek;
+        }
+        return (a.startTime || "").localeCompare(b.startTime || "");
+      });
+  }, [ws?.slots]);
   const canOpenSchedule = Boolean(ws?.canOpenSchedule) || tutorReady;
   const showSetup = gateKnown && !canOpenSchedule;
   const visibleTabs = canOpenSchedule ? TABS : TABS.filter((t) => t.id === "profile" || t.id === "certs");
@@ -273,9 +299,9 @@ export default function TutorDesk() {
     setInfo("");
     try {
       const res = await createTutorSlot({
-        isRecurring: slotForm.isRecurring,
-        dayOfWeek: slotForm.isRecurring ? Number(slotForm.dayOfWeek) : null,
-        specificDate: slotForm.isRecurring ? null : slotForm.specificDate,
+        isRecurring: true,
+        dayOfWeek: Number(slotForm.dayOfWeek),
+        specificDate: null,
         startTime: slotForm.startTime,
         endTime: slotForm.endTime,
       });
@@ -717,127 +743,11 @@ export default function TutorDesk() {
                 </Link>
               </div>
             ) : (
-          <>
-            <form
-              onSubmit={onAddSlot}
-              className="bg-white rounded-2xl border border-slate-100 p-6 sm:p-8 space-y-4"
-            >
-              <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-                <Clock size={18} className="text-brand-600" />
-                Thêm khung giờ trống
-              </h2>
-              <div className="flex gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={slotForm.isRecurring}
-                    onChange={() => setSlotForm({ ...slotForm, isRecurring: true })}
-                  />
-                  Lặp hàng tuần
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={!slotForm.isRecurring}
-                    onChange={() => setSlotForm({ ...slotForm, isRecurring: false })}
-                  />
-                  Một buổi cụ thể
-                </label>
-              </div>
-              <div className="grid sm:grid-cols-3 gap-4">
-                {slotForm.isRecurring ? (
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Thứ</span>
-                    <select
-                      className={`${inputClass} mt-1`}
-                      value={slotForm.dayOfWeek}
-                      onChange={(e) => setSlotForm({ ...slotForm, dayOfWeek: Number(e.target.value) })}
-                    >
-                      {DAYS.map((d) => (
-                        <option key={d.v} value={d.v}>
-                          {d.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Ngày</span>
-                    <input
-                      type="date"
-                      required
-                      className={`${inputClass} mt-1`}
-                      value={slotForm.specificDate}
-                      onChange={(e) => setSlotForm({ ...slotForm, specificDate: e.target.value })}
-                    />
-                  </label>
-                )}
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Bắt đầu</span>
-                  <input
-                    type="time"
-                    className={`${inputClass} mt-1`}
-                    value={slotForm.startTime}
-                    onChange={(e) => setSlotForm({ ...slotForm, startTime: e.target.value })}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Kết thúc</span>
-                  <input
-                    type="time"
-                    className={`${inputClass} mt-1`}
-                    value={slotForm.endTime}
-                    onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
-                  />
-                </label>
-              </div>
-              <button
-                type="submit"
-                className="h-10 px-5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium"
-              >
-                Thêm lịch trống
-              </button>
-            </form>
-            <ul className="space-y-3">
-              {(ws?.slots || []).length === 0 && (
-                <li className="bg-white rounded-2xl border border-slate-100 p-10 text-center text-sm text-slate-500">
-                  Chưa có lịch trống. Học viên chỉ đặt được khi bạn mở khung giờ.
-                </li>
-              )}
-              {(ws?.slots || []).map((s) => (
-                <li
-                  key={s.slotId}
-                  className="bg-white rounded-2xl border border-slate-100 px-5 py-4 flex items-center justify-between gap-3"
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      {s.isRecurring
-                        ? `${dayLabel(s.dayOfWeek)} hàng tuần`
-                        : s.specificDate
-                          ? new Date(s.specificDate).toLocaleDateString("vi-VN")
-                          : "Một buổi"}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {s.startTime} – {s.endTime}
-                      {s.isBooked ? " · Đã được đặt" : ""}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={s.isBooked}
-                    className="text-red-500 hover:bg-red-50 rounded-lg p-2 disabled:opacity-40"
-                    onClick={async () => {
-                      const res = await deleteTutorSlot(s.slotId);
-                      setInfo(res.message);
-                      load();
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            </>
+              <WeeklyScheduleManager
+                slots={ws?.slots || []}
+                canEdit={true}
+                onChanged={load}
+              />
             )}
           </div>
         )}

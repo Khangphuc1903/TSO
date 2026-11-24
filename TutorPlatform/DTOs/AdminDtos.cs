@@ -82,11 +82,33 @@ public class AdminReportDto
     public string? ReportedRole { get; set; }
     public string Reason { get; set; } = null!;
     public string? Description { get; set; }
+    public string? Evidence { get; set; }
     public string EntityType { get; set; } = null!;
     public int EntityId { get; set; }
     public string? ContentSnippet { get; set; }
     public DateTime CreatedAt { get; set; }
     public string Status { get; set; } = null!;
+}
+
+public class AdminReviewDto
+{
+    public int ReviewId { get; set; }
+    public int BookingId { get; set; }
+    public int TutorId { get; set; }
+    public string TutorName { get; set; } = null!;
+    public string? TutorEmail { get; set; }
+    public int StudentId { get; set; }
+    public string StudentName { get; set; } = null!;
+    public string? StudentEmail { get; set; }
+    public int Rating { get; set; }
+    public string? Comment { get; set; }
+    public string? TutorReply { get; set; }
+    public DateTime? RepliedAt { get; set; }
+    public bool IsHidden { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int ReportCount { get; set; }
+    public string? LatestReportReason { get; set; }
+    public string? LatestReportEvidence { get; set; }
 }
 
 public class AdminResolveReportDto

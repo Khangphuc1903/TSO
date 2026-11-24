@@ -521,6 +521,7 @@ CREATE TABLE Reports (
     ReportedEntityId    INT             NOT NULL,
     Reason              NVARCHAR(100)   NOT NULL,
     Description         NVARCHAR(500)   NULL,
+    Evidence            NVARCHAR(1000)  NULL,   -- Proof image URL, document, or links
     Status              NVARCHAR(20)    NOT NULL DEFAULT 'Pending', -- Pending / Resolved / Dismissed
     ReviewedBy          INT             NULL,       -- AdminId
     ReviewedAt          DATETIME        NULL,
@@ -733,8 +734,8 @@ BEGIN
         VALUES
         (@TutorId, 1, NULL, '18:00', '20:00', 1, 0),
         (@TutorId, 3, NULL, '19:00', '21:00', 1, 0),
-        (@TutorId, 6, NULL, '09:00', '11:00', 1, 0),
-        (@TutorId, NULL, DATEADD(DAY, 3, CAST(GETDATE() AS DATE)), '19:00', '21:00', 0, 0);
+        (@TutorId, 4, NULL, '19:00', '21:00', 1, 0),
+        (@TutorId, 6, NULL, '09:00', '11:00', 1, 0);
     END
 
     IF NOT EXISTS (SELECT 1 FROM Reviews WHERE TutorId = @TutorId AND StudentId = @StudentId)
@@ -1194,7 +1195,7 @@ BEGIN
     UPDATE TutorProfiles SET IsPublished = 1, VerificationStatus = N'Verified' WHERE TutorId = @Tid;
 END
 
--- 3. Tài khoản Admin mặc định: admin@tutor.com
+-- 3. Tài khoản Admin mặc định: admin@tutor.com và admin@tsg.com
 IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = N'admin@tutor.com')
 BEGIN
     INSERT INTO Users (Email, PasswordHash, PhoneNumber, FullName, Gender, AvatarUrl, RoleId, Address, City, District, IsEmailConfirmed, Status, CreatedAt)
@@ -1203,6 +1204,16 @@ END
 ELSE
 BEGIN
     UPDATE Users SET PasswordHash = @Pwd, IsEmailConfirmed = 1, Status = N'Active' WHERE Email = N'admin@tutor.com';
+END
+
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = N'admin@tsg.com')
+BEGIN
+    INSERT INTO Users (Email, PasswordHash, PhoneNumber, FullName, Gender, AvatarUrl, RoleId, Address, City, District, IsEmailConfirmed, Status, CreatedAt)
+    VALUES (N'admin@tsg.com', @Pwd, N'0909000001', N'Quản Trị Viên TSG', N'Male', N'https://i.pravatar.cc/300?img=68', @AdminRole, N'1 Duy Tân', N'Hà Nội', N'Cầu Giấy', 1, N'Active', GETDATE());
+END
+ELSE
+BEGIN
+    UPDATE Users SET PasswordHash = @Pwd, IsEmailConfirmed = 1, Status = N'Active' WHERE Email = N'admin@tsg.com';
 END
 
 -- 4. Gán môn Toán cho tutor@tutor.com
@@ -1218,7 +1229,7 @@ BEGIN
     (@Tid, 2, NULL, '19:00', '21:00', 1, 0),
     (@Tid, 4, NULL, '19:00', '21:00', 1, 0),
     (@Tid, 6, NULL, '19:00', '21:00', 1, 0),
-    (@Tid, NULL, DATEADD(DAY, 2, CAST(GETDATE() AS DATE)), '19:00', '21:00', 0, 0);
+    (@Tid, 7, NULL, '14:00', '16:00', 1, 0);
 END
 
 -- 6. Tạo đơn đặt lịch Pending để TEST NGAY TRANG CHECKOUT / QR CODE

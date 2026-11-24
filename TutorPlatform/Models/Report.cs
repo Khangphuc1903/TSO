@@ -17,6 +17,8 @@ public partial class Report
 
     public string? Description { get; set; }
 
+    public string? Evidence { get; set; }
+
     public string Status { get; set; } = null!;
 
     public int? ReviewedBy { get; set; }

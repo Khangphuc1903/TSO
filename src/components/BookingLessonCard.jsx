@@ -1,6 +1,7 @@
-import { Calendar, Clock, MapPin, MessageCircle, Wallet } from "lucide-react";
+import { Calendar, Clock, MapPin, MessageCircle, Wallet, Flag } from "lucide-react";
 import { useState } from "react";
 import { createTutorReview } from "../api/study";
+import ReportModal from "./ReportModal";
 
 const STATUS = {
   Pending: { label: "Chờ xác nhận", className: "bg-orange-50 text-orange-600" },
@@ -19,13 +20,14 @@ export default function BookingLessonCard({
   onSaveReport,
   onReviewed,
 }) {
+  const [reportStudentOpen, setReportStudentOpen] = useState(false);
   let status = STATUS[booking.status] || {
     label: booking.status,
     className: "bg-slate-100 text-slate-600",
   };
 
   if (booking.status === "Pending") {
-    if (booking.paymentType === "InPerson" || booking.paymentStatus === "Success") {
+    if (booking.paymentStatus === "Success") {
       status = { label: "Chờ gia sư duyệt", className: "bg-amber-50 text-amber-700 border border-amber-200" };
     } else {
       status = { label: "Chờ thanh toán", className: "bg-orange-50 text-orange-600 border border-orange-200" };
@@ -46,17 +48,12 @@ export default function BookingLessonCard({
           <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${status.className}`}>
             {status.label}
           </span>
-          {booking.paymentType === "InPerson" && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-              Tiền mặt khi gặp
-            </span>
-          )}
           {booking.paymentStatus === "Success" && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
               Đã thanh toán (Tạm giữ)
             </span>
           )}
-          {(booking.paymentStatus === "Unpaid" || booking.paymentStatus === "Pending") && booking.paymentType !== "InPerson" && booking.status !== "Cancelled" && booking.status !== "Rejected" && (
+          {(booking.paymentStatus === "Unpaid" || booking.paymentStatus === "Pending") && booking.status !== "Cancelled" && booking.status !== "Rejected" && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
               Chưa thanh toán
             </span>
@@ -74,9 +71,6 @@ export default function BookingLessonCard({
         </div>
       </div>
 
-      {booking.paymentType === "InPerson" && (
-        <p className="mb-3 text-xs text-sky-800">Không chuyển khoản. Trả tiền mặt khi gặp, sau khi cả hai xác nhận học xong.</p>
-      )}
       {booking.status === "Confirmed" && (
         <p className="mb-3 text-xs text-slate-500">
           Gia sư {booking.tutorCompleted ? "đã xác nhận dạy xong" : "chưa xác nhận"} · Học sinh {booking.studentCompleted ? "đã xác nhận học xong" : "chưa xác nhận"}
@@ -117,6 +111,17 @@ export default function BookingLessonCard({
           </button>
         )}
         {actions}
+        {canWriteReport && (
+          <button
+            type="button"
+            onClick={() => setReportStudentOpen(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-500 hover:text-red-600 hover:border-red-200 transition-colors ml-auto sm:ml-0"
+            title="Báo cáo học viên vi phạm (kèm lý do & bằng chứng)"
+          >
+            <Flag size={13} />
+            Báo cáo học viên
+          </button>
+        )}
       </div>
       {booking.status === "Completed" && (
         <LessonReview booking={booking} isTutor={canWriteReport} onReviewed={onReviewed} />
@@ -124,6 +129,16 @@ export default function BookingLessonCard({
       {booking.status === "Completed" && booking.learnerIsParent && (
         <LessonReportPanel booking={booking} canWrite={canWriteReport} onSave={onSaveReport} />
       )}
+
+      {/* Modal Báo cáo học viên */}
+      <ReportModal
+        isOpen={reportStudentOpen}
+        onClose={() => setReportStudentOpen(false)}
+        targetType="Student"
+        targetId={booking.studentId}
+        targetName={`Học viên ${counterpartName || `#${booking.studentId}`}`}
+        subInfo={`Buổi học môn ${booking.subjectName} (${booking.scheduledDate})`}
+      />
     </article>
   );
 }
@@ -134,14 +149,38 @@ function LessonReview({ booking, isTutor, onReviewed }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [reportReviewOpen, setReportReviewOpen] = useState(false);
 
   if (booking.hasReview || sent) {
     const stars = booking.reviewRating || rating;
     return (
       <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/70 p-4">
-        <p className="text-xs font-semibold text-amber-800">Đánh giá buổi học</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-amber-800">Đánh giá buổi học</p>
+          {isTutor && (
+            <button
+              type="button"
+              onClick={() => setReportReviewOpen(true)}
+              className="text-[11px] font-semibold text-red-600 hover:text-red-700 flex items-center gap-1 hover:underline"
+              title="Báo cáo đánh giá sai sự thật cho Admin xóa"
+            >
+              <Flag size={11} />
+              Báo cáo đánh giá sai sự thật
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-amber-500">{ "★".repeat(stars) }{ "☆".repeat(Math.max(0, 5 - stars)) }</p>
         {(booking.reviewComment || comment) && <p className="mt-1 text-sm text-slate-700">{booking.reviewComment || comment}</p>}
+
+        {/* Modal Báo cáo đánh giá sai sự thật */}
+        <ReportModal
+          isOpen={reportReviewOpen}
+          onClose={() => setReportReviewOpen(false)}
+          targetType="Review"
+          targetId={booking.reviewId || booking.bookingId}
+          targetName={`Đánh giá của học viên (${booking.subjectName})`}
+          subInfo={booking.reviewComment || comment || `${stars} sao`}
+        />
       </div>
     );
   }

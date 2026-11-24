@@ -138,9 +138,6 @@ export default function Checkout() {
           } else if (found.status === "Confirmed" || found.paymentStatus === "Success") {
             navigate(`/payment/result?bookingId=${bookingId}&status=success`);
             return;
-          } else if (found.paymentType === "InPerson") {
-            setBooking(found);
-            setRefundInfo(null);
           } else {
             setBooking(found);
             setRefundInfo(refund);
@@ -358,20 +355,6 @@ export default function Checkout() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (booking?.paymentType === "InPerson") {
-    return (
-      <div className="min-h-screen bg-[#F4F7FA] px-4 py-16">
-        <div className="mx-auto max-w-lg rounded-3xl bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-bold text-slate-900">Buổi này trả tiền mặt</h1>
-          <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Không tạo mã chuyển khoản. Học xong, gia sư và học sinh cùng bấm xác nhận trên Lịch học, rồi học sinh viết đánh giá.
-          </p>
-          <Link to="/bookings" className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white">Về lịch học</Link>
         </div>
       </div>
     );
@@ -1030,16 +1013,6 @@ export default function Checkout() {
                         <span className="leading-relaxed">{statusMessage}</span>
                       </div>
                     )}
-
-                    <button
-                      type="button"
-                      onClick={handleSimulatePayment}
-                      disabled={checkingStatus}
-                      className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      <Sparkles size={15} />
-                      ⚡ Xác nhận thanh toán nhanh (Đã chuyển tiền / Demo)
-                    </button>
 
                     <button
                       type="button"

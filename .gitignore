@@ -35,5 +35,7 @@ Thumbs.db
 # Uploaded test and user files
 TutorPlatform/wwwroot/uploads/diagnoses/*
 !TutorPlatform/wwwroot/uploads/diagnoses/.gitkeep
+TutorPlatform/wwwroot/uploads/reports/*
+!TutorPlatform/wwwroot/uploads/reports/.gitkeep
 test_homework.png
 *appsettings.Local.json

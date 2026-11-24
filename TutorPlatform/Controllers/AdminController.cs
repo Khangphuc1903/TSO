@@ -614,6 +614,7 @@ public class AdminController : ControllerBase
                 ReporterEmail = r.Reporter.Email,
                 Reason = r.Reason,
                 Description = r.Description,
+                Evidence = r.Evidence,
                 EntityType = r.ReportedEntityType,
                 EntityId = r.ReportedEntityId,
                 CreatedAt = r.CreatedAt,
@@ -622,6 +623,7 @@ public class AdminController : ControllerBase
             .ToListAsync(cancellationToken);
 
         await FillGroupReportAuthorsAsync(reports, cancellationToken);
+        await FillReviewReportDetailsAsync(reports, cancellationToken);
 
         var personIds = reports
             .Where(r => IsPersonReport(r.EntityType))
@@ -659,15 +661,36 @@ public class AdminController : ControllerBase
         var action = (dto.Action ?? "").Trim();
         var isWarn = action.Equals("Warn", StringComparison.OrdinalIgnoreCase);
         var isBan = action.Equals("Ban", StringComparison.OrdinalIgnoreCase);
+        var isDismiss = action.Equals("Dismiss", StringComparison.OrdinalIgnoreCase);
+        var isDeleteReview = action.Equals("DeleteReview", StringComparison.OrdinalIgnoreCase) ||
+                             action.Equals("HideReview", StringComparison.OrdinalIgnoreCase) ||
+                             action.Equals("Delete", StringComparison.OrdinalIgnoreCase);
+
         User? target = null;
-        var targetUserId = IsPersonReport(report.ReportedEntityType)
-            ? report.ReportedEntityId
-            : await GroupContentAuthorIdAsync(report.ReportedEntityType, report.ReportedEntityId, cancellationToken);
-        if (targetUserId is int personId)
+        if (string.Equals(report.ReportedEntityType, "Review", StringComparison.OrdinalIgnoreCase))
         {
-            target = await _db.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.UserId == personId, cancellationToken);
+            var review = await _db.Reviews.Include(r => r.Student).FirstOrDefaultAsync(r => r.ReviewId == report.ReportedEntityId, cancellationToken);
+            if (review != null)
+            {
+                target = review.Student;
+                if (isDeleteReview)
+                {
+                    review.IsHidden = true;
+                    await RecalculateTutorRatingAsync(review.TutorId, cancellationToken);
+                }
+            }
+        }
+        else
+        {
+            var targetUserId = IsPersonReport(report.ReportedEntityType)
+                ? report.ReportedEntityId
+                : await GroupContentAuthorIdAsync(report.ReportedEntityType, report.ReportedEntityId, cancellationToken);
+            if (targetUserId is int personId)
+            {
+                target = await _db.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.UserId == personId, cancellationToken);
+            }
         }
 
         if ((isWarn || isBan) && target == null)
@@ -675,7 +698,7 @@ public class AdminController : ControllerBase
         if (isBan && target!.Role?.RoleName == "Admin")
             return BadRequest(new { message = "Không thể khóa tài khoản quản trị viên." });
 
-        report.Status = "Resolved";
+        report.Status = isDismiss ? "Dismissed" : "Resolved";
         report.ActionTaken = action + (string.IsNullOrWhiteSpace(dto.Note) ? "" : $": {dto.Note}");
         report.ReviewedBy = CurrentUserId > 0 ? CurrentUserId : null;
         report.ReviewedAt = DateTime.UtcNow;
@@ -818,7 +841,204 @@ public class AdminController : ControllerBase
 
     private static bool IsPersonReport(string? entityType) =>
         string.Equals(entityType, "User", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(entityType, "Student", StringComparison.OrdinalIgnoreCase)
         || string.Equals(entityType, "Tutor", StringComparison.OrdinalIgnoreCase);
+
+    private async Task FillReviewReportDetailsAsync(List<AdminReportDto> reports, CancellationToken cancellationToken)
+    {
+        var reviewReportIds = reports
+            .Where(r => string.Equals(r.EntityType, "Review", StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.EntityId)
+            .Distinct()
+            .ToList();
+
+        if (reviewReportIds.Count == 0) return;
+
+        var reviews = await _db.Reviews
+            .AsNoTracking()
+            .Include(r => r.Student)
+            .Include(r => r.Tutor)
+                .ThenInclude(t => t.Tutor)
+            .Where(r => reviewReportIds.Contains(r.ReviewId))
+            .ToListAsync(cancellationToken);
+
+        var byId = reviews.ToDictionary(r => r.ReviewId);
+        foreach (var report in reports)
+        {
+            if (!string.Equals(report.EntityType, "Review", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (byId.TryGetValue(report.EntityId, out var rev))
+            {
+                report.ReportedName = rev.Student?.FullName;
+                report.ReportedEmail = rev.Student?.Email;
+                report.ReportedRole = "Student";
+                var tutorName = rev.Tutor?.Tutor?.FullName ?? $"Gia sư #{rev.TutorId}";
+                report.ContentSnippet = $"[Đánh giá {rev.Rating}★ cho {tutorName}]: \"{rev.Comment}\" ({(rev.IsHidden ? "Đã ẩn" : "Đang hiển thị")})";
+            }
+        }
+    }
+
+    private async Task RecalculateTutorRatingAsync(int tutorId, CancellationToken cancellationToken)
+    {
+        var summary = await _db.Reviews
+            .Where(r => r.TutorId == tutorId && !r.IsHidden)
+            .GroupBy(r => r.TutorId)
+            .Select(group => new
+            {
+                Average = group.Average(review => (decimal)review.Rating),
+                Count = group.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var tutor = await _db.TutorProfiles.FirstOrDefaultAsync(profile => profile.TutorId == tutorId, cancellationToken);
+        if (tutor != null)
+        {
+            tutor.AverageRating = summary?.Average ?? 0;
+            tutor.TotalReviews = summary?.Count ?? 0;
+        }
+    }
+
+    // =========================================================================
+    // 5. REVIEWS MANAGEMENT
+    // =========================================================================
+
+    [HttpGet("reviews")]
+    public async Task<IActionResult> ListReviews(
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        [FromQuery] bool? onlyReported,
+        [FromQuery] int? rating,
+        [FromQuery] int? tutorId,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Review> query = _db.Reviews
+            .Include(r => r.Student)
+            .Include(r => r.Tutor)
+                .ThenInclude(t => t.Tutor)
+            .AsNoTracking();
+
+        if (status == "visible")
+            query = query.Where(r => !r.IsHidden);
+        else if (status == "hidden")
+            query = query.Where(r => r.IsHidden);
+
+        if (rating.HasValue && rating.Value >= 1 && rating.Value <= 5)
+            query = query.Where(r => r.Rating == rating.Value);
+
+        if (tutorId.HasValue && tutorId.Value > 0)
+            query = query.Where(r => r.TutorId == tutorId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(r =>
+                (r.Comment != null && r.Comment.ToLower().Contains(s)) ||
+                (r.Student.FullName != null && r.Student.FullName.ToLower().Contains(s)) ||
+                (r.Tutor.Tutor != null && r.Tutor.Tutor.FullName != null && r.Tutor.Tutor.FullName.ToLower().Contains(s))
+            );
+        }
+
+        var reviews = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var reviewIds = reviews.Select(r => r.ReviewId).ToList();
+        var reports = await _db.Reports
+            .AsNoTracking()
+            .Where(rep => rep.ReportedEntityType == "Review" && reviewIds.Contains(rep.ReportedEntityId))
+            .OrderByDescending(rep => rep.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var reportsByReview = reports.GroupBy(rep => rep.ReportedEntityId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var result = reviews.Select(r =>
+        {
+            reportsByReview.TryGetValue(r.ReviewId, out var rList);
+            var latest = rList?.FirstOrDefault();
+            return new AdminReviewDto
+            {
+                ReviewId = r.ReviewId,
+                BookingId = r.BookingId ?? 0,
+                TutorId = r.TutorId,
+                TutorName = r.Tutor?.Tutor?.FullName ?? $"Gia sư #{r.TutorId}",
+                TutorEmail = r.Tutor?.Tutor?.Email,
+                StudentId = r.StudentId,
+                StudentName = r.Student?.FullName ?? $"Học viên #{r.StudentId}",
+                StudentEmail = r.Student?.Email,
+                Rating = r.Rating,
+                Comment = r.Comment,
+                TutorReply = r.TutorReply,
+                RepliedAt = r.RepliedAt,
+                IsHidden = r.IsHidden,
+                CreatedAt = r.CreatedAt,
+                ReportCount = rList?.Count ?? 0,
+                LatestReportReason = latest?.Reason,
+                LatestReportEvidence = latest?.Evidence ?? latest?.Description
+            };
+        });
+
+        if (onlyReported == true)
+        {
+            result = result.Where(r => r.ReportCount > 0);
+        }
+
+        return Ok(result.ToList());
+    }
+
+    [HttpDelete("reviews/{id:int}")]
+    public async Task<IActionResult> DeleteReview(int id, [FromQuery] string? reason, CancellationToken cancellationToken)
+    {
+        var review = await _db.Reviews.FirstOrDefaultAsync(r => r.ReviewId == id, cancellationToken);
+        if (review == null)
+            return NotFound(new { message = "Không tìm thấy đánh giá." });
+
+        review.IsHidden = true;
+        await RecalculateTutorRatingAsync(review.TutorId, cancellationToken);
+
+        if (CurrentUserId > 0)
+        {
+            _db.AdminActionLogs.Add(new AdminActionLog
+            {
+                AdminId = CurrentUserId,
+                ActionType = "DeleteReview",
+                TargetEntityType = "Review",
+                TargetEntityId = id,
+                Description = $"Xóa/Ẩn đánh giá #{id} của gia sư #{review.TutorId}. Lý do: {reason ?? "Đánh giá không đúng sự thật"}",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return Ok(new { message = "Đã xóa đánh giá khỏi trang gia sư thành công." });
+    }
+
+    [HttpPost("reviews/{id:int}/restore")]
+    public async Task<IActionResult> RestoreReview(int id, CancellationToken cancellationToken)
+    {
+        var review = await _db.Reviews.FirstOrDefaultAsync(r => r.ReviewId == id, cancellationToken);
+        if (review == null)
+            return NotFound(new { message = "Không tìm thấy đánh giá." });
+
+        review.IsHidden = false;
+        await RecalculateTutorRatingAsync(review.TutorId, cancellationToken);
+
+        if (CurrentUserId > 0)
+        {
+            _db.AdminActionLogs.Add(new AdminActionLog
+            {
+                AdminId = CurrentUserId,
+                ActionType = "RestoreReview",
+                TargetEntityType = "Review",
+                TargetEntityId = id,
+                Description = $"Khôi phục đánh giá #{id} của gia sư #{review.TutorId}",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return Ok(new { message = "Đã khôi phục đánh giá hiển thị lại." });
+    }
 
     private static string ReasonLabel(string? reason) => reason switch
     {

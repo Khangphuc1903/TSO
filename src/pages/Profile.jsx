@@ -156,7 +156,7 @@ export default function Profile() {
   const tutorActions = (b) => {
     const teaching = asTutorOn(b);
     if (teaching && b.status === "Pending") {
-      const waitPay = b.paymentType !== "InPerson" && b.paymentStatus !== "Success" && Number(b.price) > 0;
+      const waitPay = b.paymentStatus !== "Success" && Number(b.price) > 0;
       return (
         <>
           {waitPay ? (
