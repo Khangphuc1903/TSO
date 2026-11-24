@@ -137,6 +137,112 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG THÊM 
         return parsed;
     }
 
+    /// <summary>
+    /// Chẩn đoán bằng hai ảnh riêng biệt: đề bài và bài giải của học viên.
+    /// </summary>
+    public async Task<GeminiDiagnosisOutput?> DiagnoseHomeworkImagesAsync(
+        byte[] problemBytes,
+        string problemMime,
+        byte[] solutionBytes,
+        string solutionMime,
+        string? studentNote,
+        CancellationToken ct = default)
+    {
+        var prompt = new StringBuilder();
+        prompt.AppendLine("BẠN LÀ CHUYÊN GIA SƯ PHẠM CAO CẤP CHƯƠNG TRÌNH GDPT 2018.");
+        prompt.AppendLine("Có hai ảnh riêng biệt theo đúng thứ tự: ảnh 1 là ĐỀ BÀI gốc, ảnh 2 là BÀI GIẢI CỦA HỌC VIÊN.");
+        prompt.AppendLine("TUYỆT ĐỐI không nhầm vai trò hoặc tự suy đoán khi không đọc rõ.");
+        if (!string.IsNullOrWhiteSpace(studentNote))
+            prompt.AppendLine($"Ghi chú bổ sung: \"{studentNote.Trim()}\"");
+        prompt.AppendLine(@"
+NHIỆM VỤ:
+1. OCR ảnh đề bài; OCR riêng bài giải của học viên.
+2. Xác định yêu cầu kiến thức/kỹ năng cần giải bài.
+3. Đối chiếu từng bước bài giải với đề bài.
+4. Nêu bước làm đúng, bước sai hoặc thiếu, nguyên nhân sai theo: chưa hiểu khái niệm, sai công thức, sai phương pháp, nhầm kiến thức hoặc lỗi tính toán.
+5. Xác định lỗ hổng kiến thức chính xác; nêu mức độ nghiêm trọng Critical/Moderate/Minor.
+6. Đưa ra hướng khắc phục và bài tập đề xuất.
+
+Nếu ảnh mờ, thiếu thông tin hoặc không đọc rõ nội dung, chỉ đặt ""ocrText"" và các trường phân tích thành thông báo yêu cầu chụp lại; không tự suy đoán.
+
+TRẢ VỀ DUY NHẤT JSON hợp lệ:
+{
+  ""subjectName"": ""Toán"",
+  ""gradeLevel"": ""Lớp 11"",
+  ""topicName"": ""Tên chuyên đề"",
+  ""topicCode"": ""MA_CHUYEN_DE"",
+  ""severity"": ""Critical|Moderate|Minor"",
+  ""problemText"": ""Nội dung OCR của ảnh đề bài"",
+  ""studentSolutionText"": ""Tóm tắt OCR bài giải của học viên"",
+  ""ocrText"": ""Đề bài nhận diện"",
+  ""correctSteps"": ""Những phần học sinh đã làm đúng"",
+  ""incorrectOrIncompleteSteps"": ""Những phần sai hoặc chưa hoàn thành"",
+  ""errorCause"": ""Nguyên nhân sai"",
+  ""studentMistake"": ""Phân tích chi tiết lỗi sai"",
+  ""aiSummary"": ""Tóm tắt kết quả đối chiếu"",
+  ""gapDetail"": ""Kiến thức còn thiếu hoặc hiểu sai"",
+  ""studyPlan"": ""Phương pháp học và bài tập đề xuất"",
+  ""recommendedKeywords"": [""từ khóa""]
+}");
+
+        var payload = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new
+                        {
+                            text = "ẢNH 1 - ĐỀ BÀI GỐC:"
+                        },
+                        new
+                        {
+                            inlineData = new
+                            {
+                                mimeType = NormalizeImageMimeType(problemMime),
+                                data = Convert.ToBase64String(problemBytes)
+                            }
+                        },
+                        new
+                        {
+                            text = "ẢNH 2 - BÀI GIẢI CỦA HỌC VIÊN:"
+                        },
+                        new
+                        {
+                            inlineData = new
+                            {
+                                mimeType = NormalizeImageMimeType(solutionMime),
+                                data = Convert.ToBase64String(solutionBytes)
+                            }
+                        },
+                        new
+                        {
+                            text = prompt.ToString()
+                        }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                temperature = 0.2,
+                topP = 0.8,
+                maxOutputTokens = 8192,
+                responseMimeType = "application/json"
+            }
+        };
+
+        var responseJson = await CallGeminiApiAsync(payload, ct);
+        if (string.IsNullOrWhiteSpace(responseJson))
+            throw new InvalidOperationException("Chưa cấu hình Gemini:ApiKey hoặc AI không thể đọc hai ảnh.");
+
+        var parsed = CleanAndParseJson<GeminiDiagnosisOutput>(responseJson);
+        if (parsed == null)
+            throw new InvalidOperationException("Gemini đã trả lời nhưng không đúng dạng chẩn đoán.");
+        return parsed;
+    }
+
     public async Task<T?> ReadImagesAsJsonAsync<T>(
         string prompt,
         IReadOnlyList<(byte[] Bytes, string Mime)> images,
@@ -468,6 +574,11 @@ public class GeminiDiagnosisOutput
     public string? TopicCode { get; set; }
     public string? Severity { get; set; }
     public string? OcrText { get; set; }
+    public string? ProblemText { get; set; }
+    public string? StudentSolutionText { get; set; }
+    public string? CorrectSteps { get; set; }
+    public string? IncorrectOrIncompleteSteps { get; set; }
+    public string? ErrorCause { get; set; }
     public string? StudentMistake { get; set; }
     public string? AiSummary { get; set; }
     public string? GapDetail { get; set; }

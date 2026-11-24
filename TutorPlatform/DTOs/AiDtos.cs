@@ -5,7 +5,14 @@ namespace TutorPlatform.DTOs;
 
 public class DiagnoseHomeworkRequest
 {
+    // Kept for backward compatibility with existing clients.
     public IFormFile? File { get; set; }
+
+    public IFormFile? ProblemFile { get; set; }
+    public IFormFile? ProblemImage { get; set; }
+    public IFormFile? StudentSolutionFile { get; set; }
+    public IFormFile? SolutionFile { get; set; }
+    public IFormFile? StudentSolutionImage { get; set; }
 
     public string? StudentNote { get; set; }
 }
@@ -14,12 +21,19 @@ public class DiagnosisResultDto
 {
     public int DiagnosisId { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ProblemImageUrl { get; set; }
+    public string? StudentSolutionImageUrl { get; set; }
     public string? SubjectName { get; set; }
     public string? GradeLevel { get; set; }
     public string? TopicName { get; set; }
     public string? TopicCode { get; set; }
     public string Severity { get; set; } = "Moderate"; // Critical / Moderate / Minor
     public string? OcrText { get; set; }
+    public string? ProblemText { get; set; }
+    public string? StudentSolutionText { get; set; }
+    public string? CorrectSteps { get; set; }
+    public string? IncorrectOrIncompleteSteps { get; set; }
+    public string? ErrorCause { get; set; }
     public string? AiSummary { get; set; }
     public string? GapDetail { get; set; }
     public string? StudentMistake { get; set; }

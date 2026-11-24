@@ -46,7 +46,14 @@ public class AiMatchController : ControllerBase
 
         try
         {
-            var result = await _aiService.DiagnoseHomeworkAsync(studentId, form.File, form.StudentNote, ct);
+            var problemFile = form.ProblemFile ?? form.ProblemImage ?? form.File;
+            var solutionFile = form.StudentSolutionFile ?? form.StudentSolutionImage ?? form.SolutionFile;
+            var result = await _aiService.DiagnoseHomeworkAsync(
+                studentId,
+                problemFile,
+                solutionFile,
+                form.StudentNote,
+                ct);
             return Ok(result);
         }
         catch (ArgumentException ex)

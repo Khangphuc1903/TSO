@@ -30,53 +30,54 @@ public class AiMatchmakerService
         _logger = logger;
     }
 
-    public async Task<DiagnosisResultDto> DiagnoseHomeworkAsync(
+    // Backward-compatible overload for callers that still send only one file.
+    // The new diagnose flow still requires a separate problem and solution image.
+    public Task<DiagnosisResultDto> DiagnoseHomeworkAsync(
         int studentId,
         IFormFile? file,
         string? studentNote,
         CancellationToken ct = default)
     {
-        if (file == null || file.Length == 0)
-            throw new ArgumentException("Vui lòng chọn ảnh bài tập hoặc đề thi cần chẩn đoán.");
+        return DiagnoseHomeworkAsync(studentId, file, null, studentNote, ct);
+    }
 
-        if (file.Length > 10 * 1024 * 1024)
-            throw new ArgumentException("Dung lượng ảnh tối đa 10 MB.");
+    public async Task<DiagnosisResultDto> DiagnoseHomeworkAsync(
+        int studentId,
+        IFormFile? problemFile,
+        IFormFile? solutionFile,
+        string? studentNote,
+        CancellationToken ct = default)
+    {
+        if (problemFile == null || problemFile.Length == 0)
+            throw new ArgumentException("Vui lòng chọn ảnh đề bài.");
+        if (solutionFile == null || solutionFile.Length == 0)
+            throw new ArgumentException("Vui lòng chọn ảnh bài giải của học viên.");
 
-        var ext = Path.GetExtension(file.FileName);
-        if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
-            throw new ArgumentException("Chỉ chấp nhận định dạng ảnh JPG, PNG, WEBP.");
+        ValidateImage(problemFile, "đề bài");
+        ValidateImage(solutionFile, "bài giải của học viên");
 
         // 1. Lưu ảnh vào wwwroot/uploads/diagnoses/{studentId}/...
         var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
         var dir = Path.Combine(webRoot, "uploads", "diagnoses", studentId.ToString());
         Directory.CreateDirectory(dir);
 
-        var safeName = $"diag_{studentId}_{DateTime.UtcNow.Ticks}{ext.ToLowerInvariant()}";
-        var physicalPath = Path.Combine(dir, safeName);
-
-        byte[] imageBytes;
-        await using (var fileStream = File.Create(physicalPath))
-        {
-            await file.CopyToAsync(fileStream, ct);
-        }
-        imageBytes = await File.ReadAllBytesAsync(physicalPath, ct);
-
-        var relativeUrl = $"/uploads/diagnoses/{studentId}/{safeName}";
+        var problemUrl = await SaveDiagnosisImageAsync(problemFile, dir, studentId, "problem", ct);
+        var solutionUrl = await SaveDiagnosisImageAsync(solutionFile, dir, studentId, "solution", ct);
+        var problemBytes = await File.ReadAllBytesAsync(GetPhysicalPath(webRoot, problemUrl), ct);
+        var solutionBytes = await File.ReadAllBytesAsync(GetPhysicalPath(webRoot, solutionUrl), ct);
 
         // 2. Gọi AI Gemini chẩn đoán
-        var safeMime = !string.IsNullOrWhiteSpace(file.ContentType) &&
-                       file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-            ? file.ContentType
-            : ext.ToLowerInvariant() switch
-            {
-                ".png" => "image/png",
-                ".webp" => "image/webp",
-                _ => "image/jpeg"
-            };
-
-        var aiOutput = await _gemini.DiagnoseHomeworkImageAsync(imageBytes, safeMime, studentNote, ct);
+        var problemMime = GetSafeMime(problemFile);
+        var solutionMime = GetSafeMime(solutionFile);
+        var aiOutput = await _gemini.DiagnoseHomeworkImagesAsync(
+            problemBytes,
+            problemMime,
+            solutionBytes,
+            solutionMime,
+            studentNote,
+            ct);
         if (aiOutput == null)
-            throw new InvalidOperationException("Gemini không đọc được ảnh.");
+            throw new InvalidOperationException("Gemini không đọc rõ nội dung hai ảnh. Vui lòng chụp lại đề bài và bài giải cho rõ.");
 
         // 3. Khớp SubjectId & TopicId
         var subject = await FindMatchingSubjectAsync(aiOutput.SubjectName, ct);
@@ -91,7 +92,7 @@ public class AiMatchmakerService
             StudentId = studentId,
             SubjectId = subjectId,
             TopicId = topicId,
-            ImageUrl = relativeUrl,
+            ImageUrl = problemUrl,
             OcrText = aiOutput.OcrText,
             AiSummary = aiOutput.AiSummary,
             GapDetail = aiOutput.GapDetail,
@@ -125,13 +126,20 @@ public class AiMatchmakerService
         return new DiagnosisResultDto
         {
             DiagnosisId = diagnosis.DiagnosisId,
-            ImageUrl = relativeUrl,
+            ImageUrl = problemUrl,
+            ProblemImageUrl = problemUrl,
+            StudentSolutionImageUrl = solutionUrl,
             SubjectName = subject?.SubjectName ?? aiOutput.SubjectName,
             GradeLevel = aiOutput.GradeLevel,
             TopicName = topic?.TopicName ?? aiOutput.TopicName,
             TopicCode = topic?.TopicCode ?? aiOutput.TopicCode,
             Severity = string.IsNullOrWhiteSpace(aiOutput.Severity) ? "Moderate" : aiOutput.Severity,
             OcrText = aiOutput.OcrText,
+            ProblemText = aiOutput.ProblemText,
+            StudentSolutionText = aiOutput.StudentSolutionText,
+            CorrectSteps = aiOutput.CorrectSteps,
+            IncorrectOrIncompleteSteps = aiOutput.IncorrectOrIncompleteSteps,
+            ErrorCause = aiOutput.ErrorCause,
             AiSummary = aiOutput.AiSummary,
             GapDetail = aiOutput.GapDetail,
             StudentMistake = aiOutput.StudentMistake,
@@ -382,6 +390,55 @@ public class AiMatchmakerService
 
     // === PRIVATE HELPERS ===
 
+    private void ValidateImage(IFormFile file, string role)
+    {
+        if (file.Length > 10 * 1024 * 1024)
+            throw new ArgumentException($"Dung lượng ảnh {role} tối đa 10 MB.");
+
+        var ext = Path.GetExtension(file.FileName);
+        if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
+            throw new ArgumentException($"Ảnh {role} chỉ chấp nhận định dạng JPG, PNG, WEBP.");
+    }
+
+    private async Task<string> SaveDiagnosisImageAsync(
+        IFormFile file,
+        string dir,
+        int studentId,
+        string role,
+        CancellationToken ct)
+    {
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var safeName = $"diag_{studentId}_{role}_{DateTime.UtcNow.Ticks}{ext}";
+        await using (var stream = File.Create(Path.Combine(dir, safeName)))
+        {
+            await file.CopyToAsync(stream, ct);
+        }
+        return $"/uploads/diagnoses/{studentId}/{safeName}";
+    }
+
+    private static string GetPhysicalPath(string webRoot, string relativeUrl)
+    {
+        var relativePath = relativeUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(webRoot, relativePath);
+    }
+
+    private static string GetSafeMime(IFormFile file)
+    {
+        if (!string.IsNullOrWhiteSpace(file.ContentType) &&
+            file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return file.ContentType;
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "image/jpeg"
+        };
+    }
+
     private async Task<List<TutorSuggestionItemDto>> FindTop3MatchingTutorsAsync(
         KnowledgeGapDiagnosis diagnosis,
         int? subjectId,
@@ -593,6 +650,11 @@ public class AiMatchmakerService
             TopicCode = d.Topic?.TopicCode ?? rawParsed?.TopicCode,
             Severity = rawParsed?.Severity ?? "Moderate",
             OcrText = d.OcrText,
+            ProblemText = rawParsed?.ProblemText,
+            StudentSolutionText = rawParsed?.StudentSolutionText,
+            CorrectSteps = rawParsed?.CorrectSteps,
+            IncorrectOrIncompleteSteps = rawParsed?.IncorrectOrIncompleteSteps,
+            ErrorCause = rawParsed?.ErrorCause,
             AiSummary = d.AiSummary,
             GapDetail = d.GapDetail,
             StudentMistake = rawParsed?.StudentMistake,
